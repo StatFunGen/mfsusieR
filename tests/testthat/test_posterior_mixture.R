@@ -4,6 +4,10 @@
 #
 # Per design.md D14 (cpp11 kernel vs pure-R oracle apple-to-apple
 # tolerance <= 1e-12).
+#
+# Manuscript references for the closed-form mixture-of-normals math:
+#   methods/derivation.tex eq:post_f_mix
+#   methods/derivation.tex eq:post_f2_mix
 
 # ---- cpp11 vs pure-R oracle ------------------------------------------------
 
@@ -77,6 +81,26 @@ test_that("mixture_posterior_per_scale_R: closed form matches ashr::postmean / p
   ours <- mfsusieR:::mixture_posterior_per_scale_R(B, S, sd_g, pi_g, V_scale = V)
   expect_equal(ours$pmean,  ashr_pm, tolerance = 1e-12)
   expect_equal(ours$pmean2, ashr_psd^2 + ashr_pm^2, tolerance = 1e-12)
+})
+
+# ---- pure-null edge case (K = 1, sd = 0) --------------------------------
+
+test_that("pure-null mixture (K = 1, sd_grid = 0) gives lbf = 0 and zero posterior", {
+  # Exercises the `var_k[k] == 0.0` short-circuit branch in cpp11 and
+  # the `if (sd_k_var == 0)` branch in the R oracle. The mixture is
+  # entirely on the null component so log-BF and posterior moments are
+  # exactly zero.
+  set.seed(mfsusier_test_seed())
+  J <- 12; Ti <- 8
+  B <- matrix(rnorm(J * Ti), nrow = J)
+  S <- matrix(runif(J * Ti, 0.5, 1.5), nrow = J)
+
+  lbf <- mfsusieR:::mixture_log_bf_per_scale(B, S, sd_grid = 0, pi_grid = 1, V_scale = 1.5)
+  expect_equal(lbf, rep(0, J), tolerance = 0)   # exact
+
+  out <- mfsusieR:::mixture_posterior_per_scale(B, S, sd_grid = 0, pi_grid = 1, V_scale = 1.5)
+  expect_equal(out$pmean,  matrix(0, J, Ti), tolerance = 0)
+  expect_equal(out$pmean2, matrix(0, J, Ti), tolerance = 0)
 })
 
 # ---- susieR-degenerate single-component case (C1 sanity) -------------------
