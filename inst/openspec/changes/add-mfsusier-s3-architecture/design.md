@@ -182,14 +182,15 @@ paradigm chosen.
 | `computational_routine.R:395-431` | `estimate_residual_variance` | Reimplement as `update_variance_components.mf_individual`, branched on `residual_variance_method`. Default per-(scale, modality). | mvsusieR with manuscript-aligned default |
 | `multfsusie.R:308-316` | DWT pipeline | Port to `mf_dwt` private helper (R/dwt.R). Uses `fsusieR::remap_data`, `fsusieR::colScale`, `wavethresh::wd`, `fsusieR::gen_wavelet_indx`. Cached at data-class construction, not per iteration. | bespoke wrapper, fsusieR delegation |
 | `operation_on_multfsusie_obj.R:2074-2099` | Inverse DWT | Port to `mf_invert_dwt` private helper. Same pieces, called from `predict.mfsusie` and from CS-band computation. | bespoke wrapper |
-| `operation_on_multfsusie_obj.R:1456-1487, 2401-2477` | smash / TI / HMM post-processing | Drop in v1. Delegate band computation to fsusieR if the user requests the TIWT step (manuscript online_method step 6). Smoothers are out of scope; users can post-process the fitted curves themselves. | drop (smoothers), fsusieR delegation (TIWT) |
+| `operation_on_multfsusie_obj.R:1456-1487, 2401-2477` | smash / TI / HMM post-processing | Keep. Delegate to fsusieR's smash/TI/HMM helpers where they exist; reimplement only where fsusieR does not provide an equivalent. Argument `post_processing = c("none", "smash", "TI", "HMM")` on `mfsusie()`. TIWT band computation per manuscript online_method step 6 is part of the same path. | mvsusieR (delegation), bespoke wrapper |
 | `operation_on_multfsusie_prior.R:17-138` | Prior object construction | Reimplement as `mf_prior_scale_mixture`. Per-(scale, modality) prior. fsusieR's `init_prior.default` is delegated to per modality. | mvsusieR (V_structure analogue) |
-| `multfsusie.R:184` `nullweight = 0.7` | Null component weight | Rename to `null_prior_weight`, default 0.5 (or whichever value is principled per manuscript; open question). Document the choice. | bespoke |
+| `multfsusie.R:184` `nullweight = 0.7` | Null component weight | Rename to `null_prior_weight`, default `2`. The original code uses `nullweight = 0.7` and then internally scales by `max(K)` at `EM.R:65` (`nullweight_scaled <- nullweight * max(K)`). With typical K = 3 mixture components, the effective post-scaling value is ~2. Setting the public default directly to 2 makes the behavior interpretable without requiring users to reason about K. The internal multiplication-by-K is removed. | bespoke |
 | `multfsusie.R:172-208` | Public API | Reimplement as `mfsusie()`. Argument names per CLAUDE.md naming rules. | bespoke |
 | Y_u (univariate) path throughout | Univariate trait special case | Treat as `T_m = 1` modality. Wavelet machinery short-circuits at construction (no DWT). No separate code path. | mvsusieR (R = 1 collapse) |
 | `multfsusie.R:284, 287` | `max_scale` parameter and remapping | Keep as `max_padded_log2` argument with same meaning. | bespoke (renamed) |
 | `R/operation_on_multfsusie_obj.R:1716-1735` | Commented-out lfsr code | Drop. v1 does not compute LFSR. A follow-up change can add it. | drop |
-| `multfsusie.R:178-201` | Greedy/backfit loop | Drop. susieR's IBSS already does the backfit naturally; the explicit greedy step is redundant. | drop |
+| `multfsusie.R:178-201` | Backfit (revisit each effect each iteration) | Drop. susieR's `ibss_fit` already revisits every effect each outer iteration via `single_effect_update` (see `susieR/R/iterative_bayesian_stepwise_selection.R:177-189`). The explicit re-fit pass in `mvf.susie.alpha` is redundant with susieR's existing IBSS. | delegate to susieR |
+| `multfsusie.R:178-201` | Greedy R-search (grow L from L_start until pruning) | Generalize susieR. Per Gao's direction (overriding CLAUDE.md hard rule #1 for this case), the greedy-grow-L behavior is added to susieR core under the new argument `L_greedy = NULL`. When `L_greedy` is `NULL` (default), susieR's behavior is unchanged. When `L_greedy = K` for some integer K, susieR fits with L = K, checks for pruned effects, grows L by 1, and re-fits, repeating until one effect prunes or `L` (the upper bound) is reached. mfsusieR adds `L_greedy` as a passthrough argument with default `3` (per manuscript online_method step 2). The susieR generalization is its own work item, tracked outside this OpenSpec change but a hard prerequisite for Phase 3. | delegate to susieR (after generalization) |
 
 ### D6. Prior composition
 
@@ -214,20 +215,22 @@ mash-style adjustments. This is the susieAnn paradigm.
 ### D7. Public API signature
 
 Manuscript-aligned, CLAUDE.md naming-rule compliant. Defaults are
-suggestions; final values land with the proposal.
+suggestions; final values land with this proposal.
 
 ```r
 mfsusie(
   X, Y, pos = NULL, L = 10,
+  L_greedy = 3,
   prior_variance_scope = c("per_scale_modality", "per_modality"),
   prior_variance_grid_multiplier = sqrt(2),
   prior_variance_grid = NULL,
-  null_prior_weight = 0.5,
+  null_prior_weight = 2,
   cross_modality_prior = NULL,
   residual_variance_method = c("per_scale_modality", "shared_per_modality"),
   estimate_residual_variance = TRUE,
   estimate_prior_mixture_weights = TRUE,
   mixture_weight_method = c("mixsqp", "em"),
+  post_processing = c("none", "smash", "TI", "HMM"),
   max_padded_log2 = 10,
   max_iter = 100, tol = 1e-4,
   coverage = 0.95, min_abs_corr = 0.5,
@@ -235,30 +238,60 @@ mfsusie(
   wavelet_filter_number = 10,
   wavelet_family = "DaubLeAsymm",
   standardize = TRUE, intercept = TRUE,
+  precompute_cache = TRUE,
   verbose = FALSE, track_fit = FALSE,
   model_init = NULL
 )
 ```
 
-Renames vs `mvf.susie.alpha::multfsusie`:
+#### Renamed arguments
 
-- `multfsusie` -> `mfsusie`
-- `nullweight` -> `null_prior_weight`
-- `gridmult` -> `prior_variance_grid_multiplier`
-- `max_SNP_EM` -> rolled into `max_iter` and `mixture_weight_method`
-- `max_scale` -> `max_padded_log2` (clearer meaning: log2 of padded T_m
-  upper bound, not "max scale level")
-- `cal_obj` -> dropped; ELBO is always computed when `track_fit = TRUE`
-  or when convergence_method = "elbo"
-- `cov_lev` -> `coverage`
-- `min_purity` -> `min_abs_corr`
-- `filter_cs` -> `filter_credible_sets`
-- `filter.number` -> `wavelet_filter_number`
-- `family` -> `wavelet_family`
-- `init_pi0_w`, `tol_null_prior`, `lbf_min`, `e`, `posthoc`,
-  `cor_small`, `thresh_lowcount`, `greedy`, `backfit`, `max_step`,
-  `max_step_EM`, `L_start`, `multfsusie.obj` -> dropped (some
-  consolidated into estimation methods, some redundant)
+| `mvf.susie.alpha` | `mfsusieR` | Note |
+|---|---|---|
+| `multfsusie` | `mfsusie` | function name |
+| `nullweight` | `null_prior_weight` | default 2 (post-scaling-equivalent of original 0.7 * K = 3) |
+| `gridmult` | `prior_variance_grid_multiplier` | |
+| `max_scale` | `max_padded_log2` | clearer meaning |
+| `cov_lev` | `coverage` | matches susieR |
+| `min_purity` | `min_abs_corr` | matches susieR |
+| `filter_cs` | `filter_credible_sets` | snake_case, no abbrev |
+| `filter.number` | `wavelet_filter_number` | snake_case |
+| `family` | `wavelet_family` | scope-prefixed |
+| `cal_obj` | dropped | ELBO is computed implicitly when `track_fit = TRUE` or `convergence_method = "elbo"` |
+| `max_SNP_EM` | dropped | rolled into `max_iter` and `mixture_weight_method` |
+| `greedy`, `backfit` | dropped | susieR's IBSS does both natively (see D5) |
+| `max_step_EM`, `max_step` | dropped | redundant with `max_iter` |
+| `init_pi0_w`, `tol_null_prior`, `lbf_min`, `e`, `posthoc`, `cor_small`, `thresh_lowcount` | dropped | over-parameterization; defaults are documented and there is no evidence users tune these |
+| `L_start` | renamed to `L_greedy` (default 3) | passed through to susieR after the susieR generalization lands; `NULL` means non-greedy (use L as fixed upper bound) |
+| `multfsusie.obj` | renamed to `model_init` | matches susieR convention |
+
+#### Forbidden arguments in mfsusieR
+
+The following names from `mvf.susie.alpha::multfsusie` MUST NOT appear
+in any mfsusieR public function signature or argument list, per the
+naming rules in CLAUDE.md and the contract in
+`specs/mf-public-api/spec.md`:
+
+`multfsusie`, `nullweight`, `gridmult`, `max_scale`, `max_SNP_EM`,
+`max_step_EM`, `max_step`, `cal_obj`, `cov_lev`, `min_purity`,
+`filter_cs`, `filter.number`, `family` (without `wavelet_` scope),
+`init_pi0_w`, `tol_null_prior`, `lbf_min`, `posthoc`, `cor_small`,
+`thresh_lowcount`, `greedy`, `backfit`, `multfsusie.obj`.
+
+A test in `tests/testthat/test-public-api-naming.R` will assert that
+none of these names appear in `formalArgs(mfsusie)` so the rule is
+machine-checkable.
+
+#### Behaviors dropped because susieR provides them natively
+
+| Original location | Behavior | Why dropped |
+|---|---|---|
+| `multfsusie.R:178-201` (backfit pass) | Re-visit each effect once per outer iter | susieR's `ibss_fit` already does this every iteration |
+| `cal_obj` argument controlling whether to compute ELBO | Toggle ELBO calculation | susieR computes ELBO when `convergence_method = "elbo"`; redundant flag |
+| `max_step`, `max_step_EM` (separate iteration caps) | Multiple iteration limits | susieR has a single `max_iter`; one limit suffices |
+| Bespoke convergence check in `test_stop_cond` | Convergence | susieR's `check_convergence` covers ELBO and PIP modes |
+| Custom validate-prior step | Sanity check on V[l] | susieR's `validate_prior` already runs after each per-effect sweep |
+| Hand-coded residual computation per modality | Per-effect partial residuals | dispatched through susieR's `compute_residuals` generic; mfsusieR only writes the method body |
 
 The `mfsusie` fit object: class `c("mfsusie", "susie")`. Fields:
 `alpha`, `mu`, `mu2`, `KL`, `lbf`, `lbf_variable`, `pi`, `pi_V`,
@@ -277,6 +310,44 @@ later inversion. Inverse DWT is in `mf_invert_dwt`, called only from
 `predict.mfsusie` and `coef.mfsusie` and from the optional TIWT band
 helper. For univariate traits (`T_m = 1`), the DWT short-circuits and
 both helpers pass through.
+
+### D8b. Caching and `mf_individual` visibility
+
+`mf_individual` is *internal* (not exported). Users do not construct or
+hand around `mf_individual` objects. The constructor
+`create_mf_individual` is in `R/data_class.R` but only called from
+`mfsusie()`. This matches mvsusieR (`mv_individual` is internal,
+`create_mvsusie_data` is internal, see `mvsusieR/R/mvsusie_constructors.R`),
+susieR (`individual_data_constructor` is internal), and susieAnn
+(per-block susie fits are constructed inside the EM loop, never
+user-handed). The pattern across all three paradigm references is
+identical, so we follow it.
+
+The user-facing knob is the boolean `precompute_cache = TRUE`. When
+`TRUE`:
+
+- DWT is computed at the start of `mfsusie()` and cached on the
+  internal `mf_individual` for the duration of the fit.
+- Per-modality `t(X) %*% X / n` style sufficient statistics are cached
+  if they are reused across iterations (analogous to mvsusieR's
+  eigendecomposition cache).
+- Memory grows by `O(N * sum(T_padded[m]))` for the DWT cache and
+  `O(J^2)` for any X covariance cache.
+
+When `FALSE`, DWT and any sufficient statistics are recomputed on
+demand (slower, lower memory). The default is `TRUE` for parity with
+mvsusieR.
+
+#### Cross-fit caching of DWT
+
+Users who fit many models on the same Y (e.g., grid search over L,
+prior, or coverage) may want to amortize the DWT cost. None of the
+paradigm references expose a user-handed cached object; instead, the
+right idiom is to call `mfsusie()` repeatedly with `precompute_cache =
+TRUE` and rely on internal caching. A future change can add a
+function-level memoization keyed on `digest::digest(Y, pos)` if
+benchmarks show this is a real bottleneck. Not in v1; flagged as a
+candidate Phase 7 perf optimization.
 
 ### D9. PIP / CS ordering
 
@@ -327,11 +398,12 @@ per CLAUDE.md.
   shipped as the trivial implementation and is exercised in tests; the
   seam contract is in `mf-prior/spec.md` and any future implementation
   must satisfy it.
-- *Smoothers (smash / TI / HMM) are dropped in v1.* Risk: existing
-  `mvf.susie.alpha` workflows that depend on smoothers will not migrate
-  cleanly. Mitigation: TIWT credible bands are kept (manuscript step
-  6); the smoothers can be re-added in a follow-up change without
-  changing the architecture.
+- *Smoothers (smash / TI / HMM) are kept and delegated to fsusieR
+  where possible.* Trade-off: mfsusieR depends on fsusieR for the
+  smoother backends, which means the v1 release tracks fsusieR
+  versions for those code paths. Mitigation: a small fallback
+  reimplementation lands for any smoother fsusieR does not currently
+  expose; CI pins a fsusieR commit hash.
 - *EM on mixture weights via mixsqp may not converge for K large or
   pathological data.* Mitigation: fallback to `update_method = "em"`,
   documented in roxygen.
@@ -347,15 +419,53 @@ content to merge with. After Phase 3 implementation lands and Phase 4
 tests pass, the change is archived. Rollback is `git revert` of the
 applied commits.
 
+### External coordination: susieR `L_greedy` generalization
+
+This proposal assumes a generalization of `susieR::susie_workhorse` to
+accept an `L_greedy` argument (default `NULL`, no behavior change). The
+generalization is OUT OF SCOPE for this OpenSpec change but is a hard
+prerequisite for the public mfsusieR API to ship as designed.
+
+Coordination plan:
+
+1. Open a separate work item against `~/GIT/susieR` to add `L_greedy`
+   to `susie_workhorse` and the public `susie()` (and any other public
+   entry that takes `L`). Keep behavior unchanged when `L_greedy =
+   NULL`.
+2. Pin the susieR commit hash that contains the generalization in
+   `DESCRIPTION`'s `Imports: susieR (>= <hash-or-version>)` line.
+3. If the generalization is delayed, mfsusieR ships with
+   `L_greedy = NULL` only, the greedy path becomes a Phase 6 follow-up,
+   and the manuscript online_method step 2 is documented as a known
+   gap until then.
+
+Until the susieR change lands, mfsusieR's `L_greedy` argument is
+accepted but ignored with a one-time `lifecycle::deprecate_warn()`-style
+warning. The `mf-public-api/spec.md` records this transitional state.
+
+This is an explicit override of CLAUDE.md hard rule #1 ("susieR is
+read-only reference") authorized by Gao on 2026-04-25. The override is
+narrow: it covers only the addition of `L_greedy` and any internal
+plumbing required to support it. All other susieR code remains
+read-only.
+
 ## Open Questions
 
-- *Default value of `null_prior_weight`?* The original uses 0.7 scaled by
-  `max(K)`; manuscript does not pin a value. Resolve before Phase 3 by
-  reading the relevant section of fsusieR's defaults plus a one-paragraph
-  argument from the manuscript.
-- *Should `mfsusie()` accept a precomputed `mf_individual` object?*
-  Useful for power users who want to amortize DWT cost across many
-  fits. Default no; revisit if Phase 5 simulations show it matters.
 - *Is `cleanup_model.mf_individual` strictly needed in v1?* mvsusieR
   has it; mfsusieR may not need anything beyond the default. Decide
   during Phase 3.
+- *Which fsusieR smoother helpers exist and which need
+  reimplementation?* Resolve in PR group 7 (post-processing) by
+  reading fsusieR's exported function list.
+
+Resolved questions (recorded for the design history):
+
+- *Default value of `null_prior_weight`* -> 2 (post-scaling-equivalent
+  of `mvf.susie.alpha`'s `nullweight = 0.7` * `max(K) = 3`).
+- *Should `mfsusie()` accept a precomputed `mf_individual`?* -> No.
+  All three paradigm references keep the data class internal; we match
+  that. Cross-fit DWT caching is a candidate Phase 7 perf optimization.
+- *Smoothers* -> Kept, delegated to fsusieR where possible.
+- *Greedy R-search* -> Kept, per manuscript online_method step 2.
+  susieR does not provide it; mfsusieR wraps `susie_workhorse` with the
+  grow-until-prune logic.

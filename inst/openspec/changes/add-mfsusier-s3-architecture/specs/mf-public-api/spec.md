@@ -11,17 +11,28 @@ CLAUDE.md naming rules (snake_case, no abbreviations beyond
 
 - **WHEN** `args(mfsusie)` is inspected
 - **THEN** the argument list SHALL include `X`, `Y`, `pos`, `L`,
-  `prior_variance_scope`, `prior_variance_grid_multiplier`,
-  `prior_variance_grid`, `null_prior_weight`, `cross_modality_prior`,
+  `L_greedy`, `prior_variance_scope`,
+  `prior_variance_grid_multiplier`, `prior_variance_grid`,
+  `null_prior_weight`, `cross_modality_prior`,
   `residual_variance_method`, `estimate_residual_variance`,
   `estimate_prior_mixture_weights`, `mixture_weight_method`,
-  `max_padded_log2`, `max_iter`, `tol`, `coverage`, `min_abs_corr`,
-  `filter_credible_sets`, `wavelet_filter_number`, `wavelet_family`,
-  `standardize`, `intercept`, `verbose`, `track_fit`, `model_init`,
-  with no abbreviations from `mvf.susie.alpha::multfsusie` retained
-  (`nullweight`, `gridmult`, `max_SNP_EM`, `max_scale`, `cal_obj`,
-  `cov_lev`, `min_purity`, `filter_cs`, `filter.number`, `family` are
-  forbidden in the public signature)
+  `post_processing`, `max_padded_log2`, `max_iter`, `tol`, `coverage`,
+  `min_abs_corr`, `filter_credible_sets`, `wavelet_filter_number`,
+  `wavelet_family`, `standardize`, `intercept`, `precompute_cache`,
+  `verbose`, `track_fit`, `model_init`
+
+#### Scenario: forbidden names absent
+
+- **WHEN** `formalArgs(mfsusie)` is inspected
+- **THEN** none of the following names from
+  `mvf.susie.alpha::multfsusie` SHALL appear: `nullweight`,
+  `gridmult`, `max_scale`, `max_SNP_EM`, `max_step_EM`, `max_step`,
+  `cal_obj`, `cov_lev`, `min_purity`, `filter_cs`, `filter.number`,
+  `family`, `init_pi0_w`, `tol_null_prior`, `lbf_min`, `posthoc`,
+  `cor_small`, `thresh_lowcount`, `greedy`, `backfit`,
+  `multfsusie.obj`. A test in
+  `tests/testthat/test-public-api-naming.R` SHALL assert this
+  programmatically.
 
 #### Scenario: input validation
 

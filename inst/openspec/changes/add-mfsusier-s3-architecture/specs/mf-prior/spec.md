@@ -6,6 +6,17 @@ The package SHALL provide a default prior class `mf_prior_scale_mixture`
 that stores per-(scale, modality) mixture weights `pi_{k,s,m}` and
 per-(scale, modality) prior variances `sigma_{k,s,m}^2`, matching the
 manuscript model defined in `methods/derivation.tex` eq:additive_model.
+The default null-component weight SHALL be `null_prior_weight = 2`,
+chosen as the post-scaling-equivalent of `mvf.susie.alpha`'s
+`nullweight = 0.7` * `max(K) = 3` and exposed directly so the
+multiplication-by-K step in the original code is removed.
+
+#### Scenario: default null_prior_weight is 2
+
+- **WHEN** `mfsusie()` is called without specifying `null_prior_weight`
+- **THEN** the prior object's `null_prior_weight` field SHALL equal 2
+  and the EM/mixsqp updates SHALL use this value directly without any
+  additional scaling by K
 
 #### Scenario: per-(scale, modality) shapes
 
