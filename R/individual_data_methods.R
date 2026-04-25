@@ -168,29 +168,25 @@ loglik.mf_individual <- function(data, params, model, V, ser_stats, l = NULL, ..
   lbf_combined <- combine_modality_lbfs(model$cross_modality_combiner,
                                         modality_lbfs, model)
 
-  # Stabilization + softmax via the cached susieR helpers
-  # (`lbf_stabilization`, `compute_posterior_weights`); see `R/zzz.R`
-  # for the binding.
-  #
-  # `lbf_stabilization` was designed for susieR's scalar SER where
-  # `shat2[j]` is finite for usable SNPs and `Inf` for SNPs with zero
-  # predictor variance (so `lbf -> 0` at those SNPs). mfsusieR has a
-  # per-(modality, position) Shat^2 matrix per SNP, so we pass a
-  # length-J marker vector that encodes only the zero-pw signal: `1`
-  # for usable SNPs (any finite value works), `Inf` for zero-pw SNPs.
-  # The `1` is a placeholder, not a unit; only the `Inf` entries
-  # affect the helper's behaviour.
-  shat2_marker <- ifelse(data$predictor_weights == 0, Inf, 1)
-  stable      <- lbf_stabilization(lbf_combined, model$pi, shat2_marker)
-  weights_res <- compute_posterior_weights(stable$lpo)
+  # Stable softmax with zero-pw handling. Mirrors susieR's
+  # `lbf_stabilization` + `compute_posterior_weights` (7 lines vs 8;
+  # inlined to keep the per-(modality, position) shat2 logic explicit
+  # rather than passing a marker vector to the susieR helper).
+  zero_pw <- data$predictor_weights == 0
+  if (any(zero_pw)) lbf_combined[zero_pw] <- 0
+  lpo       <- lbf_combined + log(model$pi + sqrt(.Machine$double.eps))
+  m_max     <- max(lpo)
+  w         <- exp(lpo - m_max)
+  alpha     <- w / sum(w)
+  lbf_model <- m_max + log(sum(w))
 
   if (!is.null(l)) {
-    model$alpha[l, ]        <- weights_res$alpha
-    model$lbf[l]            <- weights_res$lbf_model
-    model$lbf_variable[l, ] <- stable$lbf
+    model$alpha[l, ]        <- alpha
+    model$lbf[l]            <- lbf_model
+    model$lbf_variable[l, ] <- lbf_combined
     return(model)
   }
-  weights_res$lbf_model
+  lbf_model
 }
 
 #' Per-effect posterior moments on `mf_individual` (mixture-aware)

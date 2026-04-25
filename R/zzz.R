@@ -12,13 +12,11 @@
 # Numerical routines do not live here.
 
 # Cached susieR internals - populated by .onLoad()
-lbf_stabilization         <- NULL
-compute_posterior_weights <- NULL
-warning_message           <- NULL
+warning_message        <- NULL
 # Cached susieR S3 generics so the per-effect methods can call the
 # generic (and pick up future subclass overrides) without going
 # through `susieR:::`.
-SER_posterior_e_loglik    <- NULL
+SER_posterior_e_loglik <- NULL
 
 #' @useDynLib mfsusieR, .registration = TRUE
 #' @keywords internal
@@ -29,10 +27,7 @@ SER_posterior_e_loglik    <- NULL
 
   # Cache susieR internals used by `loglik.mf_individual` and
   # forthcoming PR-7 finalize methods.
-  for (fn in c("lbf_stabilization",
-               "compute_posterior_weights",
-               "warning_message",
-               "SER_posterior_e_loglik")) {
+  for (fn in c("warning_message", "SER_posterior_e_loglik")) {
     assign(fn, get(fn, envir = susie_ns), envir = pkg_ns)
   }
 
