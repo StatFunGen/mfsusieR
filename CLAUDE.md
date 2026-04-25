@@ -372,6 +372,20 @@ and keep the old names working for one minor version.
 - Public S3 methods: `mfsusie()`, `predict.mfsusie()`, `summary.mfsusie()`,
   `coef.mfsusie()`, `plot.mfsusie()`, `print.mfsusie()`.
 - Internal helpers prefixed with `.` or in `R/utils_*.R`.
+- Class-related code lives in ONE file per class. The constructor
+  AND the S3 methods registered on the class share a single
+  `R/<class>_class.R` file with a section divider between
+  constructor and methods. Do NOT split into `R/<class>_class.R`
+  + `R/<class>_methods.R` — that pattern is appropriate for
+  upstream packages with many constructors and ~15 methods per
+  class (mvsusieR, susieR), but for mfsusieR's smaller scope
+  (one constructor + ~6 accessors per class) the split is
+  gratuitous. Section divider format:
+  ```r
+  # =====================================================================
+  # Per-effect getter / setter accessors on the `<class>` model
+  # =====================================================================
+  ```
 - No boolean flags named in the negative (`no_cache = FALSE` becomes `cache = TRUE`).
 - The full public-API harmonization with susieR and mvsusieR (which choices
   match, which diverge, and why) lives in design.md D7. Phase 8 polish follows
