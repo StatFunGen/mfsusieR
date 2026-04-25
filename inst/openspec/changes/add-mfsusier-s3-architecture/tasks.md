@@ -247,11 +247,13 @@ constructor calls the helpers, the C2 / C3 fidelity tests need both.
 
 ### 5c. KL and ELBO contributions
 
-- [ ] 5c.1 Implement `compute_kl.mf_individual`, `loglik.mf_individual`
+- [x] 5c.1 Implement `compute_kl.mf_individual`, `loglik.mf_individual`
       aggregate (called without `l`), `neg_loglik.mf_individual`.
 - [ ] 5c.2 Test: KL matches susieR's
       `compute_kl.individual` formula in the susieR-degenerate case
-      (C1 contract, `<= 1e-10`).
+      (C1 contract, `<= 1e-10`). Deferred to PR group 7c (full
+      degenerate-case suite); 5c provides closed-form formula
+      equality tests at `<= 1e-12`.
 - [ ] 5c.3 Test (C3, partial): KL per effect matches
       `mvf.susie.alpha`'s ELBO contribution at `<= 1e-8`.
 

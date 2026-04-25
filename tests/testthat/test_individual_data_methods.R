@@ -346,6 +346,146 @@ test_that("loglik / calculate_posterior_moments with K=1, no null reduce to susi
   }
 })
 
+# ---- SER_posterior_e_loglik.mf_individual ---------------------------
+
+test_that("SER_posterior_e_loglik returns scalar finite value", {
+  data <- make_data()
+  model <- make_model_with_prior(data)
+  model <- mfsusieR:::compute_residuals.mf_individual(data, NULL, model, 1)
+  model <- mfsusieR:::calculate_posterior_moments.mf_individual(data, NULL, model, V = 1, l = 1)
+
+  out <- mfsusieR:::SER_posterior_e_loglik.mf_individual(data, NULL, model, 1)
+  expect_length(out, 1L)
+  expect_true(is.finite(out))
+})
+
+test_that("SER_posterior_e_loglik matches the per-modality, per-position formula", {
+  data <- make_data()
+  model <- make_model_with_prior(data)
+  model <- mfsusieR:::compute_residuals.mf_individual(data, NULL, model, 1)
+  model <- mfsusieR:::calculate_posterior_moments.mf_individual(data, NULL, model, V = 1, l = 1)
+
+  # Hand re-derive the formula and compare.
+  alpha_l <- model$alpha[1, ]
+  pw <- data$predictor_weights
+  expected <- 0
+  for (m in seq_len(data$M)) {
+    Eb_m  <- alpha_l * model$mu[[1]][[m]]
+    Eb2_m <- alpha_l * model$mu2[[1]][[m]]
+    R_m   <- model$raw_residuals[[m]]
+    n     <- nrow(R_m)
+    s2_t  <- mfsusieR:::mf_sigma2_per_position(data, model, m)
+
+    XEb_m <- data$X %*% Eb_m
+    quad_t <- colSums(R_m^2) - 2 * colSums(R_m * XEb_m) + colSums(pw * Eb2_m)
+    expected <- expected + sum(-0.5 * n * log(2 * pi * s2_t) -
+                               0.5 * quad_t / s2_t)
+  }
+  expect_equal(mfsusieR:::SER_posterior_e_loglik.mf_individual(data, NULL, model, 1),
+               expected, tolerance = 1e-12)
+})
+
+test_that("SER_posterior_e_loglik handles per-scale sigma2 (model$sigma2 vector)", {
+  data <- make_data(T_per_modality = 64L)  # single modality so per-scale shape is unambiguous
+  model <- make_model_with_prior(data)
+  # Per-scale sigma2 vector (length S_m).
+  S_m <- length(data$scale_index[[1]])
+  model$sigma2[[1]] <- seq_len(S_m) * 0.1
+
+  model <- mfsusieR:::compute_residuals.mf_individual(data, NULL, model, 1)
+  model <- mfsusieR:::calculate_posterior_moments.mf_individual(data, NULL, model, V = 1, l = 1)
+
+  out <- mfsusieR:::SER_posterior_e_loglik.mf_individual(data, NULL, model, 1)
+  expect_length(out, 1L)
+  expect_true(is.finite(out))
+
+  # Cross-check the broadcast helper directly on the per-scale path.
+  s2_t <- mfsusieR:::mf_sigma2_per_position(data, model, 1)
+  expect_identical(length(s2_t), data$T_padded[1])
+  for (s in seq_len(S_m)) {
+    expect_true(all(s2_t[data$scale_index[[1]][[s]]] == model$sigma2[[1]][s]))
+  }
+})
+
+# ---- compute_kl.mf_individual ----------------------------------------
+
+test_that("compute_kl writes a finite scalar into model$KL[l]", {
+  data <- make_data()
+  model <- make_model_with_prior(data)
+  model <- mfsusieR:::compute_residuals.mf_individual(data, NULL, model, 1)
+  ser <- mfsusieR:::compute_ser_statistics.mf_individual(data, NULL, model, 1)
+  model <- mfsusieR:::loglik.mf_individual(data, NULL, model, V = 1, ser, l = 1)
+  model <- mfsusieR:::calculate_posterior_moments.mf_individual(data, NULL, model, V = 1, l = 1)
+
+  out <- mfsusieR:::compute_kl.mf_individual(data, NULL, model, 1)
+
+  expect_true(is.finite(out$KL[1]))
+})
+
+test_that("compute_kl identity: KL[l] == -lbf[l] - L_null + L_post", {
+  data <- make_data()
+  model <- make_model_with_prior(data)
+  model <- mfsusieR:::compute_residuals.mf_individual(data, NULL, model, 1)
+  ser <- mfsusieR:::compute_ser_statistics.mf_individual(data, NULL, model, 1)
+  model <- mfsusieR:::loglik.mf_individual(data, NULL, model, V = 1, ser, l = 1)
+  model <- mfsusieR:::calculate_posterior_moments.mf_individual(data, NULL, model, V = 1, l = 1)
+
+  L_null <- 0
+  for (m in seq_len(data$M)) {
+    R_m <- model$raw_residuals[[m]]
+    s2_t <- mfsusieR:::mf_sigma2_per_position(data, model, m)
+    L_null <- L_null + sum(-0.5 * nrow(R_m) * log(2 * pi * s2_t) -
+                           0.5 * colSums(R_m^2) / s2_t)
+  }
+  L_post <- mfsusieR:::SER_posterior_e_loglik.mf_individual(data, NULL, model, 1)
+  expected <- -(model$lbf[1] + L_null) + L_post
+
+  out <- mfsusieR:::compute_kl.mf_individual(data, NULL, model, 1)
+  expect_equal(out$KL[1], expected, tolerance = 1e-12)
+})
+
+# ---- neg_loglik wrapper ----------------------------------------------
+
+test_that("neg_loglik.mf_individual exponentiates V_param and negates loglik", {
+  data <- make_data()
+  model <- make_model_with_prior(data)
+  model <- mfsusieR:::compute_residuals.mf_individual(data, NULL, model, 1)
+  ser <- mfsusieR:::compute_ser_statistics.mf_individual(data, NULL, model, 1)
+
+  V_param <- log(0.7)
+  out <- mfsusieR:::neg_loglik.mf_individual(data, NULL, model, V_param, ser)
+  expected_V <- exp(V_param)
+  expected <- -mfsusieR:::loglik.mf_individual(data, NULL, model, expected_V, ser, l = NULL)
+  expect_equal(out, expected, tolerance = 1e-12)
+})
+
+# ---- .onLoad: S3 methods are registered on susieR's namespace -------
+
+test_that("S3 methods on mf_individual are registered on susieR's generics", {
+  # `registerS3method` populates susieR's S3 dispatch table; verify
+  # via `getS3method`, not top-level `exists`. Using
+  # `optional = TRUE` so a missing entry returns NULL instead of erroring.
+  for (g in c("compute_residuals", "compute_ser_statistics",
+              "calculate_posterior_moments", "loglik", "neg_loglik",
+              "compute_kl", "SER_posterior_e_loglik",
+              "update_fitted_values", "initialize_susie_model")) {
+    method_fn <- getS3method(g, "mf_individual",
+                             optional = TRUE,
+                             envir = asNamespace("susieR"))
+    expect_true(is.function(method_fn),
+                info = paste("Missing registration:", g, ".mf_individual"))
+  }
+})
+
+test_that("susieR helpers are cached on the mfsusieR namespace", {
+  pkg_ns <- asNamespace("mfsusieR")
+  for (fn in c("lbf_stabilization", "compute_posterior_weights",
+               "warning_message")) {
+    expect_true(is.function(get(fn, envir = pkg_ns)),
+                info = paste("Missing cached binding:", fn))
+  }
+})
+
 # ---- C3 fidelity vs mvf.susie.alpha::cal_Bhat_Shat_multfsusie ---------
 
 test_that("compute_ser_statistics betahat matches mvf.susie.alpha at 1e-12 (initial residual)", {
