@@ -101,6 +101,34 @@ ignored.
   `L_greedy`, and emit one warning per session referencing the
   upstream coordination plan
 
+### Requirement: degenerate case reduces exactly to susieR::susie
+
+`mfsusie()` SHALL reduce mathematically and numerically to
+`susieR::susie()` under the degenerate input combination defined in
+`design.md` D11: `M = 1`, `T_1 = 1`, `prior_variance_grid` of length 1,
+`null_prior_weight = 0`, `cross_modality_prior = NULL`,
+`prior_variance_scope = "per_modality"`, `residual_variance_method =
+"shared_per_modality"`, `post_processing = "none"`, `L_greedy = NULL`.
+
+#### Scenario: numerical equivalence to susieR::susie at degenerate inputs
+
+- **WHEN** `mfsusie(X, list(matrix(y, ncol = 1)), pos = list(1), L = L,
+  prior_variance_grid = sigma_0_squared, null_prior_weight = 0,
+  prior_variance_scope = "per_modality", residual_variance_method =
+  "shared_per_modality", post_processing = "none", L_greedy = NULL,
+  ...)` and `susieR::susie(X, y, L = L, scaled_prior_variance =
+  sigma_0_squared / var(y), null_weight = 0, ...)` are run with the
+  same fixed seed
+- **THEN** the two fits SHALL agree element-wise on `alpha`, `mu`,
+  `mu2`, `lbf`, `lbf_variable`, `KL`, `sigma2`, `elbo`, `niter`, `pip`
+  at tolerance 1e-10, and on credible-set membership exactly
+
+#### Scenario: degeneracy holds across L values
+
+- **WHEN** the degeneracy test above is repeated for `L in c(1, 5,
+  10)` on the same fixture
+- **THEN** the agreement SHALL hold for every L value tested
+
 ### Requirement: roxygen tags reference manuscript and original code
 
 Every internal function ported from `mvf.susie.alpha` SHALL carry a
