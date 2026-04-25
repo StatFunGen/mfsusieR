@@ -207,5 +207,23 @@ mfsusie <- function(X, Y,
     }
   }
 
+  # 6. Stash the wavelet pipeline metadata + X scaling on the fit so
+  #    `predict.mfsusie`, `coef.mfsusie`, `fitted.mfsusie` can
+  #    project posterior coefficients back to the original Y scale
+  #    without the user passing `data` again.
+  fit$mf_meta <- list(
+    M               = data$M,
+    pos             = data$pos,
+    T_padded        = data$T_padded,
+    scale_index     = data$scale_index,
+    csd_X           = data$csd_X,
+    X_center        = data$wavelet_meta$X_center,
+    X_scale         = data$wavelet_meta$X_scale,
+    column_center   = data$wavelet_meta$column_center,
+    column_scale    = data$wavelet_meta$column_scale,
+    wavelet_filter  = data$wavelet_meta$filter_number,
+    wavelet_family  = data$wavelet_meta$family
+  )
+
   fit
 }

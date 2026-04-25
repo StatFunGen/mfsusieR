@@ -325,20 +325,20 @@ constructor calls the helpers, the C2 / C3 fidelity tests need both.
       `save_residuals = TRUE`.
 - [ ] 7.3 Implement `R/get_functions.R` with `mf_get_pip`
       (post-filter) and the CS construction.
-- [ ] 7.4 Implement `R/predict.mfsusie.R`, `R/coef.mfsusie.R`, and
+- [x] 7.4 Implement `R/predict.mfsusie.R`, `R/coef.mfsusie.R`, and
       `R/fitted.mfsusie.R`. `predict` takes `newx` and returns a
       list of M reconstructed curves via inverse DWT (no X/Y from
       the fit needed). `coef` returns a list of M effect-curve
       matrices `(L x T_m)` (D2/D7 chosen list-of-matrices shape).
       `fitted` reads `fit$fitted`.
-- [ ] 7.5 Implement `R/print.mfsusie.R` and `R/summary.mfsusie.R`.
+- [x] 7.5 Implement `R/print.mfsusie.R` and `R/summary.mfsusie.R`.
 - [ ] 7.6 Test: CS-then-PIP ordering invariant; `susieR::susie_get_pip`
       and `susieR::susie_get_cs` agree with the fit fields.
 - [ ] 7.7 Test (C3 fidelity): end-to-end fit on three scenarios
       (single-modality functional, multi-modality functional,
       ragged T_m), `residual_variance_method =
       "shared_per_modality"`. Tolerance `<= 1e-8`.
-- [ ] 7.8 Test (apple-to-orange smoke): end-to-end fit with
+- [x] 7.8 Test (apple-to-orange smoke): end-to-end fit with
       `residual_variance_method = "per_scale_modality"` (the v1
       default) on the same scenarios. No numerical comparison.
       Concrete checks: returns a fit of class `c("mfsusie",
@@ -347,7 +347,7 @@ constructor calls the helpers, the C2 / C3 fidelity tests need both.
       monotone non-decreasing across iterations
       (`all(diff(fit$elbo) >= -1e-10)`), `nrow(fit$alpha) <= L`,
       `length(fit$cs)` is finite, `length(fit$pip) == J`.
-- [ ] 7.9 Test (forbidden names): `formalArgs(mfsusie)` does not
+- [x] 7.9 Test (forbidden names): `formalArgs(mfsusie)` does not
       contain any of the forbidden-list names from
       `mf-public-api/spec.md`. Test file
       `tests/testthat/test_public_api_naming.R`.
