@@ -392,26 +392,34 @@ update_variance_components.mf_individual <- function(data, params, model, ...) {
   model
 }
 
-#' Update per-(modality, scale) mixture weights via mixsqp for one effect
+#' Per-effect prior update for `mf_individual` (mixsqp on `pi_V`)
 #'
-#' Called per effect from the IBSS loop, matching susieR's
-#' `update_model_variance` dispatch contract. For each `(m, s)`
-#' pair, builds the mixsqp likelihood matrix
-#' (`mf_em_likelihood_per_scale`) from `ser_stats$betahat[[m]]` and
-#' `sqrt(ser_stats$shat2[[m]])`, runs the M step
+#' Overrides `susieR::optimize_prior_variance` for the
+#' `mf_individual` data class. Per (modality, scale), builds the
+#' mixsqp likelihood matrix (`mf_em_likelihood_per_scale`) from the
+#' per-modality (Bhat, Shat) in `ser_stats`, runs the M step
 #' (`mf_em_m_step_per_scale`) with `zeta = model$alpha[l, ]`, and
-#' writes the new mixture weights into
+#' writes the new mixture weights into both
 #' `model$G_prior[[m]][[s]]$fitted_g$pi` and `model$pi_V[[m]][s, ]`.
 #'
-#' The susieR-style scalar `V[l]` is held at 1 in this v1 (the
-#' mixture weights absorb the per-effect prior shape adaptation).
+#' The susieR-style scalar `V[l]` is held at 1 here in v1 since the
+#' mixture weights absorb the per-effect prior shape adaptation.
+#' Returns `list(V = 1, model = updated_model)` per the susieR
+#' generic contract.
 #'
 #' @references
 #' Manuscript: methods/derivation.tex line 216
 #' (factorized empirical-Bayes mixture-weight update).
 #' @keywords internal
 #' @noRd
-update_model_variance.mf_individual <- function(data, params, model, ser_stats, l, ...) {
+optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats,
+                                                  l       = NULL,
+                                                  alpha   = NULL,
+                                                  moments = NULL,
+                                                  V_init  = NULL) {
+  if (is.null(l)) {
+    stop("`optimize_prior_variance.mf_individual` requires the effect index `l`.")
+  }
   nullweight <- params$nullweight     %||% 0.7
   control    <- params$control_mixsqp %||% list()
   zeta_l     <- model$alpha[l, ]
@@ -435,6 +443,44 @@ update_model_variance.mf_individual <- function(data, params, model, ser_stats, 
       model$G_prior[[m]][[s]]$fitted_g$pi <- new_pi
       model$pi_V[[m]][s, ]                 <- new_pi
     }
+  }
+  list(V = 1, model = model)
+}
+
+#' Per-iteration residual variance + derived-quantity update for `mf_individual`
+#'
+#' Mirrors `susieR::update_model_variance.default`'s orchestration:
+#' calls `update_variance_components` (refresh per-modality or
+#' per-(scale, modality) sigma2), then `update_derived_quantities`
+#' (refresh the running per-modality fit). Bounds are not applied
+#' per-element here because mfsusieR's sigma2 is a list of
+#' length-`S_m` vectors per modality; `params$residual_variance_lowerbound`
+#' / `_upperbound` semantics for that shape are deferred to a later
+#' refinement.
+#'
+#' @keywords internal
+#' @noRd
+update_model_variance.mf_individual <- function(data, params, model, ...) {
+  if (!isTRUE(params$estimate_residual_variance)) return(model)
+  model <- update_variance_components(data, params, model)
+  update_derived_quantities(data, params, model)
+}
+
+#' Recompute the running per-modality fit `model$fitted[[m]]`
+#'
+#' Called by `update_model_variance` after a sigma2 update. The
+#' fit is `X %*% sum_l alpha_l * mu_l[[m]]` per modality. Mirrors
+#' `susieR::update_derived_quantities.default`.
+#'
+#' @keywords internal
+#' @noRd
+update_derived_quantities.mf_individual <- function(data, params, model, ...) {
+  for (m in seq_len(data$M)) {
+    postF_m <- matrix(0, nrow = data$J, ncol = data$T_padded[m])
+    for (l in seq_len(model$L)) {
+      postF_m <- postF_m + model$alpha[l, ] * model$mu[[l]][[m]]
+    }
+    model$fitted[[m]] <- data$X %*% postF_m
   }
   model
 }

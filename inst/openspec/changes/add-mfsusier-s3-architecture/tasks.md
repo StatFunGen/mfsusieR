@@ -314,11 +314,11 @@ constructor calls the helpers, the C2 / C3 fidelity tests need both.
 
 ## 7. Public API and finalize
 
-- [ ] 7.1 Implement `R/mfsusie.R` with the public `mfsusie()`
+- [x] 7.1 Implement `R/mfsusie.R` with the public `mfsusie()`
       function per `mf-public-api/spec.md`. Argument list matches
       design.md D7: `save_residuals = TRUE`, no `post_processing`
       argument.
-- [ ] 7.2 Implement `R/finalize.R` with
+- [x] 7.2 Implement `R/finalize.R` with
       `ibss_finalize.mf_individual` and the strict CS-then-PIP
       ordering per `mf-credible-sets/spec.md`. Finalize fills
       `fit$residuals` from the last IBSS sweep when

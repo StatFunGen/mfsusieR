@@ -164,6 +164,7 @@ create_mf_individual <- function(X,
                                                  # recompute.
     n            = n,
     J            = J,
+    p            = J,    # alias for susieR helpers that read `data$p`
     M            = M,
     residuals    = if (save_residuals) vector("list", M) else NULL,
     intercept    = intercept,

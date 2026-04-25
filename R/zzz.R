@@ -17,11 +17,17 @@ if (!exists("%||%", baseenv())) {
 }
 
 # Cached susieR internals - populated by .onLoad()
-warning_message        <- NULL
-# Cached susieR S3 generics so the per-effect methods can call the
-# generic (and pick up future subclass overrides) without going
-# through `susieR:::`.
-SER_posterior_e_loglik <- NULL
+warning_message            <- NULL
+# Cached susieR S3 generics so the per-effect / per-iteration methods
+# can call the generic (and pick up future subclass overrides) without
+# going through `susieR:::`.
+SER_posterior_e_loglik     <- NULL
+update_variance_components <- NULL
+update_derived_quantities  <- NULL
+get_var_y                  <- NULL
+initialize_susie_model     <- NULL
+initialize_fitted          <- NULL
+get_cs                     <- NULL
 
 #' @useDynLib mfsusieR, .registration = TRUE
 #' @keywords internal
@@ -32,7 +38,14 @@ SER_posterior_e_loglik <- NULL
 
   # Cache susieR internals used by `loglik.mf_individual` and
   # forthcoming PR-7 finalize methods.
-  for (fn in c("warning_message", "SER_posterior_e_loglik")) {
+  for (fn in c("warning_message",
+               "SER_posterior_e_loglik",
+               "update_variance_components",
+               "update_derived_quantities",
+               "get_var_y",
+               "initialize_susie_model",
+               "initialize_fitted",
+               "get_cs")) {
     assign(fn, get(fn, envir = susie_ns), envir = pkg_ns)
   }
 
@@ -40,19 +53,40 @@ SER_posterior_e_loglik <- NULL
   # `mf_individual`. New per-iteration methods land here as PR groups
   # 6, 6b, 7 add them; the list grows.
   mf_generics <- c(
+    # per-effect SER step
     "compute_residuals",
     "compute_ser_statistics",
-    "calculate_posterior_moments",
+    "optimize_prior_variance",
     "loglik",
     "neg_loglik",
+    "calculate_posterior_moments",
     "compute_kl",
     "SER_posterior_e_loglik",
     "update_fitted_values",
+    # per-iteration
     "update_variance_components",
+    "update_derived_quantities",
     "update_model_variance",
     "Eloglik",
     "get_objective",
-    "initialize_susie_model"
+    "track_ibss_fit",
+    "check_convergence",
+    "validate_prior",
+    "trim_null_effects",
+    # one-shot init / finalize
+    "configure_data",
+    "get_var_y",
+    "initialize_susie_model",
+    "initialize_fitted",
+    "ibss_initialize",
+    "cleanup_model",
+    # post-fit accessors
+    "get_scale_factors",
+    "get_intercept",
+    "get_fitted",
+    "get_cs",
+    "get_variable_names",
+    "get_zscore"
   )
   for (g in mf_generics) {
     method_fn <- get(paste0(g, ".mf_individual"), envir = pkg_ns)
