@@ -153,8 +153,9 @@ None. mfsusieR has no prior `inst/openspec/specs/` entries.
   ported, with reason. Created at the start of Phase 3, populated as
   PR groups land.
 - **Roxygen on every function.**
-  - `@manuscript_ref methods/<file>.tex eq:<label>` for every formula
-    in main code.
+  - Manuscript citations in `@references` blocks with a
+    `Manuscript: methods/<file>.tex eq:<label>` prefix for every
+    formula in main code (built-in roxygen tag, greppable).
   - Original-code references (`mvf.susie.alpha`, `multfsusie`,
     `fsusieR`, `susiF`, "original implementation",
     `@references_original`) FORBIDDEN under `R/`. Provenance lives in

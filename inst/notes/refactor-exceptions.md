@@ -137,3 +137,56 @@ entry SHALL be blocked.
     The port lifts it to a function-level parameter named
     consistently with the rest of the file. No behavioural change
     when `max_scale = 10` (the default); behaviour preserved.
+
+### PR group 2 (R/dwt.R + R/data_class.R, 2026-04-25)
+
+- mvf.susie.alpha/R/utils_wavelet_transform.R:24-50 (DWT2)
+  Behavior: Row-wise wavelet transform of a matrix of curves.
+    Identical in shape to `fsusieR::DWT2` but without the
+    `min.scale = 10` argument; the wavethresh default applies
+    (decompose to scale 0).
+  Decision: replaced-by-`R/utils_wavelet.R::dwt_matrix` (already
+    landed in PR group 2 task 2.2).
+  Reason: A single canonical DWT helper is enough; mvf.susie.alpha
+    and fsusieR each shipped a near-duplicate. The C3 fidelity
+    test in `tests/testthat/test_dwt.R` ("matches mvf.susie.alpha
+    DWT2 row-wise") verifies bit-identity on the same input
+    (after the same `col_scale` step).
+
+- mvf.susie.alpha/R/utils_wavelet_transform.R:64-68 (pack_dwt)
+  Behavior: One-line helper computing `cbind(W$D, W$C)` where W
+    is `DWT2(Y)`.
+  Decision: replaced-by-inline (the `cbind(D, C)` pack step is
+    inlined into `R/dwt.R::mf_dwt`).
+  Reason: The packing convention is exposed in `mf_dwt` directly;
+    a separate one-line helper is unnecessary.
+
+- mvf.susie.alpha/R/multfsusie.R:255-318 (per-modality DWT pipeline
+  inside `multfsusie()`)
+  Behavior: Inline loop in the `multfsusie()` body that calls
+    `fsusieR::remap_data` -> `fsusieR::colScale` -> `DWT2` ->
+    `cbind(D, C)` -> `fsusieR::gen_wavelet_indx` per modality.
+  Decision: replaced-by-`R/dwt.R::mf_dwt` (per-modality wrapper)
+    invoked from `R/data_class.R::create_mf_individual` (per-fit
+    constructor).
+  Reason: The original buries the DWT pipeline inside the public
+    fitting function; mfsusieR factors it into a reusable
+    per-modality helper (`mf_dwt`) and a separate constructor
+    (`create_mf_individual`). The pipeline order and arguments
+    are bit-identical to mvf.susie.alpha's; the C3 DWT fidelity
+    test verifies this on the matrix output.
+
+- fsusieR/R/operation_on_susiF_obj.R:1785-1796 (inverse-DWT
+  reconstruction skeleton)
+  Behavior: Constructs a zero `wavethresh::wd` object, sets `$D`
+    and the last entry of `$C`, applies `wavethresh::wr` to
+    reconstruct the position-space curve. Used by `update_cal_fit_func`
+    and downstream coef / predict.
+  Decision: replaced-by-`R/dwt.R::mf_invert_dwt` (PR group 2 task
+    2.4).
+  Reason: Same skeleton, factored into a reusable inverse-DWT
+    helper. The 2e-9 wd/wr roundtrip noise inherent to
+    `filter.number = 10` is documented in
+    `tests/testthat/test_dwt.R` ("mf_dwt + mf_invert_dwt is
+    identity to within wd/wr precision"), with tolerance set to
+    `1e-8` (the contract C2 floor).

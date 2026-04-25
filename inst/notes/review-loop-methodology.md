@@ -90,8 +90,10 @@ at `~/Documents/obsidian/AI/general/agents/AGENT-code-refactor.md`.
    `ashr`, or `wavethresh`? Any reimplemented IBSS loop, DWT, or CS
    construction is a finding.
 3. **Manuscript cross-reference (in main code).** Does every formula in
-   the diff carry an `@manuscript_ref methods/<file>.tex eq:<label>`
-   tag in roxygen? Open
+   the diff carry a manuscript citation in roxygen? The canonical
+   form is `@references` followed by `Manuscript: methods/<file>.tex
+   eq:<label>` (built-in roxygen tag, greppable via the
+   `Manuscript:` prefix). Open
    `~/GIT/MultifSuSiE_Manuscript/methods/<file>.tex` and verify the
    cited equation says what the code computes. Verify the math
    independently of the original code; the original may have bugs.
@@ -179,6 +181,24 @@ The author then reads the findings and decides per item.
 
 For *every* PR that touches numerical routines or CS / PIP logic, the
 loop runs. No exceptions.
+
+## Reviewer model selection
+
+The Agent tool's `model` parameter selects the model used by the
+reviewer subagent. Default inheritance gives the reviewer the same
+model the main session is using. For numerical PRs (Phase 3
+implementation work, Phase 6 fixes, Phase 7 Rcpp) the reviewer
+SHOULD be invoked with `model: "opus"` to maximize correctness
+review quality on the binary tolerance / port-fidelity contracts.
+For lighter passes (the parallel /simplify code-quality / efficiency
+agents, documentation-only PRs) `sonnet` is sufficient. The
+author-pass agent stays on the session model; only the reviewer
+pass dials up.
+
+If the user runs into rate limits on opus, fall back to sonnet for
+the reviewer pass and note the substitution in the commit message.
+Two consecutive clean reviewer passes are still required regardless
+of model.
 
 ## Cost and runtime
 
