@@ -65,7 +65,8 @@ justification accepted by Gao.
 ## Reviewer checklist
 
 The Agent reviewer prompt embeds this checklist. Every numerical PR walks
-through it.
+through it. The checklist absorbs principles from the code-refactor skill
+at `~/Documents/obsidian/AI/general/agents/AGENT-code-refactor.md`.
 
 1. **Spec adherence.** Does the code satisfy every requirement in the
    relevant `spec.md`? Cite the specific requirement if not.
@@ -73,37 +74,57 @@ through it.
    duplicate logic already provided by `susieR`, `fsusieR`, `mixsqp`,
    `ashr`, or `wavethresh`? Any reimplemented IBSS loop, DWT, or CS
    construction is a finding.
-3. **Manuscript cross-reference.** Does every formula in the diff carry an
-   `@manuscript_ref methods/<file>.tex eq:<label>` tag? Open
-   `~/GIT/MultifSuSiE_Manuscript/methods/<file>.tex` and verify the cited
-   equation says what the code computes.
-4. **Original-code cross-reference.** Does every routine ported from
-   `mvf.susie.alpha` carry an
-   `@references_original mvf.susie.alpha/R/<file>.R#L<lo>-L<hi>` tag? Open
-   the cited lines and verify the port preserves the numerical behavior
-   (or, if not, that the deviation is documented and authorized by an
-   OpenSpec change).
-5. **Naming rules.** Snake_case throughout. No abbreviations beyond `pip`,
-   `cs`, `lbf`, `elbo`, `kl`. None of the names on the
-   `mf-public-api/spec.md` forbidden list. Function-level cross-check.
-6. **CS-then-PIP ordering.** If the diff touches finalize logic, verify
-   the five-step order in `mf-credible-sets/spec.md` D9 is preserved.
-7. **Test fidelity.** Per the test-fidelity memory entry, do the tests
-   compare *every* numeric output (alpha, mu, mu2, lbf, KL, sigma2, elbo,
-   pip, cs membership) against `mvf.susie.alpha` at the documented
-   tolerance, not just `length(cs)` and `pip`?
-8. **Degenerate-case test.** If the diff touches IBSS or finalize, does
-   the susieR-degeneracy test (D11, `mf-ibss/spec.md`) still pass at
-   tolerance 1e-10?
-9. **Modularity test.** If the diff adds a new R file, did the author
-   update or run `tests/testthat/test-modularity.R`?
-10. **Roxygen cleanliness.** Does `roxygen2::roxygenise()` run without
+3. **Manuscript cross-reference (in main code).** Does every formula in
+   the diff carry an `@manuscript_ref methods/<file>.tex eq:<label>`
+   tag in roxygen? Open
+   `~/GIT/MultifSuSiE_Manuscript/methods/<file>.tex` and verify the
+   cited equation says what the code computes. Verify the math
+   independently of the original code; the original may have bugs.
+4. **Original-code references are NOT in main code.** Per design.md
+   D12, scan the `R/` portion of the diff for `@references_original`,
+   `mvf.susie.alpha`, `multfsusie`, `original implementation`. Zero
+   matches expected (except inside user-facing error/warning string
+   literals). For test-file portions of the diff, verify the test file
+   has a header comment block listing the
+   `mvf.susie.alpha/R/<file>.R#L<lo>-L<hi>` ranges being compared.
+5. **Refactor-exceptions completeness.** If the diff omits or replaces
+   any line of `mvf.susie.alpha`, is there a corresponding entry in
+   `inst/notes/refactor-exceptions.md`? Walk the cited original line
+   range; for any line not implemented in the diff, the omission must
+   be logged.
+6. **Naming rules.** Snake_case throughout. No abbreviations beyond
+   `pip`, `cs`, `lbf`, `elbo`, `kl`. None of the names on the
+   `mf-public-api/spec.md` forbidden list.
+7. **CS-then-PIP ordering.** If the diff touches finalize logic, verify
+   the five-step order in `mf-credible-sets/spec.md` is preserved.
+8. **Binary tolerance classification.** For each test in the diff,
+   classify as apple-to-apple (same algorithm, same code path) or
+   apple-to-orange (genuinely different algorithms). Apple-to-apple
+   tests SHALL use `tolerance <= 1e-8`. Apple-to-orange tests SHALL
+   be smoke tests only (return shape, no NaN, ELBO monotone) with no
+   numerical comparison. Tolerances of `1e-6`, `1e-2`, `5e-2` are
+   forbidden.
+9. **Test fidelity.** Per the test-fidelity memory entry, do the
+   apple-to-apple tests compare *every* numeric output (alpha, mu,
+   mu2, lbf, lbf_variable, KL, sigma2, elbo, niter, pip, cs
+   membership) against `mvf.susie.alpha`, not just `length(cs)` and
+   `pip`?
+10. **Degenerate-case test.** If the diff touches IBSS or finalize,
+    does the susieR-degeneracy test (`mf-ibss/spec.md` D11) still pass
+    at `tolerance <= 1e-10`?
+11. **No quick fixes.** Are there any `as.character()`,
+    `tryCatch({...}, error = function(e) NA)`, hardcoded fallbacks,
+    or "this works for now" comments that paper over a bug instead of
+    investigating it? Each such pattern is a blocker until the root
+    cause is identified.
+12. **Roxygen cleanliness.** Does `roxygen2::roxygenise()` run without
     errors on the diff? Are documented defaults consistent with the
-    function signatures?
+    function signatures? Are the manuscript citations rendered?
 
 A finding can be a *blocker* (must fix) or a *note* (should fix in a
 follow-up). The default is blocker; the reviewer downgrades to note only
-when explicitly justified.
+when explicitly justified. When a reviewer and author disagree on
+whether a finding is correct, the user (Gao) decides.
 
 ## Reviewer prompt template
 

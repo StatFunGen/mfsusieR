@@ -90,8 +90,8 @@ test against `mvf.susie.alpha` per the test-fidelity rule
 - [ ] 5.3 Test (Phase 4 fidelity): per-effect alpha, mu, mu2, lbf,
       lbf_variable, KL match `mvf.susie.alpha` after one IBSS iteration
       on a fixture, with `residual_variance_method =
-      "shared_per_modality"`. Tolerance 1e-6 for posterior summaries,
-      1e-10 for deterministic intermediates.
+      "shared_per_modality"`. Tolerance `<= 1e-8` (apple-to-apple per
+      design.md D11b).
 
 ## 6. Variance updates and ELBO
 
@@ -121,8 +121,8 @@ test against `mvf.susie.alpha` per the test-fidelity rule
       online_method step 6.
 - [ ] 6b.4 Test: each smoother runs end-to-end on the standard fixture
       and produces curves with the documented shape; smash and TI
-      outputs match `mvf.susie.alpha` at tolerance 1e-6 on the same
-      fixture.
+      outputs match `mvf.susie.alpha` at tolerance `<= 1e-8` on the
+      same fixture (apple-to-apple per design.md D11b).
 
 ## 7. Public API and finalize
 
@@ -173,13 +173,22 @@ available as an Imports dependency. Runs immediately after group 7.
 
 ## 9. Documentation
 
-- [ ] 9.1 Add `@manuscript_ref` and `@references_original` roxygen tags
-      to every numeric routine.
+- [ ] 9.1 Add `@manuscript_ref` roxygen tags to every numeric routine.
+      Confirm via grep that NO `@references_original`,
+      `mvf.susie.alpha`, `multfsusie`, or `original implementation`
+      strings appear in `R/` (per mf-ibss/spec.md and design.md D12).
 - [ ] 9.2 Render `?mfsusie` and confirm every argument has a default
       and a one-line citation per `mf-public-api/spec.md`.
 - [ ] 9.3 Add a vignette `vignettes/mfsusie-quickstart.Rmd` running the
       smallest fixture end-to-end and showing the fit object's
       structure.
+- [ ] 9.4 Create `inst/notes/refactor-exceptions.md` (per design.md
+      D11c). Walk every function in `mvf.susie.alpha::multfsusie` and
+      its supporting files line by line. For each line range that is
+      not ported, log an entry: file/line range, behavior, decision
+      (omit / replaced-by / deferred-to), reason. PRs in groups 2-7
+      that omit lines without a corresponding entry SHALL be blocked
+      by the reviewer.
 
 ## 9b. Modularity audit
 

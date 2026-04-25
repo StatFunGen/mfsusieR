@@ -148,23 +148,46 @@ authoring pass writes code per the proposal's spec.md contract, a fresh-context
 Agent (Explore subagent) reviews, findings come back, the author addresses,
 the cycle repeats until clean.
 
-Rules for Phase 3:
-- Every function that has an analog in `mvf.susie.alpha` cites its origin in roxygen:
-  ```r
-  #' @references_original mvf.susie.alpha/R/multfsusie.R#L123-L187
-  ```
-- Every formula cites the manuscript:
+Rules for Phase 3 (binding; mirrors the code-refactor skill at
+`~/Documents/obsidian/AI/general/agents/AGENT-code-refactor.md`):
+
+- **Mathematical fidelity first.** Every line of the original is
+  accounted for. Lines intentionally omitted are logged in
+  `inst/notes/refactor-exceptions.md` with file/range, behavior,
+  decision, reason. Verify math independently of code (read the
+  manuscript and supplementary material; the original may have bugs).
+- **Manuscript citations** are required in main code roxygen:
   ```r
   #' @manuscript_ref methods/derivation.tex eq:post_f_mix
   ```
-- Before marking a task done, a fresh-context Agent reviewer must diff behavior
-  against `mvf.susie.alpha` on one scripted example and report match/mismatch
-  at the documented tolerance, AND audit modularity against design.md D10.
-- No new algorithmic ideas in this phase. Faithful port first; innovations
-  come in Phase 6.
-- When porting a numerical routine, preserve the original parameter names
-  inside the internal function. Renaming happens only at the public-API
-  boundary per Phase 2.
+- **Original-code references are FORBIDDEN in main code roxygen.**
+  No `@references_original`, no `# from mvf.susie.alpha/...`, no
+  `# original implementation` comments under `R/`. Provenance lives
+  in (a) test file headers (apple-to-apple comparison metadata),
+  (b) `inst/notes/refactor-exceptions.md`, (c) free-form prose in
+  session notes and paradigm notes.
+- **Binary tolerance philosophy.** Apple-to-apple comparisons (same
+  algorithm, same code path) use tolerance `<= 1e-8`. Apple-to-orange
+  comparisons (genuinely different algorithms) are smoke tests only,
+  not numerical. Graduated tolerances (`1e-2`, `5e-2`, `1e-6`) are
+  forbidden. A failing apple-to-apple test at `1e-8` is a bug to
+  investigate, not a tolerance to relax.
+- **Reviewer pass on every numerical PR**: fresh-context Agent
+  reviewer runs the 10-item checklist in
+  `inst/notes/review-loop-methodology.md`, which includes the
+  modularity audit (design.md D10), the manuscript cross-check, the
+  refactor-exceptions completeness check, and the binary-tolerance
+  test classification.
+- **No new algorithmic ideas in this phase.** Faithful port first;
+  innovations come in Phase 6 after the FDR investigation.
+- **No quick fixes.** When tests fail, investigate root cause. Do not
+  paper over with `as.character()`, `tryCatch` swallowers, or
+  loosened tolerances. If a fix feels hacky, it is hacky.
+- **Public-API parameter names** follow the harmonization with susieR
+  / mvsusieR documented in design.md D7. Internal function
+  parameter names within ported routines preserve the original to
+  ease line-by-line review; renaming happens only at the public
+  boundary.
 
 Exit: Phase 4 reference tests pass against the port at the documented
 tolerances, then `openspec archive add-mfsusier-s3-architecture` (run from
@@ -189,15 +212,17 @@ test_that("mfsusie matches mvf.susie.alpha on toy scenario A", {
 
   # Per memory test_fidelity_and_manuscript_xref: every numeric output, not
   # just aggregates.
-  expect_equal(fit_new$alpha,        fit_old$alpha,        tolerance = 1e-6)
-  expect_equal(fit_new$mu,           fit_old$mu,           tolerance = 1e-6)
-  expect_equal(fit_new$mu2,          fit_old$mu2,          tolerance = 1e-6)
-  expect_equal(fit_new$lbf,          fit_old$lbf,          tolerance = 1e-6)
-  expect_equal(fit_new$lbf_variable, fit_old$lbf_variable, tolerance = 1e-6)
-  expect_equal(fit_new$KL,           fit_old$KL,           tolerance = 1e-6)
-  expect_equal(fit_new$sigma2,       fit_old$sigma2,       tolerance = 1e-6)
-  expect_equal(fit_new$elbo,         fit_old$elbo,         tolerance = 1e-6)
-  expect_equal(fit_new$pip,          fit_old$pip,          tolerance = 1e-6)
+  # Apple-to-apple: same algorithm, same code path -> tolerance <= 1e-8.
+  # See design.md D11b (binary tolerance philosophy).
+  expect_equal(fit_new$alpha,        fit_old$alpha,        tolerance = 1e-8)
+  expect_equal(fit_new$mu,           fit_old$mu,           tolerance = 1e-8)
+  expect_equal(fit_new$mu2,          fit_old$mu2,          tolerance = 1e-8)
+  expect_equal(fit_new$lbf,          fit_old$lbf,          tolerance = 1e-8)
+  expect_equal(fit_new$lbf_variable, fit_old$lbf_variable, tolerance = 1e-8)
+  expect_equal(fit_new$KL,           fit_old$KL,           tolerance = 1e-8)
+  expect_equal(fit_new$sigma2,       fit_old$sigma2,       tolerance = 1e-8)
+  expect_equal(fit_new$elbo,         fit_old$elbo,         tolerance = 1e-8)
+  expect_equal(fit_new$pip,          fit_old$pip,          tolerance = 1e-8)
   expect_equal(length(fit_new$cs),   length(fit_old$cs))
 })
 ```
@@ -282,6 +307,9 @@ and keep the old names working for one minor version.
   `coef.mfsusie()`, `plot.mfsusie()`, `print.mfsusie()`.
 - Internal helpers prefixed with `.` or in `R/utils-*.R`.
 - No boolean flags named in the negative (`no_cache = FALSE` becomes `cache = TRUE`).
+- The full public-API harmonization with susieR and mvsusieR (which choices
+  match, which diverge, and why) lives in design.md D7. Phase 8 polish follows
+  that table.
 
 ## Writing rules (all markdown, roxygen, and commit messages)
 

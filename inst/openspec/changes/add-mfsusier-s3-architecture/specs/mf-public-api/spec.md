@@ -15,10 +15,12 @@ CLAUDE.md naming rules (snake_case, no abbreviations beyond
   `prior_variance_grid_multiplier`, `prior_variance_grid`,
   `null_prior_weight`, `cross_modality_prior`,
   `residual_variance_method`, `estimate_residual_variance`,
+  `estimate_prior_variance`, `estimate_prior_method`,
   `estimate_prior_mixture_weights`, `mixture_weight_method`,
-  `post_processing`, `max_padded_log2`, `max_iter`, `tol`, `coverage`,
-  `min_abs_corr`, `filter_credible_sets`, `wavelet_filter_number`,
-  `wavelet_family`, `standardize`, `intercept`, `precompute_cache`,
+  `check_null_threshold`, `prior_tol`, `post_processing`,
+  `max_padded_log2`, `max_iter`, `tol`, `coverage`, `min_abs_corr`,
+  `filter_credible_sets`, `wavelet_filter_number`, `wavelet_family`,
+  `standardize`, `intercept`, `precompute_cache`, `n_thread`,
   `verbose`, `track_fit`, `model_init`
 
 #### Scenario: forbidden names absent

@@ -228,21 +228,47 @@ mfsusie(
   cross_modality_prior = NULL,
   residual_variance_method = c("per_scale_modality", "shared_per_modality"),
   estimate_residual_variance = TRUE,
+  estimate_prior_variance = TRUE,
+  estimate_prior_method = c("optim", "EM", "uniroot"),
   estimate_prior_mixture_weights = TRUE,
-  mixture_weight_method = c("mixsqp", "em"),
+  mixture_weight_method = c("mixsqp", "EM"),
+  check_null_threshold = 0,
+  prior_tol = 1e-9,
   post_processing = c("none", "smash", "TI", "HMM"),
   max_padded_log2 = 10,
-  max_iter = 100, tol = 1e-4,
+  max_iter = 100, tol = 1e-3,
   coverage = 0.95, min_abs_corr = 0.5,
   filter_credible_sets = TRUE,
   wavelet_filter_number = 10,
   wavelet_family = "DaubLeAsymm",
   standardize = TRUE, intercept = TRUE,
-  precompute_cache = TRUE,
-  verbose = FALSE, track_fit = FALSE,
+  precompute_cache = TRUE, n_thread = 1,
+  verbose = TRUE, track_fit = FALSE,
   model_init = NULL
 )
 ```
+
+#### Naming convention alignment with susieR and mvsusieR
+
+The signature follows mvsusieR/refactor-s3 conventions, which themselves
+follow susieR's master-branch conventions. Harmonized choices:
+
+- `tol = 1e-3` matches mvsusieR's default (susieR uses `1e-4` but mvsusieR
+  loosened to `1e-3` for the iterative outer loop; we match mvsusieR
+  because mfsusieR is a closer kin to mvsusieR's data-class pattern).
+- `verbose = TRUE` matches mvsusieR's default (susieR uses `FALSE`).
+- `mixture_weight_method = c("mixsqp", "EM")` capitalization matches
+  mvsusieR exactly.
+- `estimate_prior_method = c("optim", "EM", "uniroot")` matches
+  mvsusieR (susieR has "optim", "EM", "simple"; the multivariate path
+  needed `uniroot` instead of `simple`).
+- `check_null_threshold`, `prior_tol`, `n_thread` are inherited from
+  mvsusieR with identical names and defaults.
+- `precompute_cache` matches mvsusieR.
+- Argument ordering mirrors mvsusieR: data inputs first, model size,
+  prior arguments grouped together, residual-variance arguments,
+  estimation method choices, post-processing and CS options, system
+  knobs (verbose, n_thread, track_fit) at the end.
 
 #### Renamed arguments
 
@@ -456,15 +482,91 @@ The next-most-degenerate case worth pinning as a separate test:
   This requires fsusieR as a reference and is recorded as a follow-up
   test; it is not the susieR degeneracy.
 
-### D12. Manuscript cross-references in code
+### D11b. Test tolerance philosophy: binary apple/orange
 
-Every non-trivial formula in the codebase carries a roxygen tag
-`@manuscript_ref methods/<file>.tex eq:<label>`. Where the manuscript
-contains a typo or ambiguity, the roxygen tag is followed by a
-`@manuscript_note` block describing the discrepancy and the chosen
-interpretation. For ported routines, an additional
-`@references_original mvf.susie.alpha/R/<file>.R#L<lo>-L<hi>` is added
-per CLAUDE.md.
+Per the code-refactor skill principles
+(`~/Documents/obsidian/AI/general/agents/AGENT-code-refactor.md`),
+unit-test tolerances are binary, not graduated:
+
+- **Apple-to-apple comparison.** Same algorithm and same code path
+  (e.g., mfsusie with `residual_variance_method = "shared_per_modality"`
+  vs `mvf.susie.alpha::multfsusie`, OR mfsusie at the susieR-degeneracy
+  inputs vs `susieR::susie`). Tolerance MUST be `<= 1e-8`. Anything
+  looser is a bug to investigate, not a tolerance to relax.
+- **Apple-to-orange comparison.** Genuinely different algorithms (e.g.,
+  mfsusie default per-(scale, modality) variance vs the legacy
+  shared-per-modality variance, OR mfsusie vs an Rcpp re-implementation
+  that diverges in iteration order). Do NOT compare numerically. Smoke
+  test only: assert the call returns a fit, the fit has the documented
+  shape, no NaNs, ELBO is monotone.
+- **Tolerances `1e-2`, `5e-2`, `1e-6` for apple-to-apple are forbidden**
+  in this repo. They hide bugs.
+
+Concrete contracts:
+
+| Test | Comparison type | Tolerance |
+|---|---|---|
+| Phase 4 fidelity vs `mvf.susie.alpha` (legacy variance mode) | apple-to-apple | `<= 1e-8` |
+| susieR-degeneracy (D11) | apple-to-apple | `<= 1e-10` (deterministic intermediates) |
+| Default per-(scale, modality) vs legacy | apple-to-orange | smoke test |
+| Phase 7 Rcpp vs pure-R reference | apple-to-apple | `<= 1e-10` (machine precision) |
+
+### D11c. Refactor-exceptions doctrine
+
+Every line of `mvf.susie.alpha::multfsusie` and the supporting
+`operation_on_multfsusie_*.R` files MUST be accounted for during the
+port. If a line is intentionally NOT ported (because it implements a
+known bug, or is dead code, or is replaced by a delegated upstream
+helper), the omission is documented in
+`inst/notes/refactor-exceptions.md`. Each entry has the form:
+
+```
+- mvf.susie.alpha/R/<file>.R:<lo>-<hi>
+  Behavior: <one-line description of what the original lines do>
+  Decision: omit | replaced-by-<upstream> | deferred-to-<phase>
+  Reason: <one-paragraph justification, citing OpenSpec change or
+    manuscript section>
+```
+
+The reviewer pass on each Phase 3 PR confirms that any omitted lines
+are entered in this file. PRs that omit lines without an entry are
+blocked.
+
+### D12. Manuscript cross-references in code; original-code references in tests and dev notes only
+
+Per the code-refactor skill principle: do NOT reference the original
+implementation (`mvf.susie.alpha`, "old code", historical structures)
+in main package code comments or roxygen. Original-code references are
+project-internal provenance metadata, not user-facing documentation.
+They go in:
+
+1. **`inst/notes/refactor-exceptions.md`** for omitted lines (D11c).
+2. **Test file headers**: each `tests/testthat/test-<routine>.R` file
+   that compares mfsusieR against `mvf.susie.alpha` carries a header
+   block listing the original file paths and line ranges being
+   compared. Format:
+   ```
+   # apple-to-apple comparison against:
+   #   mvf.susie.alpha/R/multfsusie.R#L519-L541  (cal_Bhat_Shat path)
+   #   mvf.susie.alpha/R/EM.R#L31-L120          (mixture-weight EM)
+   ```
+3. **Dev notes** (e.g., `inst/notes/sessions/*.md`,
+   `inst/notes/paradigms/mvf-original.md`) where free-form prose
+   citation is appropriate.
+
+In *main* package code (anything under `R/`):
+
+- Manuscript citations are required and go in roxygen as
+  `@manuscript_ref methods/<file>.tex eq:<label>`.
+- Where the manuscript contains a typo or ambiguity, follow the
+  reference with a `@manuscript_note` block describing the discrepancy
+  and the chosen interpretation.
+- `@references_original` tags are FORBIDDEN in `R/` source. The reviewer
+  rejects any PR that introduces them. The provenance information is
+  available in the test file header and `refactor-exceptions.md`.
+
+This separates user-facing documentation (manuscript math) from
+implementation provenance (which mvf.susie.alpha line was ported).
 
 ## Risks / Trade-offs
 
