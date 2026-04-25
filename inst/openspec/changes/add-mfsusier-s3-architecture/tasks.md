@@ -183,22 +183,77 @@ constructor calls the helpers, the C2 / C3 fidelity tests need both.
 
 ## 5. SER and posterior moments
 
-- [ ] 5.1 Implement `R/individual_data_methods.R` with
-      `compute_residuals.mf_individual`,
-      `compute_ser_statistics.mf_individual` (per modality),
-      `calculate_posterior_moments.mf_individual` per manuscript
-      eq:post_f_mix and eq:post_f2_mix,
-      `compute_kl.mf_individual`, `loglik.mf_individual`,
-      `neg_loglik.mf_individual`, `update_fitted_values.mf_individual`.
-- [ ] 5.2 Test: posterior moments match analytical values on a
-      hand-constructed scenario at tolerance `1e-10`.
-- [ ] 5.3 Test (C3 fidelity): per-effect alpha, mu, mu2, lbf,
-      lbf_variable, KL match `mvf.susie.alpha` after one IBSS
-      iteration on a fixture, with `residual_variance_method =
-      "shared_per_modality"`. Tolerance `<= 1e-8`.
-- [ ] 5.4 Test (C2 fidelity): same per-effect quantities match
-      `fsusieR::susiF` after one IBSS iteration for `M = 1, T_1 > 1`
-      at tolerance `<= 1e-8`.
+### 5a. Per-effect plumbing (residuals + SER stats + update_fitted_values) -- LANDED in 333a04f
+
+- [x] 5a.1 `compute_residuals.mf_individual` per modality.
+- [x] 5a.2 `compute_ser_statistics.mf_individual` per modality.
+- [x] 5a.3 `update_fitted_values.mf_individual` per modality.
+- [x] 5a.4 Unit tests for the three per-effect helpers (29 expectations).
+
+### 5b. Mixture-aware posterior moments (loglik + calculate_posterior_moments)
+
+- [x] 5b.1 Add `LinkingTo: cpp11` to DESCRIPTION; `src/Makevars`
+      configured (or omitted, cpp11 default-OK).
+- [x] 5b.2 Pure-R reference oracle in `R/reference_implementations.R`
+      (mvsusieR pattern):
+      `mixture_log_bf_per_scale_R`,
+      `mixture_posterior_per_scale_R`. Closed-form mixture-of-normals
+      formulas; no ashr call (oracle target for the cpp11 kernel).
+- [x] 5b.3 cpp11 kernels in `src/posterior_mixture.cpp`:
+      `mixture_log_bf_per_scale` and
+      `mixture_posterior_per_scale`. Element-wise / dense-array
+      arithmetic only, no BLAS calls. Per design.md D14.
+- [x] 5b.4 R wrappers in `R/posterior_mixture.R` that forward to
+      the cpp11 kernels. Wrappers do input validation and shape
+      coercion; the cpp11 layer is pure arithmetic.
+- [x] 5b.5 `loglik.mf_individual(data, params, model, V, ser_stats, l, ...)`
+      in `R/individual_data_methods.R`: per modality, per scale,
+      per-(SNP, scale) log-BF via `mixture_log_bf_per_scale`; sum
+      across scales (within modality); combine across modalities
+      via `combine_modality_lbfs`; softmax with `model$pi`; update
+      `model$alpha[l, ]`, `model$lbf[l]`, `model$lbf_variable[l, ]`.
+- [x] 5b.6 `calculate_posterior_moments.mf_individual(data, params,
+      model, V, l, ...)` in `R/individual_data_methods.R`: per
+      modality, per scale: `mixture_posterior_per_scale`; populate
+      `model$mu[[l]][[m]]` and `model$mu2[[l]][[m]]` at the scale's
+      column indices.
+- [x] 5b.7 Stash `G_prior` and the cross-modality combiner on
+      `model` in `initialize_susie_model.mf_individual` so
+      per-iteration methods do not re-traverse `params$prior`.
+- [x] 5b.8 Test: `mixture_log_bf_per_scale` cpp11 vs `_R` oracle on
+      randomized inputs (fixed seed) at `<= 1e-12` per design.md
+      D14.
+- [x] 5b.9 Test: `mixture_posterior_per_scale` cpp11 vs `_R` oracle
+      at `<= 1e-12`.
+- [x] 5b.10 Test: `mixture_log_bf_per_scale_R` matches
+      `ashr::calc_logLR` element-wise at `<= 1e-12`.
+- [x] 5b.11 Test: `mixture_posterior_per_scale_R` matches
+      `ashr::postmean` and `ashr::postsd^2 + ashr::postmean^2`
+      element-wise at `<= 1e-12`.
+- [x] 5b.12 Test (degenerate, susieR-equivalent): `K = 1`,
+      `null_prior_weight = 0`, `M = 1`, `T_1 = 1` reduces to
+      susieR's scalar formula
+      `post_var = (1/V + pw/sigma2)^(-1)`,
+      `post_mean = (1/sigma2) * post_var * residuals`. Tolerance
+      `<= 1e-10` (C1 contract).
+- [x] 5b.13 Test: `loglik.mf_individual` produces alpha summing to 1,
+      `lbf` finite, `lbf_variable` length J. Round-trip with
+      `update_fitted_values` keeps zero-init at zero.
+- [ ] 5b.14 Test (C3, partial): per-effect alpha, mu, mu2, lbf,
+      lbf_variable match `mvf.susie.alpha::update_multfsusie` on a
+      fixture after one IBSS iteration, with
+      `residual_variance_method = "shared_per_modality"`. Tolerance
+      `<= 1e-8`. (Full end-to-end C3 still in PR group 7.)
+
+### 5c. KL and ELBO contributions
+
+- [ ] 5c.1 Implement `compute_kl.mf_individual`, `loglik.mf_individual`
+      aggregate (called without `l`), `neg_loglik.mf_individual`.
+- [ ] 5c.2 Test: KL matches susieR's
+      `compute_kl.individual` formula in the susieR-degenerate case
+      (C1 contract, `<= 1e-10`).
+- [ ] 5c.3 Test (C3, partial): KL per effect matches
+      `mvf.susie.alpha`'s ELBO contribution at `<= 1e-8`.
 
 ## 6. Variance updates and ELBO
 

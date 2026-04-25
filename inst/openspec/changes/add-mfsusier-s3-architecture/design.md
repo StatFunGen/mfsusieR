@@ -72,7 +72,11 @@ OpenSpec change that authorized the deviation is cited inline.
 - FDR investigation (Phase 5) and the fixes that follow it (Phase 6).
   This change makes those investigations possible without dictating
   their outcome.
-- Rcpp ports. Phase 7 only, after the architecture is locked.
+- Wholesale Rcpp / RcppArmadillo migration. Phase 7 only, after the
+  architecture is locked. Hot-path C++ via `cpp11` is permitted
+  during Phase 3 for narrow utility kernels (per design.md D14)
+  with a pure-R reference oracle and an apple-to-apple
+  C++-vs-pure-R unit test at `<= 1e-12`.
 - Deprecation of the read-only reference packages. `susieR`,
   `mvsusieR`, `susieAnn`, `mvf.susie.alpha`, and `fsusieR` remain
   read-only references for the lifetime of mfsusieR, per CLAUDE.md
@@ -749,6 +753,7 @@ Concrete contract table:
 | C2 vs `fsusieR::susiF` (D11b) | apple-to-apple | `<= 1e-8` |
 | C3 vs `mvf.susie.alpha::multfsusie` (D11c) | apple-to-apple | `<= 1e-8` |
 | Default per-(scale, modality) vs legacy variance | apple-to-orange | smoke test |
+| Phase 3 cpp11 kernel vs pure-R oracle (D14) | apple-to-apple | `<= 1e-12` |
 | Phase 7 Rcpp vs pure-R reference | apple-to-apple | `<= 1e-10` |
 | Post-processor smash/TI/HMM vs `fsusieR::susiF(post_processing = ...)` | apple-to-apple | `<= 1e-8` |
 | `mfsusie(L_greedy = K)` vs `fsusieR::susiF(greedy = TRUE)` | apple-to-orange | smoke test (different greedy algorithms) |
@@ -880,6 +885,65 @@ This step is required of routines copied from port sources. It is
 not required of routines that are bespoke to mfsusieR (e.g., the
 per-(scale, modality) residual variance update, the cross-modality
 prior plug-in seam).
+
+### D14. C++ acceleration via cpp11 in Phase 3 hot paths
+
+The Non-Goals section originally deferred all C++ to Phase 7. That
+stance is loosened for narrow utility kernels on the per-effect
+SER hot path. The rules:
+
+- **Header**: `LinkingTo: cpp11` only. NOT Rcpp, NOT
+  RcppArmadillo, NOT cpp11armadillo. Wholesale matrix-algebra
+  acceleration (eigendecompositions, solves, Cholesky) is still
+  Phase 7 territory and uses RcppArmadillo when it lands. Phase 3
+  cpp11 kernels SHALL be element-wise / dense-array operations on
+  `cpp11::doubles_matrix<>` and `cpp11::doubles` only.
+- **Pure-R reference oracle**. Every cpp11 kernel SHALL ship with
+  a pure-R counterpart in `R/reference_implementations.R` (mvsusieR
+  pattern, `mvsusieR/R/reference_implementations.R`). The R version
+  is named `<kernel>_R` (e.g., `mixture_log_bf_per_scale_R`); the
+  cpp11 version is named `<kernel>` and is the production callable.
+- **Apple-to-apple test at `<= 1e-12`**. Each cpp11 kernel has a
+  `test_<kernel>.R` test file that asserts agreement with the `_R`
+  oracle at tolerance `<= 1e-12` on randomized inputs, fixed seed.
+  This catches drift introduced by FMA/SIMD reordering and forces
+  the C++ formula to stay literal-equivalent to the R formula.
+  This tolerance is tighter than the C2/C3 contract floor of `1e-8`
+  to reduce the chance that C++/R drift contaminates a downstream
+  contract test.
+- **Where cpp11 lives**: `src/<kernel>.cpp`, one kernel per file
+  unless they share state. R-side wrappers in `R/<topic>.R` (NOT
+  inside the pure-R reference file). Generated R bindings via
+  `cpp11::cpp_register()` in `R/cpp11.R` (auto-generated, not
+  hand-edited).
+- **Out-of-scope for D14**: anything that would call BLAS at the
+  C++ level. `X %*% b` and `crossprod(X, R)` stay in R via base
+  BLAS. cpp11 is for the per-(SNP, position, mixture-component)
+  closed-form arithmetic that is not BLAS-shaped.
+
+The kernels currently authorized under D14 (PR group 5b):
+
+- `mixture_log_bf_per_scale` — per-(SNP, scale) log-Bayes factor
+  for the mixture-of-normals prior. Pure-R oracle:
+  `mixture_log_bf_per_scale_R`.
+- `mixture_posterior_per_scale` — per-(SNP, position) posterior
+  mean and second moment under the mixture-of-normals prior.
+  Pure-R oracle: `mixture_posterior_per_scale_R`.
+
+Adding a kernel under D14 in a future PR group SHALL be done by
+amending this list and the cpp11 task block in tasks.md, NOT
+silently. The reviewer pass rejects new `src/*.cpp` files whose
+authorization is not recorded here.
+
+The motivation is that the per-effect SER step is called L * iter
+times per fit, and each call walks J * M * S mixture cells. Pure
+R is BLAS-bound only on `X %*% b` and `crossprod(X, R)`; the
+mixture inner loop is element-wise and does not benefit from BLAS.
+Profiling on the C2 fixture (J = 1000, M = 3, T = 128, K = 10,
+L = 10, ~50 IBSS iters) shows the pure-R version at roughly 5-10s
+per fit; the cpp11 version is expected at < 1s. Phase 7 may
+revisit and unify this with RcppArmadillo when MASH-style
+cross-modality priors land.
 
 ## Risks / Trade-offs
 

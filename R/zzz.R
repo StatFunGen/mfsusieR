@@ -1,16 +1,15 @@
-# Package load hook.
+# Package load hook + namespace plumbing.
 #
-# Phase 3 PR group 1 (skeleton): .onLoad is intentionally empty. Subsequent
-# PR groups will populate this with:
-#   - S3 method registrations on susieR's internal generics
-#     (mirroring mvsusieR/R/zzz.R), dispatched on `mf_individual` and
-#     `mfsusie` classes,
-#   - cached bindings for susieR / fsusieR internal helpers used
-#     directly by mfsusieR (per design.md D8 "function-level imports").
+# - `@useDynLib` registers the cpp11-compiled symbols (per design.md
+#   D14, Phase 3 hot-path kernels in `src/posterior_mixture.cpp`).
+# - `.onLoad` will later host S3 method registrations on susieR's
+#   internal generics (mirroring `mvsusieR/R/zzz.R`).
 #
-# Keep this file the canonical place for namespace plumbing; do not put
-# numerical routines here.
+# Numerical routines do not live here.
 
+#' @useDynLib mfsusieR, .registration = TRUE
+#' @keywords internal
+#' @noRd
 .onLoad <- function(libname, pkgname) {
   invisible(NULL)
 }
