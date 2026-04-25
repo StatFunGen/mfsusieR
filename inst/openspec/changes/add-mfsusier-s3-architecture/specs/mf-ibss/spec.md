@@ -43,11 +43,12 @@ per modality, replicated across scales, matching `mvf.susie.alpha`.
 - **WHEN** `mfsusie()` runs with `residual_variance_method =
   "shared_per_modality"`
 - **THEN** `fit$sigma2` SHALL be a list of M scalars, and the resulting
-  posterior summaries (alpha, mu, mu2, lbf, KL, pip) SHALL match
-  `mvf.susie.alpha::multfsusie` on the same fixed seed at tolerance
-  1e-6 for posterior summaries and 1e-10 for deterministic
-  intermediates, where any deviation is documented in the test with a
-  cited reason
+  posterior summaries (alpha, mu, mu2, lbf, lbf_variable, KL, sigma2,
+  elbo, niter, pip) SHALL match `mvf.susie.alpha::multfsusie` on the
+  same fixed seed at tolerance `<= 1e-8` (apple-to-apple, same
+  algorithm, same code path per the binary tolerance philosophy in
+  `design.md` D11b). Failures at this tolerance are bugs to
+  investigate, not tolerances to relax.
 
 ### Requirement: ELBO matches the manuscript
 
@@ -129,17 +130,43 @@ ignored.
   10)` on the same fixture
 - **THEN** the agreement SHALL hold for every L value tested
 
-### Requirement: roxygen tags reference manuscript and original code
+### Requirement: roxygen tags reference manuscript only; original-code references live in test files and dev notes
 
-Every internal function ported from `mvf.susie.alpha` SHALL carry a
-roxygen tag `@references_original mvf.susie.alpha/R/<file>.R#L<lo>-L<hi>`
-and every function implementing a manuscript formula SHALL carry
-`@manuscript_ref methods/<file>.tex eq:<label>`.
+Per `design.md` D12, main package code (anything under `R/`) SHALL NOT
+contain `@references_original` tags or any other reference to
+`mvf.susie.alpha`, the "original implementation", or "old code".
+Original-code provenance lives in:
 
-#### Scenario: tags present and accurate
+- `inst/notes/refactor-exceptions.md` (line-level omission ledger).
+- Test file headers (e.g., `tests/testthat/test-ser.R` carries a
+  comment block listing the `mvf.susie.alpha/R/<file>.R#L<lo>-L<hi>`
+  ranges being compared).
+- Free-form prose in `inst/notes/sessions/*.md` and
+  `inst/notes/paradigms/mvf-original.md`.
+
+Manuscript citations remain mandatory in main package roxygen and use
+the `@manuscript_ref methods/<file>.tex eq:<label>` form.
+
+#### Scenario: manuscript tags present in main code
 
 - **WHEN** `roxygen2::roxygenise()` runs on the package
 - **THEN** every exported function and every internal function with a
   manuscript-derived formula SHALL have at least one `@manuscript_ref`
-  tag, and every ported internal function SHALL have at least one
-  `@references_original` tag, both pointing at valid file paths
+  tag pointing at a valid manuscript section or equation label
+
+#### Scenario: original-code references are not in main code
+
+- **WHEN** any file under `R/` is scanned for the strings
+  `@references_original`, `mvf.susie.alpha`, `multfsusie`, or
+  `original implementation`
+- **THEN** zero matches SHALL be found, except for matches inside
+  string literals that are part of an error message or warning
+  pointing the user at the legacy package
+
+#### Scenario: original-code references are present in test files
+
+- **WHEN** a test file under `tests/testthat/` performs an
+  apple-to-apple comparison against `mvf.susie.alpha`
+- **THEN** the file SHALL begin with a header comment block listing the
+  `mvf.susie.alpha/R/<file>.R#L<lo>-L<hi>` ranges being compared, in
+  the format described in `design.md` D12

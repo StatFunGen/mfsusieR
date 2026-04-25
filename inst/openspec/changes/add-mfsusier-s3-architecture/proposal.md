@@ -83,8 +83,10 @@ None. mfsusieR has no prior `openspec/specs/` entries.
   credible-set helpers, prior constructors, output formatter).
 - New tests under `tests/testthat/` comparing all numeric outputs against
   `mvf.susie.alpha::multfsusie` per CLAUDE.md Phase 4 rules and the
-  test-fidelity memory entry. Tolerances: 1e-6 for posterior summaries,
-  1e-10 for deterministic intermediates.
+  test-fidelity memory entry. Binary tolerance philosophy per design.md
+  D11b: `<= 1e-8` for apple-to-apple comparisons, `<= 1e-10` for the
+  susieR-degeneracy test, smoke test only for apple-to-orange
+  comparisons. Graduated tolerances are forbidden.
 - Roxygen on every function: `@references_original
   mvf.susie.alpha/R/...` for ported logic and `@manuscript_ref
   methods/<file>.tex eq:label` for any formula.
