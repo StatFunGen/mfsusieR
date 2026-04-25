@@ -83,6 +83,26 @@ test_that("mixture_posterior_per_scale_R: closed form matches ashr::postmean / p
   expect_equal(ours$pmean2, ashr_psd^2 + ashr_pm^2, tolerance = 1e-12)
 })
 
+# ---- Input validation ----------------------------------------------------
+
+test_that("mixture_log_bf_per_scale errors when bhat or shat is not a matrix", {
+  expect_error(
+    mfsusieR:::mixture_log_bf_per_scale(1:10, matrix(1, 5, 2), c(0, 1), c(0.5, 0.5)),
+    "must be matrices"
+  )
+  expect_error(
+    mfsusieR:::mixture_log_bf_per_scale(matrix(1, 5, 2), 1:10, c(0, 1), c(0.5, 0.5)),
+    "must be matrices"
+  )
+})
+
+test_that("mixture_posterior_per_scale errors when bhat or shat is not a matrix", {
+  expect_error(
+    mfsusieR:::mixture_posterior_per_scale(1:10, matrix(1, 5, 2), c(0, 1), c(0.5, 0.5)),
+    "must be matrices"
+  )
+})
+
 # ---- pure-null edge case (K = 1, sd = 0) --------------------------------
 
 test_that("pure-null mixture (K = 1, sd_grid = 0) gives lbf = 0 and zero posterior", {

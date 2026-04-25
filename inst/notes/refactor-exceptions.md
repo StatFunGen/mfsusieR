@@ -245,3 +245,45 @@ entry SHALL be blocked.
     `tests/testthat/test_dwt.R` ("mf_dwt + mf_invert_dwt is
     identity to within wd/wr precision"), with tolerance set to
     `1e-8` (the contract C2 floor).
+
+### PR group 6 (R/individual_data_methods.R variance + ELBO, 2026-04-25)
+
+- mvf.susie.alpha/R/operation_on_multfsusie_obj.R:1046-1096
+  (`get_ER2.multfsusie`)
+  Behavior: ER2 per modality is computed as
+    `sum((Y - X*postF)^2) - sum(postF^2) + sum(postF2_sd2)`,
+    where `postF = sum_l alpha_l * mu_l` and
+    `postF2_sd2 = sum_l alpha_l * mu2_l`. The bias correction
+    omits the predictor-weights factor and aggregates effects
+    via `sum(postF^2)` (sum-then-square) instead of
+    `sum_l ||X * (alpha_l * mu_l)||^2` (per-effect square-then-sum).
+  Decision: replaced-by-susieR-formula in
+    `R/individual_data_methods.R::mf_get_ER2_per_position`.
+  Reason: susieR's `get_ER2.individual` uses the correct
+    `E_q[||Y - X*beta||^2]` decomposition for the SER posterior,
+    `||Y - X*postF||^2 + sum_l ((alpha_l . pw)^T mu2_l - ||X (alpha_l . mu_l)||^2)`,
+    derived from `Cov(beta_lj, beta_lk) = -alpha_lj alpha_lk mu_lj mu_lk`
+    for j != k under the single-effect mixture posterior. The port
+    source's formula deviates in two ways: (1) missing the
+    `predictor_weights` factor (~ O(n) for scaled X), (2)
+    sum-then-square vs square-then-sum across effects. Magnitude:
+    sigma^2 underestimated by up to ~n on scaled X, which inflates
+    Bayes factors and PIPs. Plausible mechanism for the FDR
+    miscalibration observed in `inst/notes/paradigms/mvf-original.md`;
+    Phase 5 will verify with controlled simulation. This is a
+    Pattern A port-source-bug fix per refactor-discipline section 3.
+    The C3 test (PR 7e) shall assert the deviation explicitly with
+    a reference to this entry.
+
+- mvf.susie.alpha/R/computational_routine.R:395-431
+  (`estimate_residual_variance.multfsusie`)
+  Behavior: divides `get_ER2` output by `n * T_m` (legacy
+    `shared_per_modality` mode) or NA for per-(scale, modality).
+  Decision: replaced-by-`R/individual_data_methods.R::update_variance_components.mf_individual`.
+  Reason: the divisor is correct; the bug is upstream in `get_ER2`
+    (separate entry above). Our `update_variance_components`
+    branches on `params$residual_variance_method`:
+    `shared_per_modality` divides `sum(ER2)` by `n * T_padded[m]`
+    (matching the port-source divisor with the corrected ER2);
+    `per_scale_modality` (default) divides `sum(ER2[idx_s])` by
+    `n * |idx_s|` per scale.

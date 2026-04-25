@@ -319,6 +319,173 @@ neg_loglik.mf_individual <- function(data, params, model, V_param, ser_stats, ..
   -loglik.mf_individual(data, params, model, V, ser_stats)
 }
 
+#' Per-modality expected squared residuals
+#'
+#' Returns the length-`T_padded[m]` vector of per-position
+#' `E_q[||Y_m[, t] - sum_l X * b_l_m[, t]||^2]` for the SER posterior:
+#'
+#' `ER2_m[t] = ||Y_m[, t] - sum_l X * (alpha_l * mu_l_m)[, t]||^2
+#'           + sum_l ((alpha_l * pw)^T * mu2_l_m[, t]
+#'                    - ||X * (alpha_l * mu_l_m[, t])||^2)`
+#'
+#' The first term reuses `model$fitted[[m]]`, the running per-modality
+#' fit maintained by `update_fitted_values`. Used by
+#' `update_variance_components` and `Eloglik`.
+#'
+#' @references
+#' Manuscript: methods/derivation.tex eq:ERSS.
+#' @keywords internal
+#' @noRd
+mf_get_ER2_per_position <- function(data, model, m) {
+  X     <- data$X
+  pw    <- data$predictor_weights
+  T_pad <- data$T_padded[m]
+
+  # Cached running fit: model$fitted[[m]] = X %*% sum_l (alpha_l * mu_l_m).
+  res_m <- data$D[[m]] - model$fitted[[m]]
+  rss_t <- colSums(res_m * res_m)
+
+  # Bias correction summed over l.
+  bias_t <- numeric(T_pad)
+  for (l in seq_len(model$L)) {
+    alpha_l <- model$alpha[l, ]
+    mu_l_m  <- model$mu[[l]][[m]]
+    mu2_l_m <- model$mu2[[l]][[m]]
+    XEb_l_m <- X %*% (alpha_l * mu_l_m)
+    bias_t  <- bias_t + colSums((alpha_l * pw) * mu2_l_m) -
+               colSums(XEb_l_m * XEb_l_m)
+  }
+  rss_t + bias_t
+}
+
+#' Update per-modality (or per-(scale, modality)) residual variance
+#'
+#' Computes `sigma2_m` per modality using
+#' `mf_get_ER2_per_position`, then aggregates to the shape selected
+#' by `params$residual_variance_method`:
+#' - `"shared_per_modality"` (legacy): `sigma2_m = sum_t ER2_m[t] / (n * T_pad[m])`
+#' - `"per_scale_modality"` (default): per scale `s`,
+#'   `sigma2_{m,s} = sum_{t in idx_s} ER2_m[t] / (n * |idx_s|)`
+#'
+#' @references
+#' Manuscript: methods/derivation.tex eq:residual_variance_per_scale.
+#' @keywords internal
+#' @noRd
+update_variance_components.mf_individual <- function(data, params, model, ...) {
+  method <- params$residual_variance_method %||% "per_scale_modality"
+  if (!method %in% c("per_scale_modality", "shared_per_modality")) {
+    stop("`residual_variance_method` must be one of 'per_scale_modality' or 'shared_per_modality'.")
+  }
+  for (m in seq_len(data$M)) {
+    er2_t <- mf_get_ER2_per_position(data, model, m)
+    n     <- data$n
+    if (method == "shared_per_modality") {
+      model$sigma2[[m]] <- sum(er2_t) / (n * data$T_padded[m])
+    } else {
+      indx_m <- data$scale_index[[m]]
+      sigma2_per_scale <- vapply(indx_m, function(idx) {
+        sum(er2_t[idx]) / (n * length(idx))
+      }, numeric(1))
+      model$sigma2[[m]] <- sigma2_per_scale
+    }
+  }
+  model
+}
+
+#' Update per-(modality, scale) mixture weights via mixsqp for one effect
+#'
+#' Called per effect from the IBSS loop, matching susieR's
+#' `update_model_variance` dispatch contract. For each `(m, s)`
+#' pair, builds the mixsqp likelihood matrix
+#' (`mf_em_likelihood_per_scale`) from `ser_stats$betahat[[m]]` and
+#' `sqrt(ser_stats$shat2[[m]])`, runs the M step
+#' (`mf_em_m_step_per_scale`) with `zeta = model$alpha[l, ]`, and
+#' writes the new mixture weights into
+#' `model$G_prior[[m]][[s]]$fitted_g$pi` and `model$pi_V[[m]][s, ]`.
+#'
+#' The susieR-style scalar `V[l]` is held at 1 in this v1 (the
+#' mixture weights absorb the per-effect prior shape adaptation).
+#'
+#' @references
+#' Manuscript: methods/derivation.tex line 216
+#' (factorized empirical-Bayes mixture-weight update).
+#' @keywords internal
+#' @noRd
+update_model_variance.mf_individual <- function(data, params, model, ser_stats, l, ...) {
+  nullweight <- params$nullweight     %||% 0.7
+  control    <- params$control_mixsqp %||% list()
+  zeta_l     <- model$alpha[l, ]
+
+  for (m in seq_len(data$M)) {
+    bhat_m <- ser_stats$betahat[[m]]
+    shat_m <- sqrt(ser_stats$shat2[[m]])
+    indx_m <- data$scale_index[[m]]
+
+    for (s in seq_along(indx_m)) {
+      idx <- indx_m[[s]]
+      sd_grid <- model$G_prior[[m]][[s]]$fitted_g$sd
+      L_mat <- mf_em_likelihood_per_scale(
+        bhat_m[, idx, drop = FALSE],
+        shat_m[, idx, drop = FALSE],
+        sd_grid)
+      new_pi <- mf_em_m_step_per_scale(
+        L_mat, zeta_l, idx_size = length(idx),
+        nullweight = nullweight,
+        control_mixsqp = control)
+      model$G_prior[[m]][[s]]$fitted_g$pi <- new_pi
+      model$pi_V[[m]][s, ]                 <- new_pi
+    }
+  }
+  model
+}
+
+#' Aggregate expected log-likelihood across modalities
+#'
+#' Mirrors `susieR::Eloglik.individual`:
+#' `Eloglik = sum_m sum_t -0.5 * n * log(2 pi sigma2_t) - 0.5 / sigma2_t * ER2_m[t]`
+#'
+#' @references
+#' Manuscript: methods/online_method.tex (Eloglik aggregate).
+#' @keywords internal
+#' @noRd
+Eloglik.mf_individual <- function(data, model, ...) {
+  out <- 0
+  for (m in seq_len(data$M)) {
+    er2_t <- mf_get_ER2_per_position(data, model, m)
+    s2_t  <- mf_sigma2_per_position(data, model, m)
+    out   <- out + sum(-0.5 * data$n * log(2 * pi * s2_t) -
+                       0.5 * er2_t / s2_t)
+  }
+  out
+}
+
+#' ELBO for an `mf_individual` fit
+#'
+#' Mirrors `susieR::get_objective.individual`:
+#' `ELBO = Eloglik - sum_l KL_l + entropy_correction`,
+#' where `entropy_correction = sum_l sum_j alpha_lj * log(pi_j / pmax(alpha_lj, 1e-6))`
+#' is the cross-entropy of the per-effect alpha against the
+#' variable-selection prior. Reduces to
+#' `sum_l alpha_l . log(J / pmax(alpha_l, 1e-6))` when `model$pi`
+#' is uniform `1/J`.
+#'
+#' @references
+#' Manuscript: methods/online_method.tex (ELBO aggregate).
+#' @keywords internal
+#' @noRd
+get_objective.mf_individual <- function(data, params, model, ...) {
+  el <- Eloglik.mf_individual(data, model)
+  kl <- if (all(is.na(model$KL))) 0 else sum(model$KL, na.rm = TRUE)
+
+  log_pi <- log(model$pi + sqrt(.Machine$double.eps))
+  entropy_corr <- 0
+  for (l in seq_len(model$L)) {
+    alpha_l <- pmax(model$alpha[l, ], 1e-6)
+    entropy_corr <- entropy_corr + sum(model$alpha[l, ] * (log_pi - log(alpha_l)))
+  }
+  el - kl + entropy_corr
+}
+
 #' Fold the per-effect posterior into the running fit
 #'
 #' Per modality, sets

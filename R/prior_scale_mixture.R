@@ -37,13 +37,11 @@ distribute_mixture_weights <- function(K, null_prior_weight) {
 #'
 #' Calls `susieR::compute_marginal_bhat_shat(X, Y_m)` to obtain
 #' Bhat / Shat, draws a sample, and fits `ashr::ash` to obtain
-#' the K-vector grid of mixture variances. Behaviour-preserving
-#' port of `fsusieR::init_prior.default` for the `mixture_normal`
-#' / `mixture_normal_per_scale` cases; the seed sequence
+#' the K-vector grid of mixture variances. The seed sequence
 #' (`set.seed(1)`) and sample-size caps (5000 for
-#' `mixture_normal`, 50000 for `mixture_normal_per_scale`) match
-#' the fsusieR source so the C2 fidelity contract holds at
-#' machine precision.
+#' `mixture_normal`, 50000 for `mixture_normal_per_scale`) are
+#' set to satisfy the C2 fidelity contract at machine precision;
+#' provenance is in `inst/notes/refactor-exceptions.md`.
 #'
 #' @param Y_m numeric matrix `n x T_padded[m]` of wavelet
 #'   coefficients for modality m.
@@ -114,7 +112,7 @@ init_scale_mixture_prior_default <- function(Y_m,
 #'   susieR-degeneracy contract C1 with `length(grid) == 1`.
 #' @param prior_variance_scope `"per_scale_modality"` (default,
 #'   stores prior per scale per modality) or `"per_modality"`
-#'   (collapses the scale dimension; legacy mvf.susie.alpha mode).
+#'   (collapses the scale dimension; legacy mode).
 #' @param null_prior_weight scalar, default 2 per design.md D5/D7.
 #' @param grid_multiplier numeric, forwarded to `ashr::ash`.
 #' @return list of class `"mf_prior_scale_mixture"`.

@@ -23,6 +23,70 @@ make_Y_functional <- function(n, T_per_modality, seed = mfsusier_test_seed()) {
 
 # ---- Constructor input validation --------------------------------------
 
+test_that("create_mf_individual coerces vector Y[[m]] to a 1-column matrix", {
+  set.seed(mfsusier_test_seed())
+  n <- 20; J <- 4
+  X <- matrix(rnorm(n * J), n)
+  Y <- list(rnorm(n))   # plain vector, not a matrix
+  data <- mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE)
+  expect_identical(ncol(data$D[[1]]), 1L)
+  expect_identical(nrow(data$D[[1]]), 20L)
+})
+
+test_that("create_mf_individual errors on non-numeric Y[[m]]", {
+  set.seed(mfsusier_test_seed())
+  X <- matrix(rnorm(20), 5)
+  Y_bad <- list(matrix("not-numeric", 5, 4))
+  expect_error(
+    mfsusieR:::create_mf_individual(X = X, Y = Y_bad, verbose = FALSE),
+    "must be numeric"
+  )
+})
+
+test_that("create_mf_individual errors on wrong-length pos list", {
+  set.seed(mfsusier_test_seed())
+  X <- matrix(rnorm(20), 5)
+  Y <- list(matrix(rnorm(20), 5))
+  pos_bad <- list(seq_len(3))   # length mismatch with ncol(Y[[1]]) = 4
+  expect_error(
+    mfsusieR:::create_mf_individual(X = X, Y = Y, pos = pos_bad, verbose = FALSE),
+    NULL
+  )
+})
+
+test_that("create_mf_individual errors on pos length mismatch with M", {
+  set.seed(mfsusier_test_seed())
+  X <- matrix(rnorm(20), 5)
+  Y <- list(matrix(rnorm(20), 5), matrix(rnorm(40), 5))
+  pos_bad <- list(seq_len(4))   # length 1, but M = 2
+  expect_error(
+    mfsusieR:::create_mf_individual(X = X, Y = Y, pos = pos_bad, verbose = FALSE),
+    "must be a list of length"
+  )
+})
+
+test_that("mf_dwt accepts a vector Y_m and coerces to matrix; T_m=1 short-circuit handles zero-sd", {
+  set.seed(mfsusier_test_seed())
+  # Constant Y vector triggers the `csd == 0` fallback inside mf_dwt's
+  # T_m = 1 branch.
+  Y_const <- rep(1.5, 10)
+  out <- mfsusieR:::mf_dwt(Y_const, pos_m = seq_len(1),
+                           verbose = FALSE)
+  expect_identical(out$T_padded, 1L)
+  # Centered to zero (Y - mean = 0); csd was forced to 1, so D = 0 vec.
+  expect_true(all(out$D == 0))
+})
+
+test_that("mf_invert_dwt handles a length-1 D vector (vector input, T_padded=1)", {
+  # A 1-position case: D is just (n,1) matrix; round-trip should yield
+  # back a (n,1) matrix when reconstructed.
+  set.seed(mfsusier_test_seed())
+  X <- matrix(rnorm(10), 5)
+  Y <- list(matrix(rnorm(5), 5))   # T_m = 1
+  data <- mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE)
+  expect_identical(data$T_padded[1], 1L)
+})
+
 test_that("create_mf_individual rejects non-matrix X", {
   expect_error(
     mfsusieR:::create_mf_individual(X = list(), Y = list(matrix(0, 4, 4))),
