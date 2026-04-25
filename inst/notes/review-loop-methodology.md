@@ -36,7 +36,22 @@ For each task in `inst/openspec/changes/<name>/tasks.md`:
    - the code,
    - the tests,
    - a short PR description in the commit message,
-   - any new manuscript or `mvf.susie.alpha` cross-reference roxygen tags.
+   - any new manuscript or `mvf.susie.alpha` / `fsusieR::susiF` cross-reference
+     roxygen tags.
+
+   **Port-quality audit substep.** When the author pass copies a routine
+   from a port source (`mvf.susie.alpha/R/*.R` or `fsusieR/R/*.R`), the
+   author SHALL run a code-quality audit on the copied routine before
+   advancing to the reviewer pass. Two acceptable mechanisms:
+   (a) invoke the `simplify` skill on the changed files, or
+   (b) spawn an `Agent` (Explore subagent) with a focused "audit ported
+   routine for naming, dead code, redundant branches, and idiomatic R"
+   prompt and address its findings.
+   Style improvements logged in the commit message; behaviour-preserving
+   only (numerical changes are out of scope and are caught by the
+   apple-to-apple equivalence test). The fidelity test against the port
+   source is the safety net: any post-audit numerical drift fails the
+   test and reverts the audit edit.
 
 2. **Reviewer pass.** Spawn an `Agent` (Explore subagent) with a focused
    prompt that contains only:
@@ -82,19 +97,21 @@ at `~/Documents/obsidian/AI/general/agents/AGENT-code-refactor.md`.
    independently of the original code; the original may have bugs.
 4. **Original-code references are NOT in main code.** Per design.md
    D12, scan the `R/` portion of the diff for `@references_original`,
-   `mvf.susie.alpha`, `multfsusie`, `original implementation`. Zero
-   matches expected (except inside user-facing error/warning string
-   literals). For test-file portions of the diff, verify the test file
-   has a header comment block listing the
-   `mvf.susie.alpha/R/<file>.R#L<lo>-L<hi>` ranges being compared.
+   `mvf.susie.alpha`, `multfsusie`, `fsusieR`, `susiF`,
+   `original implementation`. Zero matches expected (except inside
+   user-facing error/warning string literals). For test-file portions
+   of the diff, verify the test file has a header comment block listing
+   the `mvf.susie.alpha/R/<file>.R#L<lo>-L<hi>` or
+   `fsusieR/R/<file>.R#L<lo>-L<hi>` ranges being compared.
 5. **Refactor-exceptions completeness.** If the diff omits or replaces
-   any line of `mvf.susie.alpha`, is there a corresponding entry in
-   `inst/notes/refactor-exceptions.md`? Walk the cited original line
-   range; for any line not implemented in the diff, the omission must
-   be logged.
-6. **Naming rules.** Snake_case throughout. No abbreviations beyond
-   `pip`, `cs`, `lbf`, `elbo`, `kl`. None of the names on the
-   `mf-public-api/spec.md` forbidden list.
+   any line of `mvf.susie.alpha` or `fsusieR/susiF`, is there a
+   corresponding entry in `inst/notes/refactor-exceptions.md`? Walk the
+   cited original line range; for any line not implemented in the diff,
+   the omission must be logged.
+6. **Naming rules.** Snake_case throughout (functions, arguments, AND
+   filenames in `R/` / `tests/testthat/`; hyphenated source filenames
+   are forbidden). No abbreviations beyond `pip`, `cs`, `lbf`, `elbo`,
+   `kl`. None of the names on the `mf-public-api/spec.md` forbidden list.
 7. **CS-then-PIP ordering.** If the diff touches finalize logic, verify
    the five-step order in `mf-credible-sets/spec.md` is preserved.
 8. **Binary tolerance classification.** For each test in the diff,

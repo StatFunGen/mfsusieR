@@ -22,7 +22,6 @@ Depends:
     R (>= 4.0.0)
 Imports:
     susieR (>= 0.12),
-    fsusieR,
     wavethresh,
     mixsqp,
     ashr,

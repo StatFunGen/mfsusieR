@@ -1,7 +1,7 @@
 # Fixture generator for mfsusieR test suite.
 #
 # Run from the package root:
-#   Rscript tests/testthat/scripts/make-fixtures.R
+#   Rscript tests/testthat/scripts/make_fixtures.R
 #
 # Writes one .rds per scenario into tests/testthat/fixtures/. Fixtures
 # are committed to git when small (< 1 MB each), per the Phase 3 / 4
