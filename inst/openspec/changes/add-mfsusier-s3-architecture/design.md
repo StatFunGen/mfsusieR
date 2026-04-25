@@ -366,7 +366,97 @@ Strict ordering inside `ibss_finalize.mf_individual`:
 This order is the contract enforced by spec
 `mf-credible-sets/spec.md`.
 
-### D10. Manuscript cross-references in code
+### D10. Modularity: only what is unique to mfsusieR
+
+The package SHALL contain only code that is *unique to* multi-modality
+multi-functional SuSiE. Anything that already lives in `susieR`,
+`fsusieR`, `mixsqp`, `ashr`, or `wavethresh` SHALL be delegated, not
+reimplemented. mvsusieR is the model: it adds ~25 S3 method
+implementations on `mv_individual` and a small number of new files
+(`mvsusie_constructors.R`, `mixture_prior.R`, `predict.mvsusie.R`,
+`zzz.R`); everything else is delegated to susieR or mashr.
+
+The mfsusieR layout SHALL match the same shape:
+
+| Concern | Where it lives | Notes |
+|---|---|---|
+| IBSS outer loop | `susieR::susie_workhorse` | not reimplemented |
+| Per-effect single_effect_update orchestration | `susieR` | not reimplemented |
+| Convergence check | `susieR::check_convergence` | not reimplemented |
+| Prior-variance validation | `susieR::validate_prior` | not reimplemented |
+| `validate_prior` calls and the per-effect sweep | `susieR::ibss_fit` | not reimplemented |
+| Forward DWT (per-modality) | `wavethresh::wd` via `fsusieR` helpers | wrapped, not reimplemented |
+| Inverse DWT | `wavethresh::wr` via `fsusieR` helpers | wrapped, not reimplemented |
+| Wavelet scale indexing | `fsusieR::gen_wavelet_indx` | called directly |
+| Per-scale mixture-of-normals prior | `fsusieR::init_prior.default` | called directly |
+| Mixsqp convex solve | `mixsqp::mixsqp` | called directly |
+| Ash-style mixture grid construction | `ashr` helpers | called directly |
+| smash / TI / HMM smoothers | `fsusieR` if exposed there | wrapped, not reimplemented |
+| Credible-set construction | `susieR::susie_get_cs` | called directly via the standard susie accessor |
+| **Per-(scale, modality) residual variance update** | mfsusieR | unique |
+| **Per-(scale, modality) prior variance and mixture weight storage** | mfsusieR | unique |
+| **Modality-product joint Bayes factor** | mfsusieR | unique |
+| **Cross-modality prior plug-in seam** | mfsusieR | unique |
+| **`mf_individual` data-class with ragged T_m** | mfsusieR | unique |
+| **DWT cache and inverse helpers across modalities** | mfsusieR | unique (thin wrappers) |
+| **CS-then-PIP ordering invariant** | mfsusieR | unique (fixes the original code's bug) |
+| **`mfsusie` model class and S3 method registrations** | mfsusieR | unique |
+
+Any future PR that adds code to mfsusieR SHALL be reviewed against this
+table. If the proposed code duplicates something in this column's "not
+reimplemented" rows, the reviewer SHALL reject in favor of delegation.
+
+### D11. Mathematical degenerate case: mfsusie reduces to susie
+
+mfsusie SHALL reduce mathematically to plain `susieR::susie` under the
+following degenerate inputs:
+
+- `M = 1` (single modality)
+- `T_1 = 1` (univariate trait, DWT short-circuits)
+- `prior_variance_grid` of length 1 (single mixture component, no
+  scale-mixture)
+- `null_prior_weight = 0` (no null component in the mixture)
+- `cross_modality_prior = NULL` (no cross-modality prior)
+- `prior_variance_scope = "per_modality"` (no per-scale variance)
+- `residual_variance_method = "shared_per_modality"` (single global
+  residual variance)
+- `post_processing = "none"` (no smoothing)
+- `L_greedy = NULL` (fixed L)
+
+Under these inputs, the model reduces to:
+
+```
+D_{1, i, 1, 1} = sum_{r=1..L} x_i' * (gamma_r * f_{r, 1, 1, 1}) + e_{i, 1, 1, 1}
+e ~ N(0, sigma^2)
+gamma_r ~ Multinom(1, pi)
+f_{r, 1, 1, 1} ~ N(0, sigma_0^2)
+```
+
+which is the standard susieR model `y = X * b + e` with
+`b_r ~ gamma_r * N(0, sigma_0^2)`. The DWT collapses to identity
+(length-1 input, no transform applied), per-modality storage collapses
+to scalar storage, and the per-(scale, modality) updates collapse to
+the standard SuSiE single-effect regression updates.
+
+This degenerate case is a hard unit test: a fit with the above inputs
+SHALL match `susieR::susie(X, y, L = ..., scaled_prior_variance =
+sigma_0^2 / var(y), null_weight = 0, ...)` at tolerance 1e-10 on every
+numeric output (alpha, mu, mu2, lbf, KL, sigma2, elbo, pip, cs).
+
+The test serves four purposes: (i) it pins the degeneracy contract;
+(ii) it validates the mathematical reduction without relying on
+`mvf.susie.alpha` as the reference; (iii) it catches accidental
+reintroductions of code that breaks the reduction (e.g., a stray K
+multiplier); (iv) it gives mfsusieR a non-`mvf.susie.alpha` ground truth
+for the parts of the model that susieR already validates.
+
+The next-most-degenerate case worth pinning as a separate test:
+
+- `M = 1`, `T_1 > 1` (single functional modality) reducing to fSuSiE.
+  This requires fsusieR as a reference and is recorded as a follow-up
+  test; it is not the susieR degeneracy.
+
+### D12. Manuscript cross-references in code
 
 Every non-trivial formula in the codebase carries a roxygen tag
 `@manuscript_ref methods/<file>.tex eq:<label>`. Where the manuscript
@@ -428,16 +518,22 @@ prerequisite for the public mfsusieR API to ship as designed.
 
 Coordination plan:
 
-1. Open a separate work item against `~/GIT/susieR` to add `L_greedy`
-   to `susie_workhorse` and the public `susie()` (and any other public
-   entry that takes `L`). Keep behavior unchanged when `L_greedy =
-   NULL`.
+1. Branch `feature/L_greedy` on `~/GIT/susieR` (created 2026-04-25,
+   off `master`). Develop the `L_greedy` addition there: add the
+   argument to `susie_workhorse`, `susie()`, and any other public
+   entry that takes `L`. Behavior unchanged when `L_greedy = NULL`.
+   Open a PR to `stephenslab/susieR` once the implementation is
+   reviewed in-house.
 2. Pin the susieR commit hash that contains the generalization in
-   `DESCRIPTION`'s `Imports: susieR (>= <hash-or-version>)` line.
-3. If the generalization is delayed, mfsusieR ships with
-   `L_greedy = NULL` only, the greedy path becomes a Phase 6 follow-up,
-   and the manuscript online_method step 2 is documented as a known
-   gap until then.
+   mfsusieR's `DESCRIPTION` `Imports: susieR (>= <hash-or-version>)`
+   line. Until the upstream PR merges, mfsusieR pins to the
+   feature-branch hash; once merged, the pin moves to the upstream
+   master release that contains it.
+3. If the upstream PR review takes longer than Phase 3, mfsusieR
+   ships v1.0.0 with the pre-generalization graceful-degradation
+   warning. Once upstream lands, a follow-up OpenSpec change
+   (`enable-mfsusier-greedy-l-passthrough`) flips the warning to a
+   real passthrough.
 
 Until the susieR change lands, mfsusieR's `L_greedy` argument is
 accepted but ignored with a one-time `lifecycle::deprecate_warn()`-style

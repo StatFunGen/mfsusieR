@@ -124,6 +124,19 @@ test against `mvf.susie.alpha` per the test-fidelity rule
       outputs match `mvf.susie.alpha` at tolerance 1e-6 on the same
       fixture.
 
+## 6c. Degenerate-case unit tests (susieR equivalence)
+
+- [ ] 6c.1 Implement `tests/testthat/test-susier-degeneracy.R` per the
+      contract in `mf-ibss/spec.md` "degenerate case reduces exactly
+      to susieR::susie". For each `L in c(1, 5, 10)` on a fixed
+      `(X, y)` fixture and seed, fit both `mfsusie()` (degenerate
+      inputs) and `susieR::susie()`, and assert element-wise equality
+      on `alpha`, `mu`, `mu2`, `lbf`, `lbf_variable`, `KL`, `sigma2`,
+      `elbo`, `niter`, `pip` at tolerance 1e-10. CS membership exact.
+- [ ] 6c.2 Add a documentation note in
+      `vignettes/mfsusie-quickstart.Rmd` describing the degenerate
+      case and pointing readers at the unit test.
+
 ## 7. Public API and finalize
 
 - [ ] 7.1 Implement `R/mfsusie.R` with the public `mfsusie()` function
@@ -164,6 +177,22 @@ test against `mvf.susie.alpha` per the test-fidelity rule
 - [ ] 9.3 Add a vignette `vignettes/mfsusie-quickstart.Rmd` running the
       smallest fixture end-to-end and showing the fit object's
       structure.
+
+## 9b. Modularity audit
+
+- [ ] 9b.1 Walk every R file in `R/` and check each function against
+      the table in `design.md` D10 ("Modularity: only what is unique
+      to mfsusieR"). For any function whose body duplicates logic
+      already provided by `susieR`, `fsusieR`, `mixsqp`, `ashr`, or
+      `wavethresh`, replace with a call to the upstream and remove
+      the duplicate. Record the audit result as a comment block at
+      the top of each file: `# modularity-audit: <date>, <reviewer
+      initials>, <result>`.
+- [ ] 9b.2 Add a test `tests/testthat/test-modularity.R` that scans
+      `R/` for forbidden private reimplementations (e.g., a
+      hand-rolled DWT, a hand-rolled mixsqp, a hand-rolled CS
+      construction). Use `parsetools::astquery` or a simple regex
+      check against the function bodies. Fail if any are found.
 
 ## 10. Build cleanliness
 

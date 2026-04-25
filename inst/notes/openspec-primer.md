@@ -36,7 +36,7 @@ cd ~/GIT/mfsusieR/inst
 openspec list --changes
 openspec new change <name>
 openspec validate <name>
-openspec apply <name>
+openspec status --change <name>
 openspec archive <name>
 ```
 
@@ -44,7 +44,7 @@ The Claude Code slash commands (`/opsx:propose`, etc.) wrap the CLI; they
 likewise need to run with `inst/` as the working directory. If a command
 fails with "No OpenSpec changes directory found", check cwd first.
 
-## The four-step lifecycle
+## The actual lifecycle (OpenSpec 1.3.1)
 
 For each phase or each focused fix, this is the sequence:
 
@@ -55,12 +55,20 @@ For each phase or each focused fix, this is the sequence:
    until they read well. Gao reviews on this step.
 3. `openspec validate <name>` lints structure, required sections, and delta
    format. No state change.
-4. `openspec apply <name>` merges the deltas into `openspec/specs/` (the
-   change is now considered "in flight"). After implementation lands and
-   tests pass, `openspec archive <name>` moves the change to
-   `openspec/changes/archive/`.
+4. **Implementation lives in the change folder.** The proposal's spec.md
+   files are the contract for Phase 3 code work; they sit at
+   `inst/openspec/changes/<name>/specs/<capability>/spec.md`. There is
+   no separate "apply" command in OpenSpec 1.3.1.
+5. `openspec archive <name>` is the final step. It both moves the change
+   folder to `openspec/changes/archive/<YYYY-MM-DD>-<name>/` AND merges
+   the delta specs into `openspec/specs/`. Run this once Phase 4 tests
+   pass.
 
 `openspec list --changes` and `openspec list --specs` show current state.
+
+(Earlier drafts of this primer referenced an `openspec apply` step. That
+was based on an older description of the workflow in CLAUDE.md; OpenSpec
+1.3.1 has consolidated apply and archive into a single command.)
 
 ## How mfsusieR's phases map to OpenSpec changes
 
