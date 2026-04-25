@@ -11,6 +11,11 @@
 #
 # Numerical routines do not live here.
 
+# Null-coalescing operator fallback for R < 4.4.0 (mvsusieR pattern).
+if (!exists("%||%", baseenv())) {
+  `%||%` <- function(x, y) if (is.null(x)) y else x
+}
+
 # Cached susieR internals - populated by .onLoad()
 warning_message        <- NULL
 # Cached susieR S3 generics so the per-effect methods can call the
@@ -43,6 +48,10 @@ SER_posterior_e_loglik <- NULL
     "compute_kl",
     "SER_posterior_e_loglik",
     "update_fitted_values",
+    "update_variance_components",
+    "update_model_variance",
+    "Eloglik",
+    "get_objective",
     "initialize_susie_model"
   )
   for (g in mf_generics) {

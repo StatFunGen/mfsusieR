@@ -12,10 +12,7 @@
 # machine precision (~ 1e-14) because both implementations evaluate
 # the same closed-form mixture-of-normals expression.
 
-skip_if_no_fsusier <- function() {
-  testthat::skip_if_not_installed("fsusieR")
-  testthat::skip_if_not_installed("ashr")
-}
+# skip_if_no_fsusier() lives in setup.R and pins to the contract SHA.
 
 test_that("mixture_log_bf_per_scale summed over scales matches fsusieR::log_BF at <= 1e-12", {
   skip_if_no_fsusier()

@@ -31,3 +31,49 @@ mfsusier_load_fixture <- function(name) {
 skip_if_no_mvf_alpha <- function() {
   testthat::skip_if_not_installed("mvf.susie.alpha")
 }
+
+# Pinned reference-package commits for the C2 (fsusieR) and C3
+# (mvf.susie.alpha) apple-to-apple fidelity contracts. To install
+# these exact versions:
+#
+#   remotes::install_github("stephenslab/fsusieR",            ref = mfsusier_pinned_fsusier_sha())
+#   remotes::install_github("william-denault/mvf.susie.alpha", ref = mfsusier_pinned_mvf_sha())
+#
+# Any drift from these SHAs may invalidate the C2 / C3 numerical
+# contracts. The skip helpers below warn if the installed package
+# version does not match the pinned descriptor.
+mfsusier_pinned_fsusier_sha <- function() {
+  "fdba52b3b66d80fcd3919085a0aed54a78cda941"
+}
+mfsusier_pinned_fsusier_version <- function() "0.3.52"
+
+mfsusier_pinned_mvf_sha <- function() {
+  "e41550a6595dc7baa510086afb3e8fbff6fe15c4"
+}
+mfsusier_pinned_mvf_version <- function() "0.1.51"
+
+skip_if_no_fsusier <- function() {
+  testthat::skip_if_not_installed("fsusieR")
+  installed <- as.character(utils::packageVersion("fsusieR"))
+  pinned   <- mfsusier_pinned_fsusier_version()
+  if (installed != pinned) {
+    testthat::skip(paste0(
+      "fsusieR version mismatch: installed ", installed,
+      ", contract pinned to ", pinned,
+      " (commit ", mfsusier_pinned_fsusier_sha(), ")."
+    ))
+  }
+}
+
+skip_if_pinned_mvf_mismatch <- function() {
+  testthat::skip_if_not_installed("mvf.susie.alpha")
+  installed <- as.character(utils::packageVersion("mvf.susie.alpha"))
+  pinned   <- mfsusier_pinned_mvf_version()
+  if (installed != pinned) {
+    testthat::skip(paste0(
+      "mvf.susie.alpha version mismatch: installed ", installed,
+      ", contract pinned to ", pinned,
+      " (commit ", mfsusier_pinned_mvf_sha(), ")."
+    ))
+  }
+}

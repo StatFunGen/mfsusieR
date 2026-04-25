@@ -12,6 +12,18 @@
 # same inputs. These tests are the regression net; any drift fails
 # them at exact equality (max abs diff = 0).
 
+test_that("col_scale center=FALSE returns center attribute as zeros", {
+  X <- matrix(rnorm(20), 5)
+  out <- mfsusieR:::col_scale(X, center = FALSE, scale = TRUE)
+  expect_null(attr(out, "scaled:center"))   # add_attr only sets center attr when center=TRUE
+})
+
+test_that("col_scale scale=FALSE returns no scale attr", {
+  X <- matrix(rnorm(20), 5)
+  out <- mfsusieR:::col_scale(X, center = TRUE, scale = FALSE)
+  expect_null(attr(out, "scaled:scale"))
+})
+
 test_that("is_wholenumber matches fsusieR::is.wholenumber on integer and float inputs", {
   skip_if_not_installed("fsusieR")
   cases <- list(
