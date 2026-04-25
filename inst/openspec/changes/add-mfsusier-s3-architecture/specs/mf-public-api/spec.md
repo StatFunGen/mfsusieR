@@ -11,7 +11,7 @@ beyond `pip`, `cs`, `lbf`, `elbo`, `kl`).
 
 - **WHEN** `args(mfsusie)` is inspected
 - **THEN** the argument list SHALL include `X`, `Y`, `pos`, `L`,
-  `L_greedy`, `prior_variance_scope`,
+  `L_greedy`, `lbf_min`, `prior_variance_scope`,
   `prior_variance_grid_multiplier`, `prior_variance_grid`,
   `null_prior_weight`, `cross_modality_prior`,
   `residual_variance_method`, `estimate_residual_variance`,

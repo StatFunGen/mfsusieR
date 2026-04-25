@@ -20,17 +20,17 @@ substep): run the `simplify` skill or an Explore subagent on the
 ported routine before the reviewer pass, address findings, then
 verify behaviour-preservation via the relevant equivalence test.
 
-## 0. External coordination prerequisite
+## 0. Upstream susieR `L_greedy` (landed)
 
-- [ ] 0.1 Open a separate work item against `~/GIT/susieR` to add
-      `L_greedy = NULL` to `susie_workhorse` and `susie()`. Behavior
-      unchanged when NULL; greedy grow-from-`L_greedy` to `L` upper
-      bound when non-NULL. CLAUDE.md hard rule #1 override authorized
-      by Gao for this specific addition. Track outside this OpenSpec
-      change. Pin the resulting commit hash in mfsusieR's
-      `DESCRIPTION` Imports.
-- [ ] 0.2 Until 0.1 lands, mfsusieR's `L_greedy` argument warns once
-      per session and is otherwise ignored.
+- [x] 0.1 Greedy outer loop added to `susieR::susie_workhorse` on
+      `~/GIT/susieR` master (linear `+L_greedy` step, `min(lbf) <
+      lbf_min` saturation, warm-start via `params$model_init`).
+      Authorised by Gao on 2026-04-25 as a CLAUDE.md hard rule #1
+      override. mfsusieR puts `L_greedy` and `lbf_min` in the
+      params list; no graceful-degradation shim needed. mvf.susie.alpha
+      and fsusieR's per-iteration interleaved greedy is NOT ported;
+      C2 / C3 fidelity tests run with greedy disabled on both sides
+      per design.md D11d.
 
 ## 1. Package skeleton and DESCRIPTION
 
