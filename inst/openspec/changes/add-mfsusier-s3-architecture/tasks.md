@@ -140,13 +140,13 @@ constructor calls the helpers, the C2 / C3 fidelity tests need both.
 
 ## 4. Prior class
 
-- [ ] 4.0 Upstream susieR `compute_marginal_bhat_shat(X, Y, ...)`
+- [x] 4.0 Upstream susieR `compute_marginal_bhat_shat(X, Y, ...)`
       helper lands on `~/GIT/susieR` master per design.md
       "Migration Plan" (separate from but parallel to the L_greedy
       change). Authorised by Gao 2026-04-25 as a hard rule #1
       override. mvsusieR refactor to use the helper is tracked
       outside this change.
-- [ ] 4.1 Implement `R/prior_scale_mixture.R::mf_prior_scale_mixture(data,
+- [x] 4.1 Implement `R/prior_scale_mixture.R::mf_prior_scale_mixture(data,
       prior_variance_grid = NULL, prior_variance_scope,
       null_prior_weight, grid_multiplier)` returning class
       `mf_prior_scale_mixture`. Two paths:
@@ -158,7 +158,7 @@ constructor calls the helpers, the C2 / C3 fidelity tests need both.
           get Bhat / Shat, then `ashr::ash` to fit the K-vector
           grid, then assemble. Same control-flow, no `T_m == 1`
           branch.
-- [ ] 4.2 Implement `R/prior_cross_modality.R` with
+- [x] 4.2 Implement `R/prior_cross_modality.R` with
       `cross_modality_prior_independent()` plus the S3 generic
       `combine_modality_lbfs.mf_prior_cross_modality_independent`
       (sum of log-BFs, no-op) per the plug-in seam contract in
@@ -169,14 +169,14 @@ constructor calls the helpers, the C2 / C3 fidelity tests need both.
       user to consider `susieR::susie` (T_m == 1) or
       `fsusieR::susiF` (short functional). Behaviour: still
       proceeds with the standard data-driven init.
-- [ ] 4.4 Test: prior shapes per modality and scale, including
+- [x] 4.4 Test: prior shapes per modality and scale, including
       the per-modality scope branch and the `prior_variance_grid`
       passthrough path.
-- [ ] 4.5 Test (C2 fidelity): per-modality data-driven init for
+- [x] 4.5 Test (C2 fidelity): per-modality data-driven init for
       `M = 1, T_1 > 1` produces fields (`pi`, `sd`, `mean`)
       element-wise identical to `fsusieR::init_prior.default` at
       tolerance `1e-12`.
-- [ ] 4.6 Update `inst/notes/refactor-exceptions.md` with any line
+- [x] 4.6 Update `inst/notes/refactor-exceptions.md` with any line
       of `fsusieR/R/operation_on_prior.R` and
       `fsusieR/R/computational_functions.R` (the parts replaced
       by the susieR helper) not carried over.
