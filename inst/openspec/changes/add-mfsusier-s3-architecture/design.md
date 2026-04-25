@@ -935,6 +935,29 @@ amending this list and the cpp11 task block in tasks.md, NOT
 silently. The reviewer pass rejects new `src/*.cpp` files whose
 authorization is not recorded here.
 
+**Caches deliberately NOT introduced (measured, not theoretical):**
+
+Per the 5c efficiency review, two redundant computations were
+flagged as "high severity" candidates for caching: (a) `Xb_l_m =
+X %*% (alpha_l * mu_l[[m]])` is computed in both
+`update_fitted_values.mf_individual` and (via `compute_kl`)
+`SER_posterior_e_loglik.mf_individual` for the same `(l, iter, m)`;
+(b) `colSums(R_m * R_m)` is computed in both `compute_kl` and
+`SER_posterior_e_loglik`. We profiled both before deferring:
+
+| Item                | Per-call cost | Per-IBSS-step impact |
+|---------------------|--------------:|---------------------:|
+| One full IBSS step  |        97 ms |                100% |
+| One `X %*% b` call  |       2.4 ms |                ~2.5% |
+| One `colSums(R^2)`  |     <0.1 ms |                <0.1% |
+
+(Profile: J=1000, M=1, T=128, n=500.) The `Xb_l_m` cache saves
+~2.5% per IBSS step, the `colSums(R^2)` cache <1%. Neither
+justifies the schema change (`model$Xb_current[[m]]`) and the
+deviation from susieR's pattern (susieR also recomputes both).
+Reconsider if profvis in Phase 7 shows different distributions on
+larger fixtures.
+
 The motivation is that the per-effect SER step is called L * iter
 times per fit, and each call walks J * M * S mixture cells. Pure
 R is BLAS-bound only on `X %*% b` and `crossprod(X, R)`; the
