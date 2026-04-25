@@ -235,7 +235,7 @@ the paradigm chosen.
 | `mvf.susie.alpha/R/multfsusie.R:284, 287` | `max_scale` parameter | Keep as `max_padded_log2` argument with same meaning. | bespoke (renamed) |
 | `mvf.susie.alpha/R/operation_on_multfsusie_obj.R:1716-1735` | Commented-out lfsr code | Drop. v1 does not compute LFSR. A follow-up change can add it. | drop |
 | `mvf.susie.alpha/R/multfsusie.R:178-201` (backfit pass) | Re-visit each effect once per outer iter | Drop. susieR's `ibss_fit` already does this every iteration. | delegate to susieR |
-| `mvf.susie.alpha/R/multfsusie.R:178-201` (greedy R-search) | Grow L from L_start until pruning | Generalize susieR with `L_greedy = NULL` argument. Tracked outside this OpenSpec change but a hard prerequisite for Phase 3. mfsusieR adds `L_greedy` as a passthrough argument with default `3`. | delegate to susieR (after generalization) |
+| `mvf.susie.alpha/R/multfsusie.R:178-201` (greedy R-search) | Grow L from L_start until pruning | Drop. mvf.susie.alpha and fsusieR implement greedy as a per-iteration interleaved step (`+7`-effect grows + purity-based pruning inside the IBSS loop). mfsusieR uses the susieR-side wrapper instead: outer loop, linear `+L_greedy` steps, `min(lbf) < lbf_min` saturation criterion (slot-invariant, single-round verdict). `mfsusie()` passes `L_greedy` and `lbf_min` straight through to `susieR::susie_workhorse`. The two algorithms are not numerically equivalent; C2 / C3 fidelity tests run with greedy disabled on both sides (D11d). | delegate to susieR |
 | `fsusieR/R/EBmvFR.R`, `EBmvFR_workhorse.R`, `operation_on_EBmvFR_obj.R` | EBmvFR algorithm | Out of scope. EBmvFR is a different model (EB multivariate functional regression with no SuSiE structure). Not ported. | drop (out of scope) |
 
 ### D6. Prior composition
@@ -267,7 +267,7 @@ naming-rule compliant.
 ```r
 mfsusie(
   X, Y, pos = NULL, L = 10,
-  L_greedy = 3,
+  L_greedy = 3, lbf_min = 0.1,
   prior_variance_scope = c("per_scale_modality", "per_modality"),
   prior_variance_grid_multiplier = sqrt(2),
   prior_variance_grid = NULL,
@@ -359,7 +359,7 @@ choices:
 | `greedy`, `backfit` | dropped | susieR's IBSS does both natively |
 | `max_step_EM`, `max_step` | dropped | redundant with `max_iter` |
 | `init_pi0_w`, `tol_null_prior`, `lbf_min`, `e`, `posthoc`, `cor_small`, `thresh_lowcount` | dropped | over-parameterization; defaults are documented and there is no evidence users tune these |
-| `L_start` | renamed to `L_greedy` (default 3) | passed through to susieR after the susieR generalization lands |
+| `L_start` | renamed to `L_greedy` (default 3) | passed through to `susieR::susie_workhorse`. Saturation threshold `lbf_min` (default 0.1) is also exposed; both go straight through. |
 | `multfsusie.obj` | renamed to `model_init` | matches susieR convention |
 | `post_processing` | **removed from `mfsusie()` and `fsusie()`** | D8c: post-processing is a separate function on the fit, not a fit-time argument |
 | `quantile_trans` | dropped | over-parameterization in `mvf.susie.alpha`; not in `fsusieR::susiF` |
@@ -741,6 +741,18 @@ Concrete contract table:
 | Default per-(scale, modality) vs legacy variance | apple-to-orange | smoke test |
 | Phase 7 Rcpp vs pure-R reference | apple-to-apple | `<= 1e-10` |
 | Post-processor smash/TI/HMM vs `fsusieR::susiF(post_processing = ...)` | apple-to-apple | `<= 1e-8` |
+| `mfsusie(L_greedy = K)` vs `fsusieR::susiF(greedy = TRUE)` | apple-to-orange | smoke test (different greedy algorithms) |
+| `mfsusie(L_greedy = K)` vs `mvf.susie.alpha::multfsusie(greedy = TRUE)` | apple-to-orange | smoke test (different greedy algorithms) |
+
+C2 and C3 apple-to-apple contracts SHALL be evaluated with the
+reference's greedy disabled (`fsusieR::susiF(greedy = FALSE,
+backfit = FALSE)` and `mvf.susie.alpha::multfsusie(greedy = FALSE,
+backfit = FALSE)`) AND mfsusieR's `L_greedy = NULL`. Both sides
+fit at the same fixed `L`, so the algorithmic difference (susieR's
+outer-loop wrapper vs the legacy per-iteration interleaved greedy)
+is taken out of the comparison. Greedy-L behaviour itself is
+covered by smoke tests + property tests (does the wrapper recover
+the simulated K?), not by numerical equivalence.
 
 ### D11e. Refactor-exceptions doctrine
 
@@ -908,43 +920,23 @@ content to merge with. After Phase 3 implementation lands and Phase
 4 tests pass, the change is archived. Rollback is `git revert` of the
 applied commits.
 
-### External coordination: susieR `L_greedy` generalization
+### Upstream susieR `L_greedy` and `lbf_min` (landed)
 
-This proposal assumes a generalization of `susieR::susie_workhorse`
-to accept an `L_greedy` argument (default `NULL`, no behavior
-change). The generalization is OUT OF SCOPE for this OpenSpec change
-but is a hard prerequisite for the public mfsusieR API to ship as
-designed.
+`susieR::susie_workhorse` carries the greedy outer loop (linear
+`+L_greedy` step, `min(lbf) < lbf_min` saturation criterion,
+warm-start across rounds via the existing `params$model_init`
+mechanism). The change was authorized by Gao on 2026-04-25 as an
+override of CLAUDE.md hard rule #1 and landed on `~/GIT/susieR`
+master. mfsusieR's `mfsusie()` puts `L_greedy` and `lbf_min` in
+the params list; `susie_workhorse` handles the rest. No graceful-
+degradation shim, no commit-hash pin (the susieR change is in our
+local fork; if it doesn't merge upstream before mfsusieR ships,
+mfsusieR's `Imports` line will pin the local version).
 
-Coordination plan:
-
-1. Branch `feature/L_greedy` on `~/GIT/susieR` (created 2026-04-25,
-   off `master`). Develop the `L_greedy` addition there: add the
-   argument to `susie_workhorse`, `susie()`, and any other public
-   entry that takes `L`. Behavior unchanged when `L_greedy = NULL`.
-   Open a PR to `stephenslab/susieR` once the implementation is
-   reviewed in-house.
-2. Pin the susieR commit hash that contains the generalization in
-   mfsusieR's `DESCRIPTION` `Imports: susieR (>= <hash-or-version>)`
-   line. Until the upstream PR merges, mfsusieR pins to the
-   feature-branch hash; once merged, the pin moves to the upstream
-   master release that contains it.
-3. If the upstream PR review takes longer than Phase 3, mfsusieR
-   ships v1.0.0 with the pre-generalization graceful-degradation
-   warning. Once upstream lands, a follow-up OpenSpec change
-   (`enable-mfsusier-greedy-l-passthrough`) flips the warning to a
-   real passthrough.
-
-Until the susieR change lands, mfsusieR's `L_greedy` argument is
-accepted but ignored with a one-time `lifecycle::deprecate_warn()`
--style warning. The `mf-public-api/spec.md` records this transitional
-state.
-
-This is an explicit override of CLAUDE.md hard rule #1 ("susieR is
-read-only reference") authorized by Gao on 2026-04-25. The override
-is narrow: it covers only the addition of `L_greedy` and any
-internal plumbing required to support it. All other susieR code
-remains read-only.
+The mvf.susie.alpha and fsusieR per-iteration interleaved greedy
+algorithm (with `+7`-effect grows and purity-based dummy
+detection) is NOT ported. C2 / C3 fidelity tests run with greedy
+disabled on both sides per D11d.
 
 ## Open Questions
 

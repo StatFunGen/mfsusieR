@@ -77,30 +77,45 @@ alpha across iterations is less than `tol` when `convergence_method =
 - **THEN** the loop SHALL terminate when `0 <= elbo[iter+1] -
   elbo[iter] < tol` and SHALL set `fit$converged <- TRUE`
 
-### Requirement: greedy R-search via L_greedy passthrough
+### Requirement: greedy R-search via susieR L_greedy passthrough
 
-`mfsusie()` SHALL pass `L_greedy` through to `susieR::susie_workhorse`
-without modification once the susieR generalization (recorded in
-`design.md` "External coordination") is in place. Until that
-generalization lands, mfsusieR SHALL accept the argument and SHALL
-emit a one-time deprecation-style warning that the value is being
-ignored.
+`mfsusie()` SHALL pass `L_greedy` and `lbf_min` straight through
+to `susieR::susie_workhorse`, which implements the greedy outer
+loop with linear `+L_greedy` step and `min(lbf) < lbf_min`
+saturation criterion (see `design.md` "Upstream susieR L_greedy").
+mfsusieR SHALL NOT reimplement the greedy loop locally; the legacy
+per-iteration interleaved greedy from `mvf.susie.alpha` /
+`fsusieR::susiF` is intentionally not ported.
 
-#### Scenario: post-generalization passthrough
+#### Scenario: passthrough to susieR
 
-- **WHEN** the susieR upstream generalization is available and
-  `mfsusie()` is called with `L_greedy = 3`
-- **THEN** the underlying `susie_workhorse` call SHALL receive
-  `L_greedy = 3` and the IBSS SHALL fit with L = 3, check pruning,
-  grow L by 1, and re-fit until pruning occurs or `L` is reached
+- **WHEN** `mfsusie()` is called with `L_greedy = 3, lbf_min = 0.1,
+  L = 10`
+- **THEN** `params$L_greedy` SHALL equal `3`, `params$lbf_min`
+  SHALL equal `0.1`, and `params$L` SHALL equal `10` when handed
+  to `susie_workhorse`; the wrapper SHALL grow `L` from 3 in
+  steps of 3 until either `L` reaches 10 or any slot's `lbf`
+  falls below `0.1`
 
-#### Scenario: pre-generalization graceful degradation
+#### Scenario: L_greedy = NULL disables greedy
 
-- **WHEN** the susieR upstream generalization is NOT yet available and
-  `mfsusie()` is called with a non-NULL `L_greedy`
-- **THEN** the function SHALL fit with L as a fixed upper bound, ignore
-  `L_greedy`, and emit one warning per session referencing the
-  upstream coordination plan
+- **WHEN** `mfsusie()` is called with `L_greedy = NULL` (or
+  unspecified, which the public API SHALL leave as `NULL` rather
+  than substituting a default)
+- **THEN** `params$L_greedy` SHALL be `NULL` and
+  `susie_workhorse` SHALL run a single fixed-`L` IBSS at
+  `params$L`, identical-shape behaviour to fixed-`L` susieR
+
+#### Scenario: greedy-L is apple-to-orange to legacy greedy
+
+- **WHEN** `mfsusie(L_greedy = K)` is run on a fixture and
+  `fsusieR::susiF(greedy = TRUE)` or
+  `mvf.susie.alpha::multfsusie(greedy = TRUE)` is run on the
+  same fixture
+- **THEN** the two fits are NOT required to match numerically
+  (different greedy algorithms per design.md D5/D11d); only smoke
+  tests apply (each call returns a fit, fit has documented shape,
+  no NaN, ELBO monotone within each round)
 
 ### Requirement: contract C1 - single-modality scalar case reduces exactly to susieR::susie
 
