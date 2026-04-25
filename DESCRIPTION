@@ -25,6 +25,7 @@ Imports:
     wavethresh,
     mixsqp,
     ashr,
+    Rfast,
     matrixStats,
     methods,
     stats
