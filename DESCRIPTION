@@ -25,6 +25,7 @@ Imports:
     wavethresh,
     mixsqp,
     ashr,
+    matrixStats,
     methods,
     stats
 Suggests:
