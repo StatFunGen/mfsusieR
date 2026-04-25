@@ -60,16 +60,18 @@ mf_dwt <- function(Y_m,
   T_m <- ncol(Y_m)
 
   # Univariate short-circuit. The "wavelet representation" of a
-  # length-1 signal is the signal itself. We center and scale per
-  # column so downstream IBSS sees zero-mean data and the inverse
-  # helper can recover the original.
+  # length-1 signal is the signal itself; we only need the
+  # per-column center + sd scale (matching the functional path's
+  # convention so the two paths are interchangeable at T_m = 1).
+  # The branch exists because `wavethresh::wd` does not accept
+  # length-1 inputs.
   if (T_m == 1) {
-    cm <- mean(Y_m, na.rm = TRUE)
-    csd <- stats::sd(Y_m, na.rm = TRUE)
+    cm  <- mean(Y_m, na.rm = TRUE)
+    csd <- stats::sd(as.numeric(Y_m), na.rm = TRUE)
     if (!is.finite(csd) || csd == 0) csd <- 1
-    Y_centered <- (Y_m - cm) / csd
+    Y_scaled <- (Y_m - cm) / csd
     return(list(
-      D             = Y_centered,
+      D             = Y_scaled,
       scale_index   = list(1L),
       T_padded      = 1L,
       pos           = pos_m,
@@ -87,6 +89,12 @@ mf_dwt <- function(Y_m,
   Y_remapped  <- remap$Y
   outing_grid <- remap$outing_grid
 
+  # Per-column center + sd scale (fsusieR / mvf.susie.alpha
+  # convention; the C2 / C3 fidelity tests pin bit-identical
+  # wavelet output against `fsusieR::colScale + DWT2` and
+  # `mvf.susie.alpha::DWT2`). For the C1 degeneracy contract
+  # against susieR, the test pre-scales y on both sides so the
+  # mfsusieR-internal sd-scaling is a no-op.
   Y_scaled      <- col_scale(Y_remapped, center = TRUE, scale = TRUE)
   column_center <- attr(Y_scaled, "scaled:center")
   column_scale  <- attr(Y_scaled, "scaled:scale")
