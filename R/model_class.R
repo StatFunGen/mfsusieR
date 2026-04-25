@@ -65,6 +65,16 @@ initialize_susie_model.mf_individual <- function(data, params, var_y, ...) {
   V_grid             <- if (is.null(prior)) NULL else prior$V_grid
   pi_V               <- if (is.null(prior)) NULL else prior$pi
   null_prior_weight  <- if (is.null(prior)) 0   else prior$null_prior_weight
+  G_prior            <- if (is.null(prior)) NULL else prior$G_prior
+
+  # Cross-modality combiner: passed separately from `prior` since it
+  # is a distinct plug-in seam (per design.md D6). Default to the
+  # trivial independence combiner (`combine_modality_lbfs.mf_prior_cross_modality_independent`).
+  cross_modality_combiner <- if (is.null(params$cross_modality_prior)) {
+    cross_modality_prior_independent()
+  } else {
+    params$cross_modality_prior
+  }
 
   # ---- Residual variance (per design.md D2) ----
   # `sigma2` is either a list[M] of scalars (legacy
@@ -102,6 +112,8 @@ initialize_susie_model.mf_individual <- function(data, params, var_y, ...) {
     V_grid            = V_grid,
     pi_V              = pi_V,
     null_prior_weight = null_prior_weight,
+    G_prior           = G_prior,
+    cross_modality_combiner = cross_modality_combiner,
     KL                = rep(NA_real_, L),
     lbf               = rep(NA_real_, L),
     lbf_variable      = matrix(NA_real_, nrow = L, ncol = J),

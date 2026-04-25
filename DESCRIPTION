@@ -28,6 +28,8 @@ Imports:
     matrixStats,
     methods,
     stats
+LinkingTo:
+    cpp11
 Suggests:
     mvf.susie.alpha,
     testthat (>= 3.0.0)
