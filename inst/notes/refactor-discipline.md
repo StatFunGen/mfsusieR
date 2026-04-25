@@ -11,6 +11,52 @@ Copies in the per-Claude memory system
 so the policy is reproducible across sessions, machines, and
 contributors.
 
+## 0. Upstream-first principle (BINDING for all port work)
+
+Before porting any routine from `mvf.susie.alpha` or `fsusieR`
+into mfsusieR, FIRST check whether `susieR` already has a
+similar helper or whether one can be added or generalised in
+susieR for shared use. Code duplication from susieR is forbidden;
+when a routine could live upstream and benefit other downstream
+packages (mvsusieR, mfsusieR, future packages), it SHALL be added
+to susieR rather than ported into each downstream individually.
+
+**How to apply:**
+
+- During the D13 author-pass audit, before opening a new file
+  under `R/`, search susieR for related helpers (`grep`,
+  `Glob`, search the relevant susieR source files). Look for
+  functions that compute the same quantity, even if the call
+  shape differs.
+- If susieR has a close helper:
+  - Use it directly when the call shape matches.
+  - Generalise upstream (with author authorisation) if the
+    shape needs adjustment (matrix-Y, additional kwargs,
+    Rfast acceleration, etc.). Open a separate susieR commit;
+    refactor mvsusieR to use the helper too where applicable.
+    Document the upstream change in the mfsusieR change's
+    Migration Plan section.
+- If no susieR helper exists and the routine is shareable across
+  packages, propose adding it to susieR. Examples landed under
+  this principle:
+  - `susieR::susie_workhorse(L_greedy, lbf_min)` (greedy outer
+    loop, used by susieR / mvsusieR / mfsusieR; landed
+    2026-04-25).
+  - `susieR::compute_marginal_bhat_shat(X, Y, ...)` (per-position
+    marginal OLS regression, used by susieR / mvsusieR /
+    mfsusieR; landed 2026-04-25).
+- Only port to mfsusieR locally when the routine is genuinely
+  mfsusieR-specific (e.g., wavelet-domain wrappers, the
+  per-modality prior plumbing). Document the local-port decision
+  in the refactor-exceptions ledger.
+
+**Why:** every port-source routine (cal_Bhat_Shat, init_prior,
+greedy logic, etc.) that gets duplicated into mfsusieR creates
+maintenance burden AND drifts from the canonical susieR /
+mvsusieR implementation. The upstream-first principle keeps the
+SuSiE family consistent and lets all downstream packages benefit
+from improvements made in any one of them.
+
 ## 1. Mathematical fidelity first
 
 Every line of the original is accounted for. Lines intentionally

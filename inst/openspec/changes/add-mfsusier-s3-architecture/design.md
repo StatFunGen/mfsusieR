@@ -223,6 +223,7 @@ the paradigm chosen.
 | `mvf.susie.alpha/R/operation_on_multfsusie_obj.R:1452-1454` | `check_cs`/`merge_effect`/`discard_cs` | Reimplement, with the strict ordering contract: filter -> recompute alpha-derived state -> compute PIPs -> finalize | bespoke |
 | `mvf.susie.alpha/R/computational_routine.R:395-431` | `estimate_residual_variance` | Reimplement as `update_variance_components.mf_individual`, branched on `residual_variance_method`. Default per-(scale, modality). | mvsusieR with manuscript-aligned default |
 | `fsusieR/R/utils.R` (`remap_data`, `colScale`) | Position remapping, column standardization | Port verbatim into `R/utils_wavelet.R`. Behaviour-preserving copy with snake_case naming and a code-quality audit (D13). | bespoke (port-with-audit) |
+| `fsusieR/R/computational_functions.R` (`cal_Bhat_Shat`, full-Y case) | Per-position marginal OLS regression | NOT ported locally. Use the new `susieR::compute_marginal_bhat_shat(X, Y, ...)` helper added in the upstream coordination plan (Migration Plan). The same helper replaces mvsusieR's OLS path. mfsusieR's prior init and PR-group-5 per-effect SER both call it. | delegate to upstream susieR (after Migration Plan) |
 | `fsusieR/R/wavelet_utils.R` (`gen_wavelet_indx`, DWT helpers) | Scale-index generation, ragged-T_m DWT plumbing | Port into `R/utils_wavelet.R`. `wavethresh::wd` and `wavethresh::wr` are math primitives and stay as library calls. | bespoke (port-with-audit) |
 | `fsusieR/R/operation_on_prior.R` (`init_prior.default`) | Per-scale mixture-of-normals prior init | Port into `R/prior_scale_mixture.R`. | bespoke (port-with-audit) |
 | `mvf.susie.alpha/R/multfsusie.R:308-316` and `fsusieR/R/susiF_workhorse.R` (DWT pipeline) | Forward DWT pipeline | `mf_dwt(Y_m, pos_m, max_padded_log2, filter_number, family)` in `R/dwt.R`. Calls the ported helpers + `wavethresh::wd`. Cached at data-class construction, not per iteration. | bespoke wrapper |
@@ -251,13 +252,22 @@ Default prior is `mf_prior_scale_mixture`. Stored fields:
 - `update_method`: "mixsqp" (default) or "em".
 
 The cross-modality plug-in seam: at construction time, `mfsusie()`
-accepts an optional `cross_modality_prior` argument. If non-NULL, the
-SER-stats method calls `cross_modality_prior$apply(modality_lbfs,
-model_state)` to adjust per-modality log-BFs before they are summed
-into a joint log-BF. v1 provides one stub implementation:
-`cross_modality_prior_independent()` which is a no-op (sums log-BFs
-unchanged). A future change adds mash-style adjustments. This is the
-susieAnn paradigm.
+accepts an optional `cross_modality_prior` argument. If non-NULL,
+the SER-stats method calls
+`combine_modality_lbfs(cross_modality_prior, modality_lbfs,
+model_state)` to adjust per-modality log-BFs before they are
+summed into a joint log-BF. The verb is `combine_modality_lbfs`
+(an S3 generic) rather than `apply` to avoid collision with
+`base::apply`. v1 provides one stub implementation:
+`cross_modality_prior_independent()` whose method is a no-op (sums
+log-BFs unchanged). A future change adds mash-style adjustments.
+This is the susieAnn paradigm.
+
+The per-modality lbf compute that feeds `combine_modality_lbfs` is
+itself a per-modality `lapply` over `seq_len(M)` and is thus a
+natural target for `future.apply::future_lapply` parallelisation
+when M is large. Not in v1 default; flagged as a Phase 7
+optimisation candidate.
 
 ### D7. Public API signatures
 
@@ -919,6 +929,36 @@ This change applies cleanly: there is no prior `inst/openspec/specs/`
 content to merge with. After Phase 3 implementation lands and Phase
 4 tests pass, the change is archived. Rollback is `git revert` of the
 applied commits.
+
+### Upstream susieR `compute_marginal_bhat_shat` (planned)
+
+A new helper `compute_marginal_bhat_shat(X, Y, predictor_weights =
+NULL, sigma2 = NULL)` lands in `susieR/R/univariate_regression.R`.
+Returns `list(Bhat = J x T, Shat = J x T)` for `Y` either a vector
+or matrix, treating each `(X column, Y column)` pair as an OLS
+regression with X assumed column-centred (no intercept; `n - 1`
+denominator for `Shat`). Rfast-accelerated `colVars` internally,
+matrixStats fallback.
+
+Shared by:
+
+- susieR's `compute_ser_statistics.individual` (T = 1 path).
+  Refactor cosmetic; behaviour preserved bit-for-bit.
+- mvsusieR's OLS path in `compute_ser_statistics.mv_individual`
+  (when GLS `data$svs` is NULL). The GLS path keeps its own
+  `compute_betahat`. Refactor cosmetic; bit-for-bit preserved.
+- mfsusieR's prior init in `R/prior_scale_mixture.R` (full-Y per
+  modality) AND PR-group-5 per-effect SER in
+  `R/individual_data_methods.R::compute_ser_statistics.mf_individual`
+  (residual per modality).
+
+This consolidates the per-position marginal OLS regression that
+fsusieR's `cal_Bhat_Shat`, mvsusieR's `compute_betahat` (OLS
+branch), and susieR's existing scalar SER all reimplement
+separately. Authorised by Gao on 2026-04-25 as a CLAUDE.md hard
+rule #1 override (parallel to the L_greedy override). Tracked
+outside this OpenSpec change but a hard prerequisite for PR
+group 4 of `add-mfsusier-s3-architecture`.
 
 ### Upstream susieR `L_greedy` and `lbf_min` (landed)
 
