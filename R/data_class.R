@@ -156,6 +156,12 @@ create_mf_individual <- function(X,
     scale_index  = scale_index,
     T_padded     = T_padded,
     csd_X        = X_scale,
+    predictor_weights = colSums(X_processed^2),  # X'X diagonal; cached
+                                                 # per the susieR / mvsusieR
+                                                 # pattern, used by SER stats
+                                                 # in compute_ser_statistics
+                                                 # without per-iteration
+                                                 # recompute.
     n            = n,
     J            = J,
     M            = M,
