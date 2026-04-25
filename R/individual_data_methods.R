@@ -170,10 +170,18 @@ loglik.mf_individual <- function(data, params, model, V, ser_stats, l = NULL, ..
 
   # Stabilization + softmax via the cached susieR helpers
   # (`lbf_stabilization`, `compute_posterior_weights`); see `R/zzz.R`
-  # for the binding. The `shat2` argument is a per-SNP marker that
-  # zeroes out lbf at infinite-shat2 SNPs (zero predictor variance).
+  # for the binding.
+  #
+  # `lbf_stabilization` was designed for susieR's scalar SER where
+  # `shat2[j]` is finite for usable SNPs and `Inf` for SNPs with zero
+  # predictor variance (so `lbf -> 0` at those SNPs). mfsusieR has a
+  # per-(modality, position) Shat^2 matrix per SNP, so we pass a
+  # length-J marker vector that encodes only the zero-pw signal: `1`
+  # for usable SNPs (any finite value works), `Inf` for zero-pw SNPs.
+  # The `1` is a placeholder, not a unit; only the `Inf` entries
+  # affect the helper's behaviour.
   shat2_marker <- ifelse(data$predictor_weights == 0, Inf, 1)
-  stable     <- lbf_stabilization(lbf_combined, model$pi, shat2_marker)
+  stable      <- lbf_stabilization(lbf_combined, model$pi, shat2_marker)
   weights_res <- compute_posterior_weights(stable$lpo)
 
   if (!is.null(l)) {
