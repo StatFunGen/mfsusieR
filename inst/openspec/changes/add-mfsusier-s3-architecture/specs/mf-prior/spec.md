@@ -33,9 +33,35 @@ multiplication-by-K step in the original code is removed.
 - **WHEN** the user constructs the prior with `prior_variance_scope =
   "per_modality"`
 - **THEN** the prior SHALL collapse the scale dimension and store
-  `V_grid` as a length-M list of length-K vectors, replicated per scale
-  during SER computation, matching `mvf.susie.alpha`'s per-trait
-  treatment
+  `V_grid` as a length-M list of length-K vectors, replicated per
+  scale during SER computation, matching `mvf.susie.alpha`'s
+  per-trait treatment
+
+### Requirement: per-modality init delegates to a routine ported from fsusieR
+
+The per-modality scale-mixture-of-normals init logic SHALL be a
+behaviour-preserving port of `fsusieR::init_prior.default` into
+`R/prior_scale_mixture.R`. The routine is internal to mfsusieR.
+mfsusieR SHALL NOT have `fsusieR` in `DESCRIPTION` Imports and SHALL
+NOT call `fsusieR::*` at runtime.
+
+#### Scenario: ported init produces identical output to fsusieR's
+
+- **WHEN** the ported init is invoked with the same arguments
+  `fsusieR::init_prior.default` would receive in the M = 1, T_1 > 1
+  case
+- **THEN** the returned prior object SHALL have element-wise
+  identical fields (`pi`, `V_grid`, `null_prior_weight`,
+  `update_method`) at tolerance `1e-12`, validated by the C2
+  contract in `mf-ibss/spec.md`
+
+#### Scenario: port-quality audit logged
+
+- **WHEN** the ported init lands in a Phase 3 PR
+- **THEN** the PR SHALL include a port-quality audit per
+  `design.md` D13 (simplify skill or Explore subagent), and any
+  intentionally omitted lines SHALL be entered in
+  `inst/notes/refactor-exceptions.md`
 
 ### Requirement: empirical-Bayes mixture weight update via mixsqp
 
