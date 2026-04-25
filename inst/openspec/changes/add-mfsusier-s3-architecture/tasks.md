@@ -124,17 +124,17 @@ constructor calls the helpers, the C2 / C3 fidelity tests need both.
 
 ## 3. mfsusie model class and initialization
 
-- [ ] 3.1 Implement `R/model_class.R` with
+- [x] 3.1 Implement `R/model_class.R` with
       `initialize_susie_model.mf_individual` returning class
       `c("mfsusie", "susie")` with all fields per
       `mf-data-class/spec.md` and `mf-public-api/spec.md`.
-- [ ] 3.2 Implement `R/model_methods.R` with `get_alpha_l.mfsusie`,
+- [x] 3.2 Implement `R/model_methods.R` with `get_alpha_l.mfsusie`,
       `get_posterior_mean_l.mfsusie`,
       `get_posterior_mean_sum.mfsusie`,
       `get_posterior_moments_l.mfsusie`,
       `get_prior_variance_l.mfsusie`,
       `set_prior_variance_l.mfsusie`.
-- [ ] 3.3 Test: model initialization shapes for several (M, T_m)
+- [x] 3.3 Test: model initialization shapes for several (M, T_m)
       configurations, including the susieR-degeneracy inputs
       (M = 1, T_1 = 1).
 
