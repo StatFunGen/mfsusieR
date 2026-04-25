@@ -6,7 +6,7 @@ not align with the S3 conventions adopted by sister packages
 (`mvsusieR/refactor-s3` and `susieAnn`). Phase 1 paradigm notes
 (`inst/notes/paradigms/`) catalogued the port source and the two reference
 paradigms. This change locks the architecture so Phase 3 (port and
-implementation under the Humanize loop) and Phase 4 (reference unit tests)
+implementation under the Claude-native review loop) and Phase 4 (reference unit tests)
 have a stable target. The package's math is anchored to the manuscript at
 `/home/gw/GIT/MultifSuSiE_Manuscript`.
 
