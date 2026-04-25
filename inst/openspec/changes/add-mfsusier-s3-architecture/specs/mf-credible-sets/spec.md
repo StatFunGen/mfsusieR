@@ -87,5 +87,36 @@ that `class(fit) = c("mfsusie", "susie")`.
 
 - **WHEN** `susieR::susie_get_cs(fit, X = X)` is called
 - **THEN** the returned list SHALL contain credible-set indices that
-  match `fit$cs`, possibly with additional purity diagnostics computed
-  from X
+  match `fit$cs`, possibly with additional purity diagnostics
+  computed from X
+
+### Requirement: CS / PIP invariants hold for the single-modality functional case
+
+mfsusieR SHALL apply the same CS construction order, PIP definition,
+and CS object structure to the single-modality case (`M = 1`,
+contract C2) as to the multi-modality case (`M >= 1`, contract C3).
+The PIP-after-CS-filter ordering rule SHALL fix a known bug in
+`fsusieR::susiF` where PIP is computed before CS filtering; the
+ported mfsusieR path SHALL apply the filter first.
+
+#### Scenario: M = 1 fits produce same-shape CS structure as M > 1
+
+- **WHEN** `mfsusie()` is called with `M = 1, T_1 > 1` (or
+  equivalently via `fsusie()`) and again with `M >= 2`, both with
+  `filter_credible_sets = TRUE`
+- **THEN** `fit$cs[[i]]` SHALL have the same fields (`cs`,
+  `coverage`, `purity`, `cs_index`, `lbf`) and the same dtypes in
+  both cases; `fit$pip` SHALL be a length-J numeric vector in both
+  cases
+
+#### Scenario: M = 1 PIP-after-CS-filter fix vs fsusieR::susiF
+
+- **WHEN** `mfsusie(X, list(Y_matrix), list(pos), filter_credible_sets
+  = TRUE)` is run on a fixture where one of the L effects is
+  dropped by purity filtering, and `fsusieR::susiF(Y_matrix, X,
+  pos, ...)` is run on the same fixture and seed
+- **THEN** the two `pip` vectors SHALL differ at indices that were
+  contributed by the dropped effect; the contract C2 test in
+  `mf-ibss/spec.md` SHALL assert this deviation explicitly with a
+  comment citing this OpenSpec change (the mfsusieR side is the
+  fixed side; the test does not "expect" fsusieR's pre-filter PIP)

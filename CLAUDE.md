@@ -56,14 +56,50 @@ susieR. You can use zzz.R to load internal functions without having to expose fr
 | Tool | Use for |
 |------|---------|
 | Regular Claude Code | Phase 1 exploration, reading code, drafting notes |
-| OpenSpec (`openspec new change / validate / archive`, run from `inst/`) | Phase 2, 6, 7, 8 planning |
+| OpenSpec skills (`/openspec-explore`, `/openspec-propose`, `/openspec-apply-change`, `/openspec-archive-change`) | Phase 2, 6, 7, 8 design + implementation. Skills are the **preferred entry points** for OpenSpec work. |
+| OpenSpec CLI (`openspec validate`, `openspec status`, `openspec list`, run from `inst/`) | In-place refinement of already-scaffolded changes; safety-net validation after manual edits |
 | Claude-native review loop (see `inst/notes/review-loop-methodology.md`) | Phase 3, 4, 6, 7 implementation |
 | `targets` pipeline + `bench` + `profvis` | Phase 5 calibration, Phase 7 profiling |
 
-The review loop borrows the structure of an external code-review-bot RLCR loop
-(write -> review -> revise) but runs entirely inside Claude Code by spawning
-fresh-context Agent (Explore subagent) reviewers between Claude's authoring
-passes. There is no external review CLI to install.
+### OpenSpec skill flow (binding for all future design work)
+
+When a design task requires opening or substantially revising an
+OpenSpec change, invoke the OpenSpec skills rather than hand-editing
+artifacts from a blank page. The mapping:
+
+- **Start of a design phase, requirements are unclear or in flux:**
+  invoke `/openspec-explore` (or the experimental
+  `/opsx:explore`). The skill puts the session in explore mode, a
+  thinking partner for clarifying requirements with Gao before any
+  artifact is drafted.
+- **Scaffolding a new change:** invoke `/openspec-propose` (or
+  `/opsx:propose`). The skill generates `proposal.md`, `design.md`,
+  `tasks.md`, and the spec capabilities directory in one step. Refine
+  manually after.
+- **Implementing tasks from an existing change:** invoke
+  `/openspec-apply-change` (or `/opsx:apply`). The skill walks the
+  task list and helps drive the Claude-native review loop on each
+  PR group.
+- **Archiving a completed change:** invoke
+  `/openspec-archive-change` (or `/opsx:archive`) after Phase 4
+  reference tests pass. The skill performs the merge of spec deltas
+  into `inst/openspec/specs/`.
+- **In-place refinement of an already-scaffolded change** (the case
+  during the 2026-04-25 architectural pivot): hand-editing +
+  `openspec validate` is acceptable. Skills add little when the
+  artifacts already exist and only need section-level rewrites.
+
+For every step where the skill flow applies, prefer the skill. If
+the skill does not match the work being done (e.g., a tiny typo fix
+in a spec, or a one-line rename), hand-editing + `openspec validate`
+is the right choice. When in doubt, ask Gao before opening an
+OpenSpec change without a skill.
+
+The review loop borrows the structure of an external code-review-bot
+RLCR loop (write -> review -> revise) but runs entirely inside
+Claude Code by spawning fresh-context Agent (Explore subagent)
+reviewers between Claude's authoring passes. There is no external
+review CLI to install.
 
 For all notes please save to inst/notes under this folder ~/GIT/mfsusieR
 

@@ -102,33 +102,76 @@ ignored.
   `L_greedy`, and emit one warning per session referencing the
   upstream coordination plan
 
-### Requirement: degenerate case reduces exactly to susieR::susie
+### Requirement: contract C1 - single-modality scalar case reduces exactly to susieR::susie
 
 `mfsusie()` SHALL reduce mathematically and numerically to
 `susieR::susie()` under the degenerate input combination defined in
-`design.md` D11: `M = 1`, `T_1 = 1`, `prior_variance_grid` of length 1,
-`null_prior_weight = 0`, `cross_modality_prior = NULL`,
+`design.md` D11a: `M = 1`, `T_1 = 1`, `prior_variance_grid` of
+length 1, `null_prior_weight = 0`, `cross_modality_prior = NULL`,
 `prior_variance_scope = "per_modality"`, `residual_variance_method =
-"shared_per_modality"`, `post_processing = "none"`, `L_greedy = NULL`.
+"shared_per_modality"`, `L_greedy = NULL`. No post-processing is
+applied (the decoupled `mf_post_smooth` and `mf_credible_bands`
+functions are not called).
 
 #### Scenario: numerical equivalence to susieR::susie at degenerate inputs
 
-- **WHEN** `mfsusie(X, list(matrix(y, ncol = 1)), pos = list(1), L = L,
-  prior_variance_grid = sigma_0_squared, null_prior_weight = 0,
+- **WHEN** `mfsusie(X, list(matrix(y, ncol = 1)), pos = list(1), L =
+  L, prior_variance_grid = sigma_0_squared, null_prior_weight = 0,
   prior_variance_scope = "per_modality", residual_variance_method =
-  "shared_per_modality", post_processing = "none", L_greedy = NULL,
-  ...)` and `susieR::susie(X, y, L = L, scaled_prior_variance =
+  "shared_per_modality", L_greedy = NULL, ...)` and
+  `susieR::susie(X, y, L = L, scaled_prior_variance =
   sigma_0_squared / var(y), null_weight = 0, ...)` are run with the
   same fixed seed
 - **THEN** the two fits SHALL agree element-wise on `alpha`, `mu`,
-  `mu2`, `lbf`, `lbf_variable`, `KL`, `sigma2`, `elbo`, `niter`, `pip`
-  at tolerance 1e-10, and on credible-set membership exactly
+  `mu2`, `lbf`, `lbf_variable`, `KL`, `sigma2`, `elbo`, `niter`,
+  `pip` at tolerance `1e-10`, and on credible-set membership
+  exactly
 
 #### Scenario: degeneracy holds across L values
 
 - **WHEN** the degeneracy test above is repeated for `L in c(1, 5,
   10)` on the same fixture
 - **THEN** the agreement SHALL hold for every L value tested
+
+### Requirement: contract C2 - single-modality functional case reduces exactly to fsusieR::susiF
+
+`mfsusie()` SHALL match `fsusieR::susiF()` numerically when called
+with single-modality functional inputs (`M = 1`, `T_1 > 1`) and the
+arguments aligned to fsusieR's defaults. The thin wrapper
+`mfsusie::fsusie(Y, X, pos, ...)` (per `mf-public-api/spec.md`)
+provides a drop-in entry point that performs the canonicalization.
+The contract is stated in `design.md` D11b.
+
+#### Scenario: numerical equivalence to fsusieR::susiF at single-modality functional inputs
+
+- **WHEN** `fsusie(Y_matrix, X, pos, L = L, ...)` (or equivalently
+  `mfsusie(X, list(Y_matrix), list(pos), L = L, ...)`) and
+  `fsusieR::susiF(Y_matrix, X, pos, L = L, ...)` are run on a fixed
+  `(X, Y_matrix)` fixture with `T_1 in c(64, 128)`, the same fixed
+  seed, and arguments aligned per the test-file header (matching
+  `null_prior_weight`, `prior_variance_grid_multiplier`,
+  `wavelet_filter_number`, `wavelet_family`, `max_padded_log2`)
+- **THEN** the two fits SHALL agree element-wise on `alpha`, `mu`,
+  `mu2`, `lbf`, `lbf_variable`, `KL`, `sigma2`, `elbo`, `niter`,
+  `pip` at tolerance `<= 1e-8`, and on credible-set membership
+  exactly
+
+#### Scenario: contract C2 holds across L values
+
+- **WHEN** the contract C2 test above is repeated for `L in c(1, 5,
+  10)` on the same fixture
+- **THEN** the agreement SHALL hold for every L value tested
+
+#### Scenario: intentional fsusieR-bug fixes are asserted explicitly
+
+- **WHEN** mfsusieR fixes a bug in `fsusieR::susiF` (e.g., the
+  PIP-after-CS-filter ordering bug; CS filter applied before PIP
+  computation per `mf-credible-sets/spec.md`)
+- **THEN** the contract C2 test SHALL include an explicit
+  `expect_*` assertion that records the deviation, and a comment
+  citing the OpenSpec change (this change,
+  `add-mfsusier-s3-architecture`) that authorized the fix; the
+  test SHALL NOT loosen tolerance to mask the deviation
 
 ### Requirement: roxygen tags reference manuscript only; original-code references live in test files and dev notes
 
