@@ -84,12 +84,12 @@ PR group 2 lands the data class plus the ported wavelet helpers in
 one PR because they form a single lockstep contract: the
 constructor calls the helpers, the C2 / C3 fidelity tests need both.
 
-- [ ] 2.1 Port `remap_data` and `colScale` from `fsusieR/R/utils.R`
+- [x] 2.1 Port `remap_data` and `colScale` from `fsusieR/R/utils.R`
       into `R/utils_wavelet.R`. Run the D13 port-quality audit
       (simplify skill or Explore subagent) before the reviewer pass;
       log style improvements in the commit message. No behavioural
       changes.
-- [ ] 2.2 Port `gen_wavelet_indx` and any DWT helper that wraps
+- [x] 2.2 Port `gen_wavelet_indx` and any DWT helper that wraps
       `wavethresh::wd` from `fsusieR/R/wavelet_utils.R` into
       `R/utils_wavelet.R`. Same D13 audit substep. Univariate
       (`T_m = 1`) short-circuit is a single explicit branch in the
