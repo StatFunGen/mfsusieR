@@ -1,0 +1,38 @@
+Type: Package
+Package: mfsusieR
+Title: Multi-Modality Multi-Functional Sum of Single Effects Regression
+Version: 0.0.0.9000
+Date: 2026-04-25
+Authors@R: c(
+    person("Gao", "Wang", role = c("aut", "cre"),
+           email = "wang.gao@columbia.edu"),
+    person("William R. P.", "Denault", role = "aut"),
+    person("Anjing", "Liu", role = "aut"),
+    person("Matthew", "Stephens", role = "aut"))
+Description: A multi-modality, multi-functional generalisation of the
+    'Sum of Single Effects' (SuSiE) model for variable selection in
+    regression with mixtures of functional and univariate responses.
+    Built on the 'susieR' backbone, with wavelet-based functional priors
+    and a per-(scale, modality) variance structure. Refactor of the
+    'mvf.susie.alpha' prototype.
+License: BSD_3_clause + file LICENSE
+URL: https://github.com/StatFunGen/mfsusieR
+BugReports: https://github.com/StatFunGen/mfsusieR/issues
+Depends:
+    R (>= 4.0.0)
+Imports:
+    susieR (>= 0.12),
+    fsusieR,
+    wavethresh,
+    mixsqp,
+    ashr,
+    methods,
+    stats
+Suggests:
+    mvf.susie.alpha,
+    testthat (>= 3.0.0)
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.3
+Roxygen: list(markdown = TRUE)
+Config/testthat/edition: 3
