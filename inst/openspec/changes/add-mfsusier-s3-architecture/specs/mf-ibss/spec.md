@@ -76,6 +76,31 @@ alpha across iterations is less than `tol` when `convergence_method =
 - **THEN** the loop SHALL terminate when `0 <= elbo[iter+1] -
   elbo[iter] < tol` and SHALL set `fit$converged <- TRUE`
 
+### Requirement: greedy R-search via L_greedy passthrough
+
+`mfsusie()` SHALL pass `L_greedy` through to `susieR::susie_workhorse`
+without modification once the susieR generalization (recorded in
+`design.md` "External coordination") is in place. Until that
+generalization lands, mfsusieR SHALL accept the argument and SHALL
+emit a one-time deprecation-style warning that the value is being
+ignored.
+
+#### Scenario: post-generalization passthrough
+
+- **WHEN** the susieR upstream generalization is available and
+  `mfsusie()` is called with `L_greedy = 3`
+- **THEN** the underlying `susie_workhorse` call SHALL receive
+  `L_greedy = 3` and the IBSS SHALL fit with L = 3, check pruning,
+  grow L by 1, and re-fit until pruning occurs or `L` is reached
+
+#### Scenario: pre-generalization graceful degradation
+
+- **WHEN** the susieR upstream generalization is NOT yet available and
+  `mfsusie()` is called with a non-NULL `L_greedy`
+- **THEN** the function SHALL fit with L as a fixed upper bound, ignore
+  `L_greedy`, and emit one warning per session referencing the
+  upstream coordination plan
+
 ### Requirement: roxygen tags reference manuscript and original code
 
 Every internal function ported from `mvf.susie.alpha` SHALL carry a

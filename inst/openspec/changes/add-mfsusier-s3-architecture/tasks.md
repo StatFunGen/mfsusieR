@@ -9,6 +9,18 @@ that adds a numerical routine also adds the matching paired-comparison
 test against `mvf.susie.alpha` per the test-fidelity rule
 (`~/.claude/projects/-home-gw-GIT-mfsusieR/memory/test_fidelity_and_manuscript_xref.md`).
 
+## 0. External coordination prerequisite
+
+- [ ] 0.1 Open a separate work item against `~/GIT/susieR` to add
+      `L_greedy = NULL` to `susie_workhorse` and `susie()`. Behavior
+      unchanged when NULL; greedy grow-from-`L_greedy` to `L` upper
+      bound when non-NULL. CLAUDE.md hard rule #1 override authorized
+      by Gao for this specific addition. Track outside this OpenSpec
+      change. Pin the resulting commit hash in mfsusieR's
+      `DESCRIPTION` Imports.
+- [ ] 0.2 Until 0.1 lands, mfsusieR's `L_greedy` argument warns once
+      per session and is otherwise ignored.
+
 ## 1. Package skeleton and DESCRIPTION
 
 - [ ] 1.1 Set up `DESCRIPTION` with imports `susieR (>= 0.12)`,
@@ -97,6 +109,20 @@ test against `mvf.susie.alpha` per the test-fidelity rule
       `residual_variance_method = "shared_per_modality"` matches
       `mvf.susie.alpha` on alpha, mu, mu2, lbf, lbf_variable, KL,
       sigma2, elbo, niter at the documented tolerances.
+
+## 6b. Post-processing (smash / TI / HMM)
+
+- [ ] 6b.1 Inventory fsusieR's exported smash, TI, and HMM smoother
+      helpers; record which are usable as-is vs need a wrapper.
+- [ ] 6b.2 Implement `R/post_processing.R` with a dispatch on
+      `post_processing = c("none", "smash", "TI", "HMM")`. Delegate to
+      fsusieR where possible; reimplement only the gaps.
+- [ ] 6b.3 Implement TIWT credible-band computation per manuscript
+      online_method step 6.
+- [ ] 6b.4 Test: each smoother runs end-to-end on the standard fixture
+      and produces curves with the documented shape; smash and TI
+      outputs match `mvf.susie.alpha` at tolerance 1e-6 on the same
+      fixture.
 
 ## 7. Public API and finalize
 
