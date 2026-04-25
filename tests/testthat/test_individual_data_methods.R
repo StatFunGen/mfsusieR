@@ -479,8 +479,7 @@ test_that("S3 methods on mf_individual are registered on susieR's generics", {
 
 test_that("susieR helpers are cached on the mfsusieR namespace", {
   pkg_ns <- asNamespace("mfsusieR")
-  for (fn in c("lbf_stabilization", "compute_posterior_weights",
-               "warning_message")) {
+  for (fn in c("warning_message", "SER_posterior_e_loglik")) {
     expect_true(is.function(get(fn, envir = pkg_ns)),
                 info = paste("Missing cached binding:", fn))
   }
