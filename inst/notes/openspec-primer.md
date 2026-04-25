@@ -5,21 +5,44 @@ A short orientation. Read this before approving Phase 2.
 ## What OpenSpec is
 
 OpenSpec is a planning layer that sits on top of git. It tracks two trees in
-the repo:
+the repo, both kept under `inst/openspec/`:
 
-- `openspec/specs/` - the source of truth for what the package currently
+- `inst/openspec/specs/` - the source of truth for what the package currently
   delivers. One folder per *capability*. Each contains a `spec.md` with
   testable requirements written as `WHEN ... THE SYSTEM SHALL ...`.
-- `openspec/changes/` - one folder per *open proposal*. Each holds:
+- `inst/openspec/changes/` - one folder per *open proposal*. Each holds:
   - `proposal.md` - why this change, what shifts.
   - `design.md` - architecture, trade-offs, S3 dispatch decisions, etc.
   - `tasks.md` - small, reviewable implementation steps.
   - delta spec fragments (`specs/<capability>/spec.md`) showing what gets
-    `ADDED`, `MODIFIED`, or `REMOVED` in `openspec/specs/`.
+    `ADDED`, `MODIFIED`, or `REMOVED` in `inst/openspec/specs/`.
 
-Once a change is applied, its deltas merge into `openspec/specs/`, and the
-proposal moves to `openspec/changes/archive/`. The archive plus the current
-`openspec/specs/` together describe the package's full design history.
+Once a change is applied, its deltas merge into `inst/openspec/specs/`, and
+the proposal moves to `inst/openspec/changes/archive/`. The archive plus the
+current `inst/openspec/specs/` together describe the package's full design
+history.
+
+The `inst/openspec/` directory is excluded from package builds via
+`.Rbuildignore` so it does not ship with the installed package.
+
+## Working directory for openspec commands
+
+The openspec CLI looks for `./openspec/` in the current working directory
+and has no flag to relocate it. Because we keep it under `inst/`, all
+openspec commands must be run from `inst/`:
+
+```bash
+cd ~/GIT/mfsusieR/inst
+openspec list --changes
+openspec new change <name>
+openspec validate <name>
+openspec apply <name>
+openspec archive <name>
+```
+
+The Claude Code slash commands (`/opsx:propose`, etc.) wrap the CLI; they
+likewise need to run with `inst/` as the working directory. If a command
+fails with "No OpenSpec changes directory found", check cwd first.
 
 ## The four-step lifecycle
 
@@ -74,7 +97,7 @@ For Phase 2 specifically (just so it's concrete):
 - **tasks.md** - small PRs. None should take more than a day. Each PR has a
   clear deliverable and lists which tests gate its merge.
 - **delta specs** - one spec.md per new capability under
-  `openspec/changes/add-mfsusieR-s3-architecture/specs/<capability>/`.
+  `inst/openspec/changes/add-mfsusieR-s3-architecture/specs/<capability>/`.
   Capabilities I expect for mfsusieR: `multifunctional-data-class`,
   `multifunctional-prior`, `multifunctional-ibss`, `mfsusie-public-api`,
   `mfsusie-credible-sets`. Each spec.md uses `## ADDED Requirements`

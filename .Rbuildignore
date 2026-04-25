@@ -1,0 +1,6 @@
+^inst/openspec$
+^inst/notes$
+^\.claude$
+^\.Rbuildignore$
+^bootstrap-mfsusieR\.sh$
+^README-SETUP\.md$
