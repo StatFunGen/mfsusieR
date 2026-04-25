@@ -215,6 +215,22 @@ Rules for Phase 3 (binding; mirrors the code-refactor skill at
   not numerical. Graduated tolerances (`1e-2`, `5e-2`, `1e-6`) are
   forbidden. A failing apple-to-apple test at `1e-8` is a bug to
   investigate, not a tolerance to relax.
+
+  **The ONLY exception is a documented port-source bug fix.** When
+  mfsusieR fixes a buggy or numerically noisy formula in
+  `mvf.susie.alpha` / `fsusieR`, the affected unit test EITHER
+  (a) directly asserts the new corrected behaviour and does NOT
+  expect the old buggy output (Pattern A), OR (b) keeps asserting
+  equivalence with the port source but uses a relaxed tolerance
+  (e.g., `1e-12`) well below the contract floor, with an inline
+  comment saying "this is a port-source-bug fix, not numerical
+  drift" and a refactor-exceptions ledger entry per design.md
+  D11e (Pattern B). The relaxed `1e-12` tolerance is NOT a
+  graduated tolerance: it is four orders of magnitude tighter
+  than the contract floor and catches real drift while accepting
+  the port source's machine-epsilon rounding noise. The full
+  policy lives in `inst/notes/refactor-discipline.md` sections 3
+  and 4.
 - **Reviewer pass on every numerical PR**: fresh-context Agent
   reviewer runs the 10-item checklist in
   `inst/notes/review-loop-methodology.md`, which includes the

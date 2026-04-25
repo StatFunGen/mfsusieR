@@ -7,7 +7,7 @@ day; if a task feels larger, split it.
 Phase 4 reference tests interleave with Phase 3 implementation: every
 PR that adds a numerical routine also adds the matching paired-comparison
 test against the relevant port source per the test-fidelity rule
-(`~/.claude/projects/-home-gw-GIT-mfsusieR/memory/test_fidelity_and_manuscript_xref.md`).
+in `inst/notes/test-fidelity-policy.md`.
 Three apple-to-apple equivalence contracts hold the port together
 (design.md D11): C1 vs `susieR::susie` at `<= 1e-10`, C2 vs
 `fsusieR::susiF` at `<= 1e-8`, C3 vs `mvf.susie.alpha::multfsusie` at
