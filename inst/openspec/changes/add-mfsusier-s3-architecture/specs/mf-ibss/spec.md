@@ -187,21 +187,34 @@ Original-code provenance lives in:
 - Free-form prose in `inst/notes/sessions/*.md` and
   `inst/notes/paradigms/mvf-original.md`.
 
-Manuscript citations remain mandatory in main package roxygen and use
-the `@manuscript_ref methods/<file>.tex eq:<label>` form.
+Manuscript citations remain mandatory in main package roxygen.
+The canonical form is the built-in `@references` tag with a
+`Manuscript:` prefix on each citation line:
 
-#### Scenario: manuscript tags present in main code
+```r
+#' @references
+#' Manuscript: methods/<file>.tex eq:<label>
+```
+
+The built-in tag is used because `roxygen2::roxygenise()` rejects
+unknown tags; the `Manuscript:` prefix keeps the citations
+greppable for the reviewer-checklist scan.
+
+#### Scenario: manuscript citations present in main code
 
 - **WHEN** `roxygen2::roxygenise()` runs on the package
-- **THEN** every exported function and every internal function with a
-  manuscript-derived formula SHALL have at least one `@manuscript_ref`
-  tag pointing at a valid manuscript section or equation label
+- **THEN** every exported function and every internal function with
+  a manuscript-derived formula SHALL have at least one
+  `@references` block whose body contains a line starting with
+  `Manuscript:` and pointing at a valid manuscript section or
+  equation label, AND the build SHALL NOT emit "unknown tag"
+  errors
 
 #### Scenario: original-code references are not in main code
 
 - **WHEN** any file under `R/` is scanned for the strings
-  `@references_original`, `mvf.susie.alpha`, `multfsusie`, or
-  `original implementation`
+  `@references_original`, `@manuscript_ref`, `mvf.susie.alpha`,
+  `multfsusie`, `fsusieR`, `susiF`, or `original implementation`
 - **THEN** zero matches SHALL be found, except for matches inside
   string literals that are part of an error message or warning
   pointing the user at the legacy package

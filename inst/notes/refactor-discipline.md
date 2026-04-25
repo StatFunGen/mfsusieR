@@ -122,8 +122,16 @@ comments are FORBIDDEN under `R/`. Provenance lives in:
 - Test file headers (apple-to-apple comparison metadata)
 - Free-form prose in session notes and paradigm notes
 
-Manuscript citations (`@manuscript_ref methods/<file>.tex
-eq:<label>`) ARE required in main roxygen and stay.
+Manuscript citations are required in main roxygen and stay. The
+canonical form is the built-in `@references` tag with a
+`Manuscript:` prefix:
+```r
+#' @references
+#' Manuscript: methods/<file>.tex eq:<label>
+```
+The built-in tag is used because roxygen2 rejects unknown tags;
+the `Manuscript:` prefix makes the citation greppable for the
+reviewer-checklist scan.
 
 ## 8. Structural cleanliness AFTER correctness
 

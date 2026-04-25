@@ -90,8 +90,10 @@ simulation time.
   `manuscript:methods/derivation.tex#sec:posterior` (line numbers
   are brittle; section labels or equation tags like
   `eq:elbo_mvf` are preferred).
-- `@manuscript_ref methods/derivation.tex eq:foo` is required in
-  main package roxygen. `@references_original
+- Manuscript citations are required in main package roxygen, in
+  the form `@references` + `Manuscript: methods/<file>.tex
+  eq:<label>` (built-in roxygen tag, greppable via the
+  `Manuscript:` prefix). `@references_original
   mvf.susie.alpha/R/...` and bare `mvf.susie.alpha` / `fsusieR` /
   `susiF` / `multfsusie` strings are FORBIDDEN in main package
   roxygen per design.md D12 and

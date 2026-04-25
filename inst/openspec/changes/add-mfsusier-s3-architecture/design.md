@@ -814,7 +814,11 @@ They go in:
 In *main* package code (anything under `R/`):
 
 - Manuscript citations are required and go in roxygen as
-  `@manuscript_ref methods/<file>.tex eq:<label>`.
+  `@references` blocks with the format
+  `Manuscript: methods/<file>.tex eq:<label>` (one citation per
+  line). The built-in `@references` tag is used because roxygen2
+  rejects unknown tags; the `Manuscript:` prefix makes the
+  citations greppable for the reviewer checklist scan.
 - Where the manuscript contains a typo or ambiguity, follow the
   reference with a `@manuscript_note` block describing the
   discrepancy and the chosen interpretation.

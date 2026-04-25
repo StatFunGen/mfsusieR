@@ -199,9 +199,12 @@ Rules for Phase 3 (binding; mirrors the code-refactor skill at
   `inst/notes/refactor-exceptions.md` with file/range, behavior,
   decision, reason. Verify math independently of code (read the
   manuscript and supplementary material; the original may have bugs).
-- **Manuscript citations** are required in main code roxygen:
+- **Manuscript citations** are required in main code roxygen.
+  Use the built-in `@references` tag with a `Manuscript:` prefix
+  so roxygen2 accepts the tag and the citation is greppable:
   ```r
-  #' @manuscript_ref methods/derivation.tex eq:post_f_mix
+  #' @references
+  #' Manuscript: methods/derivation.tex eq:post_f_mix
   ```
 - **Original-code references are FORBIDDEN in main code roxygen.**
   No `@references_original`, no `# from mvf.susie.alpha/...`, no

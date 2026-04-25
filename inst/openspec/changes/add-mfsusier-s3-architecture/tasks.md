@@ -94,30 +94,30 @@ constructor calls the helpers, the C2 / C3 fidelity tests need both.
       `R/utils_wavelet.R`. Same D13 audit substep. Univariate
       (`T_m = 1`) short-circuit is a single explicit branch in the
       DWT helper.
-- [ ] 2.3 Implement `R/data_class.R` with `create_mf_individual(X, Y,
+- [x] 2.3 Implement `R/data_class.R` with `create_mf_individual(X, Y,
       pos, max_padded_log2, wavelet_filter_number, wavelet_family,
       standardize, intercept, save_residuals)` returning class
       `c("mf_individual", "individual")`. Field shapes per
       `mf-data-class/spec.md` (D2): `D`, `scale_index`, `T_padded`,
       `csd_X`, optional `residuals` (NULL until `mfsusie()` fills
       it post-IBSS).
-- [ ] 2.4 Implement `R/dwt.R` with `mf_dwt` (forward) and
+- [x] 2.4 Implement `R/dwt.R` with `mf_dwt` (forward) and
       `mf_invert_dwt` (inverse) wrappers. Both call the helpers
       ported in 2.1-2.2 + `wavethresh::wd` / `wavethresh::wr`. Both
       short-circuit when `T_m = 1`.
-- [ ] 2.5 Test (basic shapes): ragged `T_m`, `M = 1`, `T_m = 1`, NA
+- [x] 2.5 Test (basic shapes): ragged `T_m`, `M = 1`, `T_m = 1`, NA
       handling, idempotence of `mf_invert_dwt(mf_dwt(.))` to
       tolerance `1e-12`.
-- [ ] 2.6 Test (C3 fidelity, Phase 4): forward DWT output matches
+- [x] 2.6 Test (C3 fidelity, Phase 4): forward DWT output matches
       `mvf.susie.alpha`'s `DWT2` row by row at tolerance `1e-12` on
       a fixture row taken from the existing minimal fixture
       (`scenario_minimal.rds`, M = 2, T = c(64, 128)).
-- [ ] 2.7 Test (C2 fidelity, Phase 4): forward DWT output for `M = 1,
+- [x] 2.7 Test (C2 fidelity, Phase 4): forward DWT output for `M = 1,
       T_1 > 1` matches the corresponding step in `fsusieR::susiF`'s
       pipeline at tolerance `1e-12`. Reuse `scenario_minimal.rds`
       by taking the M = 1 view (use `Y_f[[1]]` and `pos[[1]]` only;
       no separate fixture needed).
-- [ ] 2.8 Update `inst/notes/refactor-exceptions.md` with any line of
+- [x] 2.8 Update `inst/notes/refactor-exceptions.md` with any line of
       `fsusieR/R/utils.R`, `fsusieR/R/wavelet_utils.R`, or
       `mvf.susie.alpha/R/utils_wavelet_transform.R` not carried
       over.
@@ -343,11 +343,12 @@ Depends on 7.1.
 
 ## 9. Documentation
 
-- [ ] 9.1 Add `@manuscript_ref` roxygen tags to every numeric
-      routine. Confirm via grep that NO `@references_original`,
-      `mvf.susie.alpha`, `multfsusie`, `fsusieR`, `susiF`, or
-      `original implementation` strings appear in `R/` (per
-      `mf-ibss/spec.md` and design.md D12).
+- [ ] 9.1 Add `@references` + `Manuscript: methods/<file>.tex
+      eq:<label>` roxygen entries to every numeric routine.
+      Confirm via grep that NO `@references_original`,
+      `@manuscript_ref`, `mvf.susie.alpha`, `multfsusie`, `fsusieR`,
+      `susiF`, or `original implementation` strings appear in `R/`
+      (per `mf-ibss/spec.md` and design.md D12).
 - [ ] 9.2 Render `?mfsusie` and `?fsusie` and confirm every
       argument has a default and a one-line citation per
       `mf-public-api/spec.md`. The post-processor docs explain the
