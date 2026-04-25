@@ -295,9 +295,9 @@ test_that("All-zero alpha (no effects): ER2 = ||D||^2 per position", {
   }
 })
 
-# ---- update_model_variance: non-trivial pi update, fidelity vs hand-roll ----
+# ---- optimize_prior_variance: non-trivial pi update, fidelity vs hand-roll ----
 
-test_that("update_model_variance changes pi vs the initial uniform prior", {
+test_that("optimize_prior_variance.mf_individual changes pi vs the initial uniform prior", {
   data  <- make_data_for_ev()
   model <- make_model_with_post(data)
   model <- mfsusieR:::compute_residuals.mf_individual(data, NULL, model, l = 1)
@@ -310,12 +310,46 @@ test_that("update_model_variance changes pi vs the initial uniform prior", {
   init_pi <- vapply(seq_along(model$G_prior[[1]]),
                     function(s) model$G_prior[[1]][[s]]$fitted_g$pi,
                     numeric(length(model$G_prior[[1]][[1]]$fitted_g$pi)))
-  out <- mfsusieR:::update_model_variance.mf_individual(data, list(), model, ser, l = 1)
+  out_list <- mfsusieR:::optimize_prior_variance.mf_individual(
+    data, list(), model, ser, l = 1)
+  expect_named(out_list, c("V", "model"))
+  expect_equal(out_list$V, 1)
+  out <- out_list$model
   new_pi <- vapply(seq_along(out$G_prior[[1]]),
                    function(s) out$G_prior[[1]][[s]]$fitted_g$pi,
                    numeric(length(out$G_prior[[1]][[1]]$fitted_g$pi)))
-  # At least one (m, s) pair should have changed.
   expect_false(isTRUE(all.equal(init_pi, new_pi)))
+})
+
+test_that("update_model_variance.mf_individual orchestrates sigma2 update + derived quantities", {
+  data  <- make_data_for_ev()
+  model <- make_model_with_post(data)
+  params <- list(estimate_residual_variance = TRUE,
+                 residual_variance_method = "shared_per_modality")
+
+  out <- mfsusieR:::update_model_variance.mf_individual(data, params, model)
+
+  # sigma2 was refreshed to a (length-1) scalar per modality.
+  for (m in seq_len(data$M)) {
+    expect_length(out$sigma2[[m]], 1L)
+    expect_true(out$sigma2[[m]] > 0)
+  }
+  # Running fit was synced to current alpha * mu.
+  for (m in seq_len(data$M)) {
+    postF <- matrix(0, nrow = data$J, ncol = data$T_padded[m])
+    for (l in seq_len(model$L)) {
+      postF <- postF + model$alpha[l, ] * model$mu[[l]][[m]]
+    }
+    expect_equal(out$fitted[[m]], data$X %*% postF, tolerance = 1e-12)
+  }
+})
+
+test_that("update_model_variance is a no-op when estimate_residual_variance = FALSE", {
+  data  <- make_data_for_ev()
+  model <- make_model_with_post(data)
+  out <- mfsusieR:::update_model_variance.mf_individual(
+    data, list(estimate_residual_variance = FALSE), model)
+  expect_identical(out, model)
 })
 
 test_that("mf_em_m_step_per_scale matches a hand-rolled mixsqp invocation at <= 1e-12", {
