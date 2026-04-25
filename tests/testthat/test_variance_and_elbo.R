@@ -173,13 +173,7 @@ test_that("get_objective returns Eloglik - sum(KL) + entropy_correction", {
   out <- mfsusieR:::get_objective.mf_individual(data, list(), model)
 
   el <- mfsusieR:::Eloglik.mf_individual(data, model)
-  log_pi <- log(model$pi + sqrt(.Machine$double.eps))
-  ent <- 0
-  for (l in seq_len(model$L)) {
-    a_l <- pmax(model$alpha[l, ], 1e-6)
-    ent <- ent + sum(model$alpha[l, ] * (log_pi - log(a_l)))
-  }
-  expect_equal(out, el - sum(model$KL) + ent, tolerance = 1e-12)
+  expect_equal(out, el - sum(model$KL), tolerance = 1e-12)
 })
 
 # ---- S3 registration on susieR namespace ---------------------
@@ -233,13 +227,7 @@ test_that("get_objective with per-scale sigma2 + non-uniform model$pi", {
   expect_true(is.finite(out))
 
   el <- mfsusieR:::Eloglik.mf_individual(data, model)
-  log_pi <- log(model$pi + sqrt(.Machine$double.eps))
-  ent <- 0
-  for (l in seq_len(model$L)) {
-    a_l <- pmax(model$alpha[l, ], 1e-6)
-    ent <- ent + sum(model$alpha[l, ] * (log_pi - log(a_l)))
-  }
-  expect_equal(out, el - sum(model$KL) + ent, tolerance = 1e-12)
+  expect_equal(out, el - sum(model$KL), tolerance = 1e-12)
 })
 
 # ---- Edge cases ------------------------------------------------

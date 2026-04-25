@@ -508,28 +508,21 @@ Eloglik.mf_individual <- function(data, model, ...) {
 #' ELBO for an `mf_individual` fit
 #'
 #' Mirrors `susieR::get_objective.individual`:
-#' `ELBO = Eloglik - sum_l KL_l + entropy_correction`,
-#' where `entropy_correction = sum_l sum_j alpha_lj * log(pi_j / pmax(alpha_lj, 1e-6))`
-#' is the cross-entropy of the per-effect alpha against the
-#' variable-selection prior. Reduces to
-#' `sum_l alpha_l . log(J / pmax(alpha_l, 1e-6))` when `model$pi`
-#' is uniform `1/J`.
+#' `ELBO = Eloglik - sum_l KL_l`. The per-effect KL stored in
+#' `model$KL[l]` (set by `compute_kl.mf_individual`) already
+#' contains both the Gaussian component
+#' (`KL(q(beta_l|gamma_l) || p(beta_l|gamma_l))`) and the
+#' categorical mixture component
+#' (`KL(q(gamma_l) || p(gamma_l))`), so no separate entropy
+#' correction is needed here.
 #'
 #' @references
 #' Manuscript: methods/online_method.tex (ELBO aggregate).
 #' @keywords internal
 #' @noRd
 get_objective.mf_individual <- function(data, params, model, ...) {
-  el <- Eloglik.mf_individual(data, model)
-  kl <- if (all(is.na(model$KL))) 0 else sum(model$KL, na.rm = TRUE)
-
-  log_pi <- log(model$pi + sqrt(.Machine$double.eps))
-  entropy_corr <- 0
-  for (l in seq_len(model$L)) {
-    alpha_l <- pmax(model$alpha[l, ], 1e-6)
-    entropy_corr <- entropy_corr + sum(model$alpha[l, ] * (log_pi - log(alpha_l)))
-  }
-  el - kl + entropy_corr
+  Eloglik.mf_individual(data, model) -
+    if (all(is.na(model$KL))) 0 else sum(model$KL, na.rm = TRUE)
 }
 
 #' Fold the per-effect posterior into the running fit

@@ -358,7 +358,7 @@ Depends on 7.1 (mfsusie() must exist) and on susieR's `susie()`
 being available as an Imports dependency. Runs immediately after
 group 7.
 
-- [ ] 7c.1 Implement `tests/testthat/test_susier_degeneracy.R` per
+- [x] 7c.1 Implement `tests/testthat/test_susier_degeneracy.R` per
       the contract in `mf-ibss/spec.md` "degenerate case reduces
       exactly to susieR::susie" (design.md D11a). For each
       `L in c(1, 5, 10)` on a fixed `(X, y)` fixture and seed, fit

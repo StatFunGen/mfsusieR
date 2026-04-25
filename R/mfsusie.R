@@ -68,6 +68,12 @@
 #'   (`min(lbf) < lbf_min`).
 #' @param lbf_min numeric saturation threshold for the greedy outer
 #'   loop. Default 0.1.
+#' @param estimate_prior_method one of `"optim"` (default) or
+#'   `"none"`. `"optim"` runs the per-effect mixture-weight EM
+#'   step (mixsqp on `pi_V` per (modality, scale)). `"none"` holds
+#'   the prior fixed at the initial `prior_variance_grid` /
+#'   `null_prior_weight`; required by the C1 (susieR) degeneracy
+#'   contract.
 #' @param verbose logical.
 #' @param track_fit logical, retain a per-iteration tracking list on
 #'   the fit. Default `FALSE`.
@@ -126,6 +132,7 @@ mfsusie <- function(X, Y,
                     min_abs_corr              = 0.5,
                     L_greedy                  = NULL,
                     lbf_min                   = 0.1,
+                    estimate_prior_method     = c("optim", "none"),
                     verbose                   = FALSE,
                     track_fit                 = FALSE,
                     max_padded_log2           = 10,
@@ -135,6 +142,7 @@ mfsusie <- function(X, Y,
                     nullweight                = 0.7) {
   prior_variance_scope     <- match.arg(prior_variance_scope)
   residual_variance_method <- match.arg(residual_variance_method)
+  estimate_prior_method    <- match.arg(estimate_prior_method)
 
   # 1. Construct the data class.
   data <- create_mf_individual(
@@ -169,8 +177,8 @@ mfsusie <- function(X, Y,
     residual_variance          = residual_variance,
     residual_variance_method   = residual_variance_method,
     estimate_residual_variance = TRUE,
-    estimate_prior_variance    = TRUE,
-    estimate_prior_method      = "optim",   # forwarded to single_effect_regression scaffolding
+    estimate_prior_variance    = (estimate_prior_method != "none"),
+    estimate_prior_method      = estimate_prior_method,   # forwarded to single_effect_regression scaffolding
     check_null_threshold       = 0,
     prior_tol                  = 1e-9,
     max_iter                   = max_iter,
