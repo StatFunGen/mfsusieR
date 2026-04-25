@@ -21,11 +21,10 @@ BugReports: https://github.com/StatFunGen/mfsusieR/issues
 Depends:
     R (>= 4.0.0)
 Imports:
-    susieR (>= 0.12),
+    susieR (>= 0.16.1),
     wavethresh,
     mixsqp,
     ashr,
-    Rfast,
     matrixStats,
     methods,
     stats

@@ -138,6 +138,61 @@ entry SHALL be blocked.
     consistently with the rest of the file. No behavioural change
     when `max_scale = 10` (the default); behaviour preserved.
 
+### PR group 4 (R/prior_scale_mixture.R + R/prior_cross_modality.R, 2026-04-25)
+
+- fsusieR/R/computational_functions.R:69-155 (cal_Bhat_Shat,
+  full-Y case)
+  Behavior: per-position marginal OLS regression (Bhat, Shat)
+    used to seed the ash mixture grid in init_prior.default.
+  Decision: replaced-by-`susieR::compute_marginal_bhat_shat`
+    (new upstream helper landed in this session).
+  Reason: per the upstream-first principle in
+    `inst/notes/refactor-discipline.md` section 0, the per-
+    position OLS regression belongs in susieR where multiple
+    downstream packages can share it. mfsusieR calls
+    `susieR::compute_marginal_bhat_shat(X, Y_m)` from
+    `init_scale_mixture_prior_default`. Bit-identical to fsusieR
+    output (max diff = 0 verified in
+    `tests/testthat/test_prior_scale_mixture.R` C2 fidelity test).
+
+- fsusieR/R/operation_on_prior.R:42-185 (init_prior.default,
+  mixture_normal and mixture_normal_per_scale branches)
+  Behavior: Per-modality data-driven prior init via ash on a
+    sample of (Bhat, Shat); replicate per scale.
+  Decision: replaced-by-`R/prior_scale_mixture.R::init_scale_mixture_prior_default`.
+  Reason: behaviour-preserving port. Calls the susieR helper
+    instead of `cal_Bhat_Shat`. Same `set.seed(1)` sequence,
+    same sample-size caps (5000 / 50000), same hardcoded
+    `c(0.8, 0.2/(K-1), ...)` mixture-weight distribution.
+    Validated bit-identical to `fsusieR::init_prior.default` at
+    tolerance `1e-12` per the C2 contract.
+
+- fsusieR/R/operation_on_prior.R:79-165 (lowc_wc filtering branch)
+  Behavior: when `lowc_wc` (low-count wavelet coefficient
+    indices) is non-NULL, drop those columns from the Bhat/Shat
+    sample before the ash fit.
+  Decision: deferred-to-Phase-3-future-PR (not implemented in PR
+    group 4).
+  Reason: the ledger comment block says low-count filtering is a
+    smashr / signal-quality concern downstream. mfsusieR's v1
+    init does not filter low-count coefficients. If the FDR
+    investigation in Phase 5 surfaces a need, a follow-up PR can
+    add the option. The C2 fidelity tests run with `lowc_wc =
+    NULL` on both sides, so the deferral does not affect the
+    contract.
+
+- mvf.susie.alpha/R/operation_on_multfsusie_prior.R:17-138
+  (Prior object construction for `multfsusie`)
+  Behavior: per-(modality, scale) prior init in the multi-
+    functional case.
+  Decision: replaced-by-`R/prior_scale_mixture.R::mf_prior_scale_mixture`
+    (per-modality wrapper).
+  Reason: mfsusieR's wrapper iterates over modalities and calls
+    the per-modality init. The original mvf.susie.alpha file is
+    a thicker wrapper that includes EM update logic that lives
+    in PR group 6 in mfsusieR. Per-modality prior init line
+    range mapped over the new file structure.
+
 ### PR group 2 (R/dwt.R + R/data_class.R, 2026-04-25)
 
 - mvf.susie.alpha/R/utils_wavelet_transform.R:24-50 (DWT2)
