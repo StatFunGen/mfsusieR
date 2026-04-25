@@ -64,29 +64,29 @@ For all notes please save to inst/notes under this folder ~/GIT/mfsusieR
 
 ### Phase 1 — paradigm study (notes only, no code)
 
-Produce four Markdown files under `notes/paradigms/`. No OpenSpec proposal.
+Produce four Markdown files under `inst/notes/paradigms/`. No OpenSpec proposal.
 Each note answers: (1) core data structures, (2) IBSS inner-loop shape,
 (3) user-facing parameters, (4) what mfsusieR can inherit or mirror vs. must add.
 
 Required files:
 
-- `notes/paradigms/susieR-backbone.md` — what `susieR::susie()` exposes. The fit
+- `inst/notes/paradigms/susieR-backbone.md` — what `susieR::susie()` exposes. The fit
   object (`alpha`, `mu`, `mu2`, `KL`, `lbf`, `pip`, `sets`). The IBSS inner loop.
   Which helpers are exported vs. internal. Which functions a wrapper package is
   expected to call directly.
 
-- `notes/paradigms/mvsusieR-s3.md` — how `mvsusieR/refactor-s3` extends `susieR`
+- `inst/notes/paradigms/mvsusieR-s3.md` — how `mvsusieR/refactor-s3` extends `susieR`
   with multi-trait structure. Class hierarchy, which methods are overridden,
   dispatch points, how the MASH prior plugs into the IBSS loop. This is paradigm
   reference #1 for mfsusieR.
 
-- `notes/paradigms/susieAnn-s3.md` — how `susieAnn` extends `susieR` with a new
+- `inst/notes/paradigms/susieAnn-s3.md` — how `susieAnn` extends `susieR` with a new
   prior structure. Class hierarchy, where the activity-indicator / annotation
   prior enters the IBSS update, how the predictor interface is abstracted, how
   overdispersion enters. This is paradigm reference #2 for mfsusieR. Note which
   patterns differ from `mvsusieR/refactor-s3` and why.
 
-- `notes/paradigms/mvf-original.md` — William's `mvf.susie.alpha`. Public API,
+- `inst/notes/paradigms/mvf-original.md` — William's `mvf.susie.alpha`. Public API,
   key numerical pathways including the wavelet basis construction and
   scale-specific prior handling, the FDR miscalibration Anjing observed (point
   to specific functions if you can identify them), what's elegant vs. what's
@@ -224,13 +224,13 @@ Set up `bench/_targets.R`:
   `max_scale` {6, 8, 10}.
 - Per combination: observed FDR at nominal 0.05 PIP threshold, PIP calibration curve
   (binned observed vs. claimed), credible-set coverage.
-- Reproducible seeds. Output: one `html` per scenario family in `notes/investigations/fdr-plots/`.
+- Reproducible seeds. Output: one `html` per scenario family in `inst/notes/investigations/fdr-plots/`.
 
-For each hypothesis, write `notes/investigations/fdr-<short-name>.md` with sections:
+For each hypothesis, write `inst/notes/investigations/fdr-<short-name>.md` with sections:
 *Hypothesis, Evidence, Test, Result, Conclusion*. One hypothesis per file. Commit as
 you go. Do not collapse multiple hypotheses into one note.
 
-Exit: a summary note `notes/investigations/fdr-summary.md` naming the specific
+Exit: a summary note `inst/notes/investigations/fdr-summary.md` naming the specific
 components responsible (residual variance estimation? scale-specific prior variance?
 CS construction? screening threshold?). Each identified issue is a candidate OpenSpec
 proposal in Phase 6.
@@ -308,13 +308,23 @@ The lab's `statgen-writing-style` conventions apply. In short:
 ## Hard rules
 
 1. `mvf.susie.alpha/`, `susieR/`, `mvsusieR/`, `susieAnn/` are read-only reference.
-   Do not edit.
-2. Do not consult `fsusieR` for any design decision in this refactor. It is a
-   separate package and is not a paradigm source here.
+   Do not edit. The single authorized exception is the `feature/L_greedy` branch on
+   `~/GIT/susieR`, used to add the `L_greedy` argument to `susie_workhorse` per the
+   external coordination plan in
+   `inst/openspec/changes/add-mfsusier-s3-architecture/design.md` (Migration Plan).
+2. `fsusieR` is not a paradigm source. Do NOT model mfsusieR architecture decisions
+   on fsusieR's structure. Do NOT cite fsusieR alongside mvsusieR/refactor-s3 or
+   susieAnn as a paradigm reference. Specific *runtime utility* delegations to
+   fsusieR (e.g., `fsusieR::remap_data`, `fsusieR::colScale`,
+   `fsusieR::gen_wavelet_indx`, `fsusieR::init_prior.default`, smash/TI/HMM
+   smoothers) ARE allowed and are documented in design.md D5 and D8. The rule is
+   about design influence, not function calls.
 3. Do not run expensive simulations without declaring an estimated runtime at the
-   top of the script. If projected wall-clock exceeds 30 minutes or estimated
-   token cost exceeds $5, ask the user first.
-4. Do not start phase N+1 while phase N is not archived in OpenSpec.
+   top of the script. If projected wall-clock exceeds 30 minutes, ask the user first.
+4. Do not start phase N+1 while phase N is not archived in OpenSpec. Note that
+   Phase 1 has no OpenSpec change (notes only), so the Phase 1 -> Phase 2 transition
+   only requires Gao's review of the paradigm notes; for all other transitions, the
+   Phase N OpenSpec change must be archived first.
 5. If a design decision comes up that is not covered by an OpenSpec proposal, stop
    and open one. Do not decide silently.
 6. If you find yourself reframing a numerical discrepancy against `mvf.susie.alpha`
@@ -322,7 +332,7 @@ The lab's `statgen-writing-style` conventions apply. In short:
 
 ## Reporting at end of session
 
-Before ending a session, write `notes/sessions/YYYY-MM-DD-HHMM.md` with:
+Before ending a session, write `inst/notes/sessions/YYYY-MM-DD-HHMM.md` with:
 - What was done.
 - What phase it was.
 - OpenSpec state after the session (what's active, what's archived).

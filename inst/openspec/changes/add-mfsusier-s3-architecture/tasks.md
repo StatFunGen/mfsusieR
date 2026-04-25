@@ -124,19 +124,6 @@ test against `mvf.susie.alpha` per the test-fidelity rule
       outputs match `mvf.susie.alpha` at tolerance 1e-6 on the same
       fixture.
 
-## 6c. Degenerate-case unit tests (susieR equivalence)
-
-- [ ] 6c.1 Implement `tests/testthat/test-susier-degeneracy.R` per the
-      contract in `mf-ibss/spec.md` "degenerate case reduces exactly
-      to susieR::susie". For each `L in c(1, 5, 10)` on a fixed
-      `(X, y)` fixture and seed, fit both `mfsusie()` (degenerate
-      inputs) and `susieR::susie()`, and assert element-wise equality
-      on `alpha`, `mu`, `mu2`, `lbf`, `lbf_variable`, `KL`, `sigma2`,
-      `elbo`, `niter`, `pip` at tolerance 1e-10. CS membership exact.
-- [ ] 6c.2 Add a documentation note in
-      `vignettes/mfsusie-quickstart.Rmd` describing the degenerate
-      case and pointing readers at the unit test.
-
 ## 7. Public API and finalize
 
 - [ ] 7.1 Implement `R/mfsusie.R` with the public `mfsusie()` function
@@ -159,6 +146,22 @@ test against `mvf.susie.alpha` per the test-fidelity rule
       "per_scale_modality"` produces sensible CSs on the same scenarios
       (no fidelity claim against legacy code; calibration claims
       deferred to Phase 5).
+
+## 7c. Degenerate-case unit tests (susieR equivalence)
+
+Depends on 7.1 (mfsusie() must exist) and on susieR's `susie()` being
+available as an Imports dependency. Runs immediately after group 7.
+
+- [ ] 7c.1 Implement `tests/testthat/test-susier-degeneracy.R` per the
+      contract in `mf-ibss/spec.md` "degenerate case reduces exactly
+      to susieR::susie". For each `L in c(1, 5, 10)` on a fixed
+      `(X, y)` fixture and seed, fit both `mfsusie()` (degenerate
+      inputs) and `susieR::susie()`, and assert element-wise equality
+      on `alpha`, `mu`, `mu2`, `lbf`, `lbf_variable`, `KL`, `sigma2`,
+      `elbo`, `niter`, `pip` at tolerance 1e-10. CS membership exact.
+- [ ] 7c.2 Add a documentation note in
+      `vignettes/mfsusie-quickstart.Rmd` describing the degenerate
+      case and pointing readers at the unit test.
 
 ## 8. zzz.R registration
 
