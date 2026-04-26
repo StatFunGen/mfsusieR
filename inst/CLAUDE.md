@@ -222,7 +222,7 @@ Rules for Phase 3 (binding; mirrors the code-refactor skill at
   **The ONLY exception is a documented port-source bug fix.** When
   mfsusieR fixes a buggy or numerically noisy formula in
   `mvf.susie.alpha` / `fsusieR`, the affected unit test EITHER
-  (a) directly asserts the new corrected behaviour and does NOT
+  (a) directly asserts the new corrected behavior and does NOT
   expect the old buggy output (Pattern A), OR (b) keeps asserting
   equivalence with the port source but uses a relaxed tolerance
   (e.g., `1e-12`) well below the contract floor, with an inline

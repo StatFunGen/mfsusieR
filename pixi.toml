@@ -50,5 +50,6 @@ r45 = {features = ["r45"]}
 "r-rcmdcheck" = "*"
 "r-pkgdown" = "*"
 "r-remotes" = "*"       # for install_github("stephenslab/susieR") in CI
+"r-jsonlite" = "*"      # for coverage.json shields.io endpoint
 "r-decor" = "*"         # required by cpp11::cpp_register() during devtools::document()
 "qpdf" = "*"

@@ -1,19 +1,23 @@
 Type: Package
 Package: mfsusieR
-Title: Multi-Modality Sum of Single Functions Regression
+Title: Multi-Outcome Functional Regression with the Sum of Single Effects Model
 Version: 0.0.1
 Date: 2026-04-25
 Authors@R: c(
     person("Gao", "Wang", role = c("aut", "cre"),
            email = "wang.gao@columbia.edu"),
-    person("William R. P.", "Denault", role = "aut"),
     person("Anjing", "Liu", role = "aut"),
-    person("Matthew", "Stephens", role = "aut"))
-Description: A multi-modality generalisation of the 'Sum of Single
-    Functions' (SuSiF) model for variable selection in regression
-    with mixtures of functional and scalar responses. Built on the
-    'susieR' backbone, with wavelet-based functional priors and a
-    per-(scale, modality) variance structure.
+    person("William R. P.", "Denault", role = "aut"))
+Description: Bayesian variable selection for functional regression
+    problems with one or many outcomes. Each outcome may be a scalar
+    or a curve sampled at a grid of positions. The method is built
+    on the 'susieR' backbone via S3 dispatch and uses a wavelet-based
+    functional prior so a variable that affects several spatially
+    correlated positions is jointly identified. Motivated by molecular
+    QTL fine-mapping, where outcomes are genome-scale molecular traits
+    such as DNA methylation profiles and chromatin accessibility
+    tracks; applies to any functional regression problem with
+    sparsely-active variables.
 License: BSD_3_clause + file LICENSE
 URL: https://github.com/StatFunGen/mfsusieR
 BugReports: https://github.com/StatFunGen/mfsusieR/issues
@@ -29,11 +33,9 @@ Imports:
 LinkingTo:
     cpp11
 Suggests:
-    mvf.susie.alpha,
     testthat (>= 3.0.0),
     knitr,
     rmarkdown,
-    ggplot2,
     reshape2
 VignetteBuilder: knitr
 Encoding: UTF-8

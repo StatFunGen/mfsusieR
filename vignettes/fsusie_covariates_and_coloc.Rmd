@@ -1,11 +1,11 @@
 ---
-title: "Covariate adjustment and colocalisation with fsusie()"
+title: "Covariate adjustment and colocalization with fsusie()"
 author: "Gao Wang and contributors"
 output:
   rmarkdown::html_vignette:
     toc: true
 vignette: >
-  %\VignetteIndexEntry{Covariate adjustment and colocalisation with fsusie()}
+  %\VignetteIndexEntry{Covariate adjustment and colocalization with fsusie()}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -19,7 +19,7 @@ knitr::opts_chunk$set(
 
 This vignette covers two adjacent workflows that wrap a single
 `fsusie()` fit: (i) regressing out covariates before fine-mapping, and
-(ii) colocalising two functional outcomes via per-outcome fits and a
+(ii) colocalizing two functional outcomes via per-outcome fits and a
 shared posterior.
 
 ```{r setup, message = FALSE}
@@ -81,14 +81,14 @@ Y2 <- X %*% beta2 + matrix(rnorm(n * T_m, sd = 0.4), n)
 Y3 <- X %*% beta3 + matrix(rnorm(n * T_m, sd = 0.4), n)
 ```
 
-Fit both outcomes and a non-colocalising third for comparison.
+Fit both outcomes and a non-colocalizing third for comparison.
 
 ```{r coloc-fit}
 fit1 <- fsusie(Y1, X, pos = positions, L = 3, verbose = FALSE)
 fit2 <- fsusie(Y2, X, pos = positions, L = 3, verbose = FALSE)
 fit3 <- fsusie(Y3, X, pos = positions, L = 3, verbose = FALSE)
 
-# Per-effect colocalisation: outer product of alpha rows, summed
+# Per-effect colocalization: outer product of alpha rows, summed
 # over effects, summed over the diagonal (same variable causal in both).
 coloc_pp <- function(a, b) {
   L <- min(nrow(a), nrow(b))
@@ -107,7 +107,7 @@ per-effect alpha matrices into the standard
 
 - `fsusie()` does not mutate `X` and `Y` in place; the residualisation
   pattern above is the recommended idiom.
-- The colocalisation snippet here is intentionally minimal. For
-  multi-outcome colocalisation across more than two outcomes, see
+- The colocalization snippet here is intentionally minimal. For
+  multi-outcome colocalization across more than two outcomes, see
   [the multi-outcome intro](mfsusie_intro.html), which fits all
   outcomes jointly and avoids the post-hoc combine.
