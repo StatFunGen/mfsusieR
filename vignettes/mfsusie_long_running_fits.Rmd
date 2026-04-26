@@ -79,12 +79,10 @@ fit_short <- readRDS("fit_progress.rds")
 
 ## Mid-run restart from a saved partial fit
 
-`mvf.susie.alpha::multfsusie()` supports a `multfsusie.obj = m_prev`
-argument that resumes from the saved IBSS state without restarting
-the loop. mfsusieR does not yet expose this seam at the public level
-(the per-iteration model state is stored on the susieR backbone via
-S3 dispatch; surfacing it as a public argument is a planned
-extension).
+A direct mid-run resume API (`s_init = m_prev`-style) is a planned
+extension. The per-iteration model state is stored on the susieR
+backbone via S3 dispatch; surfacing it as a public argument requires
+a small wiring change but no new numerics.
 
 Until that extension lands, the recommended pattern is:
 
@@ -119,8 +117,7 @@ wavelet step regardless of iteration count. Two levers:
 - Drop `coverage` from `0.95` to a coarser `0.9` to reduce the size
   of credible-set search.
 
-For very large `T_m`, the upstream `fsusieR` post-processing module
-is not yet ported (see the
-[task list](https://github.com/StatFunGen/mfsusieR) PR group 6b). The
-core IBSS fit returns the wavelet-space posterior; post-hoc smoothing
-will be added as a separate `mf_post_smooth()` API.
+For very large `T_m`, post-hoc smoothing helpers (smash, TI, HMM)
+are exposed through a separate `mf_post_smooth()` API rather than
+folded into the IBSS loop. The core fit returns the wavelet-space
+posterior; the smoothing module is a follow-up PR.

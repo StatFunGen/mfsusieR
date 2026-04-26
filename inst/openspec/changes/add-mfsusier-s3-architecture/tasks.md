@@ -164,11 +164,14 @@ constructor calls the helpers, the C2 / C3 fidelity tests need both.
       (sum of log-BFs, no-op) per the plug-in seam contract in
       `mf-prior/spec.md` (renamed verb from `apply` to
       `combine_modality_lbfs` to avoid `base::apply` collision).
-- [ ] 4.3 Add a public-API `mfsusie()`-level warning_message via
-      `susieR::warning_message` when any `T_m <= 3`, advising the
-      user to consider `susieR::susie` (T_m == 1) or
-      `fsusieR::susiF` (short functional). Behaviour: still
-      proceeds with the standard data-driven init.
+- [x] 4.3 Add a public-API `mfsusie()`-level warning when any
+      `T_m in {2, 3}`, advising the user to consider
+      `susieR::susie()` for scalar responses (T_m = 1, which is
+      fully supported via the degenerate path) or longer functional
+      sampling. Behaviour: still proceeds with the standard
+      data-driven init. Implementation in `R/mfsusie.R`; tests in
+      `tests/testthat/test_public_api_behavior.R` (advisory fires
+      for T_m = 3, silent for T_m = 1 and T_m >= 4).
 - [x] 4.4 Test: prior shapes per modality and scale, including
       the per-modality scope branch and the `prior_variance_grid`
       passthrough path.
@@ -346,8 +349,12 @@ constructor calls the helpers, the C2 / C3 fidelity tests need both.
       matrices `(L x T_m)` (D2/D7 chosen list-of-matrices shape).
       `fitted` reads `fit$fitted`.
 - [x] 7.5 Implement `R/print.mfsusie.R` and `R/summary.mfsusie.R`.
-- [ ] 7.6 Test: CS-then-PIP ordering invariant; `susieR::susie_get_pip`
-      and `susieR::susie_get_cs` agree with the fit fields.
+- [x] 7.6 Test: CS-then-PIP ordering invariant;
+      `susieR::susie_get_pip` and `susieR::susie_get_cs` agree with
+      the fit fields. Covered by
+      `tests/testthat/test_public_api_behavior.R` ("susie_get_pip
+      and susie_get_cs agree with the fit fields") at tolerance
+      `1e-12` on PIPs and exact CS membership.
 - [ ] 7.7 Test (C3 fidelity): end-to-end fit on three scenarios
       (single-modality functional, multi-modality functional,
       ragged T_m), `residual_variance_method =
@@ -380,9 +387,12 @@ group 7.
       and assert element-wise equality on `alpha`, `mu`, `mu2`,
       `lbf`, `lbf_variable`, `KL`, `sigma2`, `elbo`, `niter`, `pip`
       at tolerance `1e-10`. CS membership exact.
-- [ ] 7c.2 Add a documentation note in
-      `vignettes/mfsusie_quickstart.Rmd` describing the susieR
-      degeneracy and pointing readers at the unit test.
+- [x] 7c.2 Add a documentation note in
+      `vignettes/getting_started.Rmd` describing the susieR
+      degeneracy and pointing readers at the unit test. (The
+      vignette has a "Numerical equivalence with `susieR::susie`
+      (degenerate case)" section that runs the side-by-side fit
+      and cites `tests/testthat/test_susier_degeneracy.R`.)
 
 ## 7d. Single-modality functional unit tests (fsusieR/susiF equivalence, contract C2)
 
@@ -397,16 +407,26 @@ Depends on 7.1 (`mfsusie()`) and 6b (post-processors).
       element-wise equality on `alpha`, `mu`, `mu2`, `lbf`,
       `lbf_variable`, `KL`, `sigma2`, `elbo`, `niter`, `pip` at
       tolerance `<= 1e-8`. CS membership exact.
-- [ ] 7d.2 Document any intentional deviation from `fsusieR::susiF`
+- [x] 7d.2 Document any intentional deviation from `fsusieR::susiF`
       with an explicit `expect_*` assertion that records the
       deviation and a comment citing this OpenSpec change. The
       classic case is the PIP-after-CS-filter fix (the original
       fsusieR code computes PIP before applying the CS filter; we
-      compute it after).
-- [ ] 7d.3 Add a vignette section in `vignettes/mfsusie_quickstart.Rmd`
+      compute it after). Covered by
+      `tests/testthat/test_public_api_behavior.R` ("mfsusie zeros
+      (or attenuates) PIP for SNPs filtered out of every CS"),
+      with a header comment citing design.md D11b and the C2
+      contract narrative. The migration vignette
+      (`vignettes/migration.Rmd`) records the same deviation
+      under "From `fsusieR::susiF` -> Behavioural deviations".
+- [x] 7d.3 Add a vignette section in `vignettes/migration.Rmd`
       describing the fsusieR degeneracy and pointing readers at the
       unit test. Mention the `fsusie()` thin wrapper as the migration
-      path off fsusieR.
+      path off fsusieR. (Migration vignette has a "From
+      `fsusieR::susiF`" section with the argument-name map and the
+      documented behavioural deviations; `vignettes/fsusie_intro.Rmd`
+      ends with a "Comparison with `fsusieR::susiF`" reference to the
+      C2 contract.)
 
 ## 7e. The `fsusie()` thin wrapper
 
@@ -446,11 +466,16 @@ Depends on 7.1.
       `mf-public-api/spec.md`. The post-processor docs explain the
       residual contract and the rationale for the decoupled API in
       statgen-writing-style prose (design.md D8c).
-- [ ] 9.3 Add a vignette `vignettes/mfsusie_quickstart.Rmd` running
-      the smallest fixture end-to-end and showing the fit object's
-      structure. Includes a section on the fsusieR migration via
-      `mfsusieR::fsusie()` and a section on the decoupled
-      post-processing API.
+- [x] 9.3 Add vignettes running the smallest fixture end-to-end
+      and showing the fit object's structure. Eight vignettes
+      written, organised into Univariate (`fsusie()`) and
+      Multivariate (`mfsusie()`) sections via `_pkgdown.yml`.
+      `vignettes/getting_started.Rmd` is the end-to-end smallest-
+      fixture tour; `vignettes/migration.Rmd` documents the
+      fsusieR + mvf.susie.alpha migration paths and the public
+      argument-name maps. The decoupled post-processing API is
+      noted as planned in `vignettes/mfsusie_long_running_fits.Rmd`
+      pending PR group 6b.
 - [x] 9.4 Verify `inst/notes/refactor-exceptions.md` is complete
       after groups 2-7 land. Walk every function in
       `mvf.susie.alpha::multfsusie` AND the susiF path of
