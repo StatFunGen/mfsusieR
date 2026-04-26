@@ -20,6 +20,13 @@ pkgdown_build = "cd $GITHUB_WORKSPACE; R -e 'pkgdown::build_site_github_pages(ne
 [feature.r44]
 dependencies = {"r-base" = "4.4.*"}
 
+# r-smashr 1.2_7 on dnachun is pinned to r-base 4.4; only available
+# for linux-64. Used by `mf_post_smooth(method = "smash")` which
+# gates on `requireNamespace("smashr")`. r45 + osx-arm64 builds
+# skip the smash method.
+[feature.r44.target.linux-64.dependencies]
+"r-smashr" = "*"
+
 [feature.r45]
 dependencies = {"r-base" = "4.5.*"}
 
@@ -85,12 +92,10 @@ r45 = {features = ["r45"]}
 # do not ship osx-arm64 builds).
 "r-coloc" = "*"
 
-# `smashr` is used by `mf_post_smooth(method = "smash")`. Linux-64
-# only on the dnachun channel; macOS users can install from GitHub
-# (https://github.com/stephenslab/smashr) if they need that
-# smoother. The smash method gates on requireNamespace("smashr"),
-# so the package builds on osx-arm64 without it.
-"r-smashr" = "*"
+# `smashr` is moved to feature-specific deps below. The dnachun
+# build of r-smashr 1.2_7 is pinned to r-base 4.3 or 4.4; it has
+# no r-base 4.5 build, so it can only ride along with the r44
+# environment.
 
 # Vignette-only render dependencies for the methylation
 # case-study data panels. Linux-64 only because some of these
