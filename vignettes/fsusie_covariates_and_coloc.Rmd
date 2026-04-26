@@ -1,6 +1,6 @@
 ---
 title: "Adjusting for covariates and colocalization analysis"
-author: "Gao Wang and contributors"
+author: "Gao Wang, Anjing Liu and William Denault"
 output:
   rmarkdown::html_vignette:
     toc: true
@@ -54,7 +54,7 @@ Project out `Z` from `X` and `Y` with the same hat matrix.
 H_resid <- diag(n) - Z %*% solve(crossprod(Z), t(Z))
 X_r <- H_resid %*% X
 Y_r <- H_resid %*% Y
-fit <- fsusie(Y_r, X_r, pos = positions, L = 3, verbose = FALSE)
+fit <- fsusie(Y_r, X_r, pos = positions, L = 15, L_greedy = 5, verbose = TRUE)
 which(fit$pip > 0.9)
 length(fit$sets$cs)
 ```
@@ -84,9 +84,9 @@ Y3 <- X %*% beta3 + matrix(rnorm(n * T_m, sd = 0.4), n)
 Fit both outcomes and a non-colocalizing third for comparison.
 
 ```{r coloc-fit}
-fit1 <- fsusie(Y1, X, pos = positions, L = 3, verbose = FALSE)
-fit2 <- fsusie(Y2, X, pos = positions, L = 3, verbose = FALSE)
-fit3 <- fsusie(Y3, X, pos = positions, L = 3, verbose = FALSE)
+fit1 <- fsusie(Y1, X, pos = positions, L = 15, L_greedy = 5, verbose = TRUE)
+fit2 <- fsusie(Y2, X, pos = positions, L = 15, L_greedy = 5, verbose = TRUE)
+fit3 <- fsusie(Y3, X, pos = positions, L = 15, L_greedy = 5, verbose = TRUE)
 
 # Per-effect colocalization: outer product of alpha rows, summed
 # over effects, summed over the diagonal (same variable causal in both).

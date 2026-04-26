@@ -1,6 +1,6 @@
 ---
 title: "Smoothing effect curves and credible bands"
-author: "Gao Wang and contributors"
+author: "Gao Wang, Anjing Liu and William Denault"
 output:
   rmarkdown::html_vignette:
     toc: true
@@ -68,7 +68,7 @@ beta[42, ] <-  1.5 * shape
 beta[97, ] <- -1.0 * shape
 Y <- X %*% beta + matrix(rnorm(n * T_m, sd = 0.5), n)
 
-fit <- fsusie(Y, X, pos = positions, L = 3, verbose = FALSE)
+fit <- fsusie(Y, X, pos = positions, L = 15, L_greedy = 5, verbose = TRUE)
 ```
 
 ## Before smoothing
@@ -151,7 +151,7 @@ Y_list <- list(
   X %*% beta2 + matrix(rnorm(n * 32, sd = 0.4), n)
 )
 
-fit_m   <- mfsusie(X, Y_list, L = 3, verbose = FALSE)
+fit_m   <- mfsusie(X, Y_list, L = 15, L_greedy = 5, verbose = TRUE)
 fit_m_s <- mf_post_smooth(fit_m, method = "TI",
                           wavelet_filter = 1L,
                           wavelet_family = "DaubExPhase")

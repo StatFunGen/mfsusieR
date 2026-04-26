@@ -155,6 +155,51 @@ multiomic_example <- local({
 
 # --- Save to data/ ---
 
+# --- GTEx-style: gene-body RNA-seq coverage with multiple CSes ---
+
+gtex_example <- local({
+  data(N3finemapping)
+  X <- N3finemapping$X[, seq(601, 800)]
+  n <- nrow(X); p <- ncol(X)
+  T_m <- 256L
+  exon_pos <- seq_len(T_m)
+
+  # Three causal SNPs at different gene-body positions, mimicking
+  # the multi-CS structure seen in the AHCYL1 / SCD GTEx case
+  # studies (fsusie-experiments/scripts_plot/GeTX/). Effects are
+  # localized peaks at distinct positions.
+  shape <- function(c, w) exp(-((exon_pos - c)^2) / (2 * w^2))
+  beta <- matrix(0, p, T_m)
+  beta[37,  ] <-  1.20 * shape(c =  60, w = 12)   # 5' peak
+  beta[112, ] <- -0.85 * shape(c = 130, w = 10)   # mid-body peak
+  beta[173, ] <-  0.95 * shape(c = 200, w =  8)   # 3' peak
+
+  # log1p-coverage observation model (positive counts inflated to
+  # mimic RNA-seq coverage; we keep the regression on the log1p
+  # scale, matching the upstream AHCYL1 case study).
+  mean_cov <- 4 + X %*% beta
+  Y <- mean_cov + matrix(rnorm(n * T_m, sd = 0.30), n)
+
+  list(
+    X            = X,
+    Y            = Y,
+    pos          = exon_pos,
+    causal_snps  = c(37L, 112L, 173L),
+    causal_betas = beta[c(37L, 112L, 173L), ],
+    description  = paste0(
+      "Simulated GTEx-style cis-eQTL fixture inspired by the ",
+      "AHCYL1 / SCD case studies in fsusie-experiments. n = ", n,
+      ", p = ", p, " SNPs over the susieR::N3finemapping LD ",
+      "scaffold, T = ", T_m, " gene-body positions. Three causal ",
+      "SNPs with localized peak effects at distinct positions ",
+      "(5', mid-body, 3'). Designed to surface a multi-CS ",
+      "fsusie() fit and exercise mfsusie_plot() on a realistic ",
+      "RNA-seq-style coverage curve."
+    )
+  )
+})
+
 usethis::use_data(dnam_example,      overwrite = TRUE, compress = "xz")
 usethis::use_data(rnaseq_example,    overwrite = TRUE, compress = "xz")
 usethis::use_data(multiomic_example, overwrite = TRUE, compress = "xz")
+usethis::use_data(gtex_example,      overwrite = TRUE, compress = "xz")

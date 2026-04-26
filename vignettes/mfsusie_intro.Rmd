@@ -1,6 +1,6 @@
 ---
 title: "Joint multi-outcome fine-mapping"
-author: "Gao Wang and contributors"
+author: "Gao Wang, Anjing Liu and William Denault"
 output:
   rmarkdown::html_vignette:
     toc: true
@@ -17,11 +17,16 @@ knitr::opts_chunk$set(
 )
 ```
 
-`mfsusie()` extends `fsusie()` from one response to many. Each
-outcome `m` is a matrix `n x T_m`; outcomes can be functional
-(`T_m > 1`) or scalar (`T_m = 1`), and `T_m` may differ across
-outcomes. The fit returns one credible set list and one PIP vector
-per variable combining evidence from every outcome.
+`mfsusie()` extends `fsusie()` from one functional response to
+many. Each outcome `m` is a matrix `n x T_m`; outcomes are
+typically functional (DNAm tracks, RNA-seq coverage, ATAC-seq
+profiles) and `T_m` may differ across outcomes. The fit returns
+one credible set list and one PIP vector per variable, combining
+evidence from every outcome. Scalar outcomes (`T_m = 1`) are
+supported through the same interface but `susieR::susie()` is
+typically the better tool for that case; the strength of
+`mfsusie()` is joint fine-mapping across multiple functional
+layers.
 
 ```{r setup, message = FALSE}
 library(mfsusieR)
@@ -31,28 +36,28 @@ set.seed(1)
 
 ## Bundled multi-omic fixture
 
-`multiomic_example` is a four-outcome cis-QTL fixture: DNA
-methylation (T = 64, irregular CpGs), RNA-seq (T = 32, exon
-body), and two scalar QTLs (eQTL, pQTL). Two causal SNPs are
-shared across all four outcomes with per-outcome shapes and
-signs. Genotypes use the `susieR::N3finemapping` LD scaffold for
-realistic correlation.
+`multiomic_example` is a four-outcome cis-QTL fixture, of which
+we use the two functional outcomes here (DNAm with T = 64
+irregular CpGs and RNA-seq with T = 32 exon-body positions). Two
+causal SNPs are shared across both outcomes with per-outcome
+shapes and signs. Genotypes use the `susieR::N3finemapping` LD
+scaffold for realistic correlation.
 
 ```{r load-data}
 data(multiomic_example)
-str(multiomic_example, max.level = 1)
-sapply(multiomic_example$Y_list, ncol)   # T_m per outcome
+Y_list <- multiomic_example$Y_list[c("dnam", "rna")]
+pos_list <- multiomic_example$pos_list[c("dnam", "rna")]
+sapply(Y_list, ncol)     # T_m per outcome
 multiomic_example$causal_snps
 ```
 
 ## Fit
 
 ```{r fit}
-fit <- mfsusie(multiomic_example$X, multiomic_example$Y_list,
-               pos = multiomic_example$pos_list,
-               L = 5,
+fit <- mfsusie(multiomic_example$X, Y_list, pos = pos_list,
+               L = 15, L_greedy = 5,
                prior_variance_scope = "per_outcome",
-               verbose = FALSE)
+               verbose = TRUE)
 fit$niter; fit$converged
 length(fit$sets$cs)
 fit$pip[multiomic_example$causal_snps]
@@ -62,11 +67,10 @@ fit$pip[multiomic_example$causal_snps]
 
 `mfsusie_plot()` shows everything in one call: PIPs in the
 top-left tile (CS-colored), then one effect-curve panel per
-outcome. Functional outcomes show position-space effect curves
-and credible bands; scalar outcomes (`T_m = 1`) show a per-CS dot
-plot. The legend on each panel labels CSs by index.
+outcome with TI-smoothed curves, 95% credible bands, and
+affected-region bars at the bottom of each panel.
 
-```{r mfsusie-plot, fig.width = 8, fig.height = 7, fig.cap = "Joint fit across DNAm (T = 64), RNA-seq (T = 32), and two scalar QTLs. PIP panel (top-left) combines evidence from all four outcomes; functional panels show TI-smoothed effect curves with 95% credible bands; scalar panels show per-CS effect points."}
+```{r mfsusie-plot, fig.width = 8, fig.height = 5, fig.cap = "Joint fit across DNAm (T = 64) and RNA-seq (T = 32). PIP panel combines evidence from both outcomes; effect panels show TI-smoothed curves with 95% credible bands."}
 fit_s <- mf_post_smooth(fit, method = "TI",
                         wavelet_filter = 1L,
                         wavelet_family = "DaubExPhase")

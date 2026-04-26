@@ -77,12 +77,12 @@ articles:
 
   - title: "Single-outcome fine-mapping"
     desc: >
-      Fine-mapping a single response: scalar (T = 1) or functional
-      (T > 1). One Y, one workflow.
+      Fine-mapping a single response. One Y, one set of predictor variables.
     contents:
       - fsusie_intro
       - fsusie_covariates_and_coloc
       - fsusie_dnam_case_study
+      - fsusie_gtex_case_study
       - fsusie_why_functional
 
   - title: "Multi-outcome fine-mapping"

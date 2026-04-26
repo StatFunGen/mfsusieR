@@ -1,0 +1,136 @@
+---
+title: "GTEx-style RNA-seq cis-eQTL fine-mapping"
+author: "Gao Wang, Anjing Liu and William Denault"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+vignette: >
+  %\VignetteIndexEntry{GTEx-style RNA-seq cis-eQTL fine-mapping}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r knitr-opts, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE, comment = "#>",
+  fig.align = "center", dpi = 120
+)
+```
+
+This vignette walks through a GTEx-style cis-eQTL fine-mapping
+analysis using `fsusie()`. The phenotype is RNA-seq read coverage
+along a gene body; `fsusie()` treats it as a single functional
+response and returns credible sets of variants that drive
+coordinated changes in expression at distinct positions of the
+gene.
+
+The case studies in `fsusie-experiments/scripts_plot/GeTX/`
+(AHCYL1, SCD, HSP90AA1, GALNT6, ABHD17A, STMN2) all share this
+shape: a multi-CS fit on log-transformed RNA-seq counts over a
+cis window. We reproduce the same workflow here on a bundled
+simulated fixture (`gtex_example`) shaped after those examples.
+
+## Bundled GTEx fixture
+
+```{r setup, message = FALSE}
+library(mfsusieR)
+data(gtex_example)
+str(gtex_example, max.level = 1)
+```
+
+200 SNPs over a real LD scaffold (`susieR::N3finemapping$X`),
+256 gene-body positions, three causal SNPs at distinct positions
+(5', mid-body, 3') with localized peak effects:
+
+```{r show-truth, fig.width = 7, fig.height = 3, fig.cap = "Three true per-position effects on the gene-body grid."}
+matplot(gtex_example$pos, t(gtex_example$causal_betas),
+        type = "l", lty = 1, lwd = 1.5,
+        col = c("#E69F00", "#56B4E9", "#009E73"),
+        xlab = "gene-body position", ylab = "true effect",
+        main = "Ground-truth effect curves")
+abline(h = 0, lty = 2, col = "grey60")
+legend("topright",
+       legend = paste0("SNP ", gtex_example$causal_snps),
+       col = c("#E69F00", "#56B4E9", "#009E73"),
+       lwd = 1.5, bty = "n")
+```
+
+## Fit
+
+We use `L = 15` candidate single effects and `L_greedy = 5`. The
+`L_greedy` knob (added on the susieR side of the migration plan)
+runs a greedy filter pass on the full-`L` IBSS and is the
+recommended default for most cis-windows.
+
+```{r fit}
+fit <- fsusie(gtex_example$Y, gtex_example$X,
+              pos = gtex_example$pos,
+              L = 15, L_greedy = 5,
+              verbose = TRUE)
+fit$niter; fit$converged
+length(fit$sets$cs)
+fit$sets$cs
+fit$pip[gtex_example$causal_snps]
+```
+
+All three causal SNPs receive PIP = 1 and land in three separate
+credible sets.
+
+## Inspecting the fit
+
+The unsmoothed `mfsusie_plot()` shows PIPs (top panel, points
+colored by CS membership) and the per-CS effect curves recovered
+by inverse DWT (bottom panel):
+
+```{r plot-raw, fig.width = 6, fig.height = 5, fig.cap = "Raw fSuSiE fit. Top: PIPs across SNPs colored by credible set. Bottom: posterior effect curves on the gene-body grid."}
+mfsusie_plot(fit)
+```
+
+Adding `mf_post_smooth(method = "TI")` denoises the wavelet
+posterior with cycle-spinning translation-invariant denoising
+and adds 95% pointwise credible bands. The three CS effect
+curves now show clean peaks at distinct positions, mirroring
+the multi-CS structure highlighted in the AHCYL1 / SCD figures
+of the fsusie-experiments paper:
+
+```{r plot-smoothed, fig.width = 6, fig.height = 5, fig.cap = "TI-smoothed fSuSiE fit on the simulated GTEx-style fixture. Each CS captures a distinct gene-body region; bands and bottom-bar affected regions surface where each effect is significantly different from zero."}
+fit_s <- mf_post_smooth(fit, method = "TI",
+                        wavelet_filter = 1L,
+                        wavelet_family = "DaubExPhase")
+mfsusie_plot(fit_s)
+```
+
+## Why functional fine-mapping helps here
+
+The fine-mapping signal is spread across many positions of the
+gene. A scalar SuSiE fit on `rowSums(Y)` (total expression)
+mixes every per-position effect into one number and loses the
+per-region structure. The functional model preserves it:
+
+```{r susie-comparison}
+library(susieR)
+fit_scalar <- susie(gtex_example$X, rowSums(gtex_example$Y),
+                    L = 15, verbose = FALSE)
+fit_scalar$sets$cs
+fit_scalar$pip[gtex_example$causal_snps]
+```
+
+Per-position effects (the GTEx case studies' value add) are not
+recoverable from the scalar fit; they are the natural output of
+`fsusie()`.
+
+## Genome-browser overlay (optional)
+
+For a publication-grade genome-browser figure with ideogram,
+genome axis, fitted effect with credible band, allele-stratified
+observed coverage, and a gene-region track, `mfsusieR` ships
+worked-example scripts in
+`system.file("scripts/gtex_case_study", package = "mfsusieR")`
+(AHCYL1, SCD, HSP90AA1, STMN2, ABHD17A). They layer an
+`fsusie()` fit onto `Gviz` tracks. The Bioconductor packages
+they depend on (`Gviz`, `GenomicFeatures`, `AnnotationDbi`,
+`TxDb.Hsapiens.UCSC.hg38.knownGene`, `org.Hs.eg.db`, `smashr`)
+are listed as `Suggests`; install them with
+`BiocManager::install(...)` if you want the genome-browser
+overlay. The base-R `mfsusie_plot()` shown above is the lighter
+default and is what most users need.

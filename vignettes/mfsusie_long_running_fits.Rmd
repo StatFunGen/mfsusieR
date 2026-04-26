@@ -1,6 +1,6 @@
 ---
 title: "Practical patterns for long-running fits"
-author: "Gao Wang and contributors"
+author: "Gao Wang, Anjing Liu and William Denault"
 output:
   rmarkdown::html_vignette:
     toc: true
@@ -45,9 +45,9 @@ Y_list <- lapply(T_func, function(T_m) {
     matrix(rnorm(n * T_m, sd = 0.4), nrow = n)
 })
 
-fit_short <- mfsusie(X, Y_list, L = 5, max_iter = 5,
+fit_short <- mfsusie(X, Y_list, L = 15, L_greedy = 5, max_iter = 5,
                      prior_variance_scope = "per_outcome",
-                     verbose = FALSE)
+                     verbose = TRUE)
 fit_short$niter
 fit_short$converged
 tail(fit_short$elbo, 5)
@@ -57,9 +57,9 @@ If `converged` is `FALSE` and the ELBO is still climbing in the last
 few iterations, the fix is more iterations.
 
 ```{r run-full}
-fit_full <- mfsusie(X, Y_list, L = 5, max_iter = 100,
+fit_full <- mfsusie(X, Y_list, L = 15, L_greedy = 5, max_iter = 100,
                     prior_variance_scope = "per_outcome",
-                    verbose = FALSE)
+                    verbose = TRUE)
 fit_full$niter
 fit_full$converged
 ```
@@ -96,7 +96,7 @@ Until that extension lands, the recommended pattern is:
 For diagnostic monitoring inside a long run, consider:
 
 ```{r monitor, eval = FALSE}
-fit <- mfsusie(X, Y_list, L = 5,
+fit <- mfsusie(X, Y_list, L = 15, L_greedy = 5,
                max_iter = 100, tol = 1e-3,
                prior_variance_scope = "per_outcome",
                verbose = TRUE,                # logs per-iter ELBO

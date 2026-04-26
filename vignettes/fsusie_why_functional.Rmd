@@ -1,6 +1,6 @@
 ---
 title: "Why functional fine-mapping"
-author: "Gao Wang and contributors"
+author: "Gao Wang, Anjing Liu and William Denault"
 output:
   rmarkdown::html_vignette:
     toc: true
@@ -69,7 +69,7 @@ Y <- X %*% beta + 1.5 * nuisance + matrix(rnorm(n * T_m, sd = 0.4), n)
 
 ```{r per-position}
 pip_per_pos <- vapply(seq_len(T_m), function(t) {
-  fit_t <- susie(X, Y[, t], L = 5,
+  fit_t <- susie(X, Y[, t], L = 15,
                  estimate_prior_variance    = TRUE,
                  estimate_residual_variance = TRUE,
                  verbose = FALSE)
@@ -84,17 +84,17 @@ which(pip_per_snp > 0.9)
 ```{r top-pc}
 v1 <- svd(scale(Y, center = TRUE, scale = FALSE))$v[, 1]
 y_pc <- as.numeric(scale(Y, center = TRUE, scale = FALSE) %*% v1)
-fit_pc <- susie(X, y_pc, L = 5,
+fit_pc <- susie(X, y_pc, L = 15,
                 estimate_prior_variance    = TRUE,
                 estimate_residual_variance = TRUE,
-                verbose = FALSE)
+                verbose = TRUE)
 which(fit_pc$pip > 0.9)
 ```
 
 ## Functional SuSiE (the right answer)
 
 ```{r fsusie}
-fit_f <- fsusie(Y, X, pos = positions, L = 5, verbose = FALSE)
+fit_f <- fsusie(Y, X, pos = positions, L = 15, L_greedy = 5, verbose = TRUE)
 which(fit_f$pip > 0.9)
 length(fit_f$sets$cs)
 ```
