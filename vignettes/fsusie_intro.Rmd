@@ -1,6 +1,6 @@
 ---
 title: "Single-outcome functional fine-mapping"
-author: "Gao Wang and contributors"
+author: "Gao Wang, Anjing Liu and William Denault"
 output:
   rmarkdown::html_vignette:
     toc: true
@@ -21,17 +21,18 @@ knitr::opts_chunk$set(
 
 `fsusie()` fits the Functional Sum of Single Effects (fSuSiE) model to
 a single functional response. It extends `susieR::susie` to outcomes
-sampled at multiple positions, such as DNA methylation profiles, ATAC-
-seq tracks, or expression along a transcript. The wavelet basis lets
-the model share information across nearby positions while keeping the
-SuSiE per-effect prior structure intact.
+sampled at multiple positions, such as DNA methylation profiles, ATAC-seq 
+tracks, or expression along a transcript as **RNA-seq coverage data**. 
+The wavelet basis lets the model share information across nearby positions 
+while performing variable selection via the SuSiE approach (IBSS, variational EM and empirical Bayes).
 
 `fsusie()` is a thin wrapper around `mfsusie()` for the special case
 of one outcome. The argument order is `(Y, X, pos, ...)` so the
-response comes first, mirroring how single-response models are
-typically called.
+response comes first, as in `susieR::susie()`.
 
 ## Bundled fixture
+
+FIXME: what does this section title even mean? internal slang agian! fix it
 
 The package ships `rnaseq_example`, a simulated cis-eQTL fixture:
 200 SNPs over a real LD scaffold (`susieR::N3finemapping$X`),
@@ -58,7 +59,7 @@ matplot(rnaseq_example$pos,
 
 ```{r fit}
 fit <- fsusie(rnaseq_example$Y, rnaseq_example$X,
-              pos = rnaseq_example$pos, L = 5, verbose = FALSE)
+              pos = rnaseq_example$pos, L = 15, L_greedy = 5, verbose = TRUE)
 fit$niter; fit$converged
 length(fit$sets$cs)
 fit$pip[rnaseq_example$causal_snps]
@@ -75,6 +76,8 @@ susieR) when only the PIP panel is wanted.
 ```{r mfsusie-plot, fig.cap = "PIP and per-effect curves. Top: PIPs colored by CS membership. Bottom: posterior effect curves on the position grid."}
 mfsusie_plot(fit)
 ```
+
+FIXME: no need for fig.cap. Also this is too narrow all the figures are too small -- title too large the actual plot too small. How to fix it? fix!
 
 Credible sets:
 

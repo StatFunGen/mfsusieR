@@ -84,16 +84,39 @@ mf_cs_colors <- function(n_cs) {
   lapply(on, function(i) c(starts[i], ends[i]))
 }
 
+# Build the PIP-panel title from `fit$sets`. Default: "Posterior
+# inclusion probability and credible sets" with the requested
+# coverage and the minimum CS purity (smallest min-abs-corr
+# across the displayed CSes).
+.pip_title <- function(fit) {
+  base <- "Posterior inclusion probability and credible sets"
+  cov  <- fit$sets$requested_coverage
+  pur  <- fit$sets$purity
+  parts <- character()
+  if (!is.null(cov) && length(cov) == 1L && is.finite(cov))
+    parts <- c(parts, sprintf("coverage %g%%", 100 * cov))
+  pur_min <- if (is.data.frame(pur) && "min.abs.corr" %in% colnames(pur))
+    suppressWarnings(min(pur$min.abs.corr, na.rm = TRUE)) else NA_real_
+  if (is.finite(pur_min))
+    parts <- c(parts, sprintf("min purity %.2f", pur_min))
+  if (length(parts) > 0L)
+    sprintf("%s\n(%s)", base, paste(parts, collapse = ", "))
+  else
+    base
+}
+
 # Internal: PIP panel.
-.draw_pip <- function(fit, pos = NULL, main = "PIP",
+.draw_pip <- function(fit, pos = NULL, main = NULL,
                       xlab = "variable", ylab = "PIP",
                       cex = 0.9, add_legend = TRUE) {
   pip <- fit$pip
   if (is.null(pos)) pos <- seq_along(pip)
+  if (is.null(main)) main <- .pip_title(fit)
   col <- .pip_colors(fit)
   pch <- ifelse(col == "grey60", 1L, 19L)
   plot(pos, pip, type = "p", pch = pch, col = col, cex = cex,
-       xlab = xlab, ylab = ylab, ylim = c(0, 1), main = main, las = 1)
+       xlab = xlab, ylab = ylab, ylim = c(0, 1), main = main,
+       cex.main = 0.95, las = 1)
   abline(h = 0.95, lty = 3, col = "grey50")
   cs <- fit$sets$cs %||% list()
   if (add_legend && length(cs) > 0L) {

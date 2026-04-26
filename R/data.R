@@ -111,3 +111,41 @@
 #' mfsusie_plot(fit_s)
 #' }
 "multiomic_example"
+
+#' Simulated GTEx-style cis-eQTL fixture (gene-body coverage)
+#'
+#' An `fsusie()`-shaped fixture inspired by the AHCYL1 / SCD case
+#' studies in `fsusie-experiments/scripts_plot/GeTX/`: a single
+#' functional response on 256 gene-body positions, three causal
+#' SNPs with localized peak effects at distinct positions
+#' (5', mid-body, 3'). Used by `vignette("fsusie_gtex_case_study")`
+#' to demonstrate a multi-CS fSuSiE fit on RNA-seq-style coverage
+#' data without redistributing real GTEx individual-level data.
+#'
+#' @format A list with components
+#' \describe{
+#'   \item{`X`}{`n x p` genotype matrix (`p = 200`) sliced from
+#'     `susieR::N3finemapping$X`.}
+#'   \item{`Y`}{`n x T` log1p-coverage matrix (`T = 256`).}
+#'   \item{`pos`}{length-`T` integer vector of gene-body positions.}
+#'   \item{`causal_snps`}{integer vector of column indices in
+#'     `X` flagged as truly causal.}
+#'   \item{`causal_betas`}{`length(causal_snps) x T` matrix of
+#'     true per-position effects.}
+#'   \item{`description`}{free-text description.}
+#' }
+#'
+#' @source Simulated. See `data-raw/make_data.R`.
+#' @keywords datasets
+#' @examples
+#' \donttest{
+#' data(gtex_example)
+#' fit <- fsusie(gtex_example$Y, gtex_example$X,
+#'               pos = gtex_example$pos, L = 15, L_greedy = 5,
+#'               verbose = TRUE)
+#' fit_s <- mf_post_smooth(fit, method = "TI",
+#'                         wavelet_filter = 1L,
+#'                         wavelet_family = "DaubExPhase")
+#' mfsusie_plot(fit_s)
+#' }
+"gtex_example"

@@ -1,6 +1,6 @@
 ---
 title: "DNA methylation QTL fine-mapping"
-author: "Gao Wang, William Denault, Peter Carbonetto"
+author: "Gao Wang, Anjing Liu and William Denault"
 output:
   rmarkdown::html_vignette:
     toc: true
@@ -52,7 +52,7 @@ onto a power-of-two grid before the wavelet step.
 
 ```{r fit}
 fit <- fsusie(dnam_example$Y, dnam_example$X,
-              pos = dnam_example$pos, L = 3, verbose = FALSE)
+              pos = dnam_example$pos, L = 15, L_greedy = 5, verbose = TRUE)
 fit$niter; fit$converged
 fit$sets$cs
 fit$pip[dnam_example$causal_snps]

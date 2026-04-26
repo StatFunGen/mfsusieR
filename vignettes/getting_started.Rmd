@@ -1,6 +1,6 @@
 ---
 title: "Getting started"
-author: "Gao Wang and contributors"
+author: "Gao Wang, Anjing Liu and William Denault"
 output:
   rmarkdown::html_vignette:
     toc: true
@@ -17,8 +17,8 @@ knitr::opts_chunk$set(
 )
 ```
 
-`mfsusieR` is the multi-outcome, multi-functional generalization of
-`susieR::susie()`. It exposes two public entry points:
+`mfsusieR` is the multi-outcome, functional regression generalization of
+`susieR::susie()`. It provides two main functions:
 
 - `fsusie(Y, X, pos = NULL, ...)` for fine-mapping a **single**
   response. `Y` may be scalar (`T = 1`, recovers
@@ -39,6 +39,13 @@ library(susieR)
 set.seed(1)
 ```
 
+Both fits return raw inverse-DWT effect curves through `coef()`.
+For a smoothed position-space curve with a pointwise credible
+band (and, for the HMM smoother, a per-position lfsr curve),
+post-process with `mf_post_smooth()`: see
+[`vignette("post_processing")`](post_processing.html) for the
+three available methods (`scalewise`, `TI`, `HMM`).
+
 ## A small `fsusie()` example (single outcome, functional)
 
 Simulate one functional response on a length-`32` grid with two causal
@@ -51,7 +58,7 @@ beta <- numeric(p); beta[c(5, 17)] <- c(1.2, -0.8)
 Y <- X %*% matrix(rep(beta, T_m), nrow = p) +
      matrix(rnorm(n * T_m, sd = 0.4), nrow = n)
 
-fit_f <- fsusie(Y, X, L = 5, verbose = FALSE)
+fit_f <- fsusie(Y, X, L = 15, L_greedy = 5, verbose = TRUE)
 fit_f$pip[c(5, 17)]
 length(fit_f$sets$cs)
 ```
@@ -78,9 +85,9 @@ Y_func <- lapply(T_per, function(T_m) {
 Y_scalar <- as.numeric(X %*% beta + rnorm(n, sd = 0.4))
 Y_list <- c(Y_func, list(matrix(Y_scalar, ncol = 1)))
 
-fit_m <- mfsusie(X, Y_list, L = 5,
+fit_m <- mfsusie(X, Y_list, L = 15, L_greedy = 5,
                  prior_variance_scope = "per_outcome",
-                 verbose = FALSE)
+                 verbose = TRUE)
 fit_m$pip[c(5, 17)]
 length(fit_m$sets$cs)
 ```
