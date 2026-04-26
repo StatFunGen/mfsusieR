@@ -16,6 +16,10 @@ knitr::opts_chunk$set(
   fig.width = 8, fig.height = 6, fig.align = "center", dpi = 110,
   out.width = "100%"
 )
+# `coloc` is linux-64-only in pixi (its Bioconductor deps do not
+# ship osx-arm64 builds); gate coloc.susie chunks so the vignette
+# still builds on macOS CI.
+has_coloc <- requireNamespace("coloc", quietly = TRUE)
 ```
 
 This vignette runs a formal colocalization analysis on a pair of
@@ -37,7 +41,7 @@ choice when both fits cover multiple outcomes.
 ```{r setup, message = FALSE}
 library(mfsusieR)
 library(susieR)
-library(coloc)
+if (has_coloc) library(coloc)
 set.seed(1)
 ```
 
@@ -76,7 +80,7 @@ the labels align by construction.
 
 ## Shared causal
 
-```{r coloc-shared}
+```{r coloc-shared, eval = has_coloc}
 res_shared <- coloc.susie(fit1, fit2)
 res_shared$summary
 ```
@@ -86,7 +90,7 @@ shared causal variant `SNP42` drives both outcomes.
 
 ## Distinct causals
 
-```{r coloc-distinct}
+```{r coloc-distinct, eval = has_coloc}
 res_distinct <- coloc.susie(fit1, fit3)
 res_distinct$summary
 ```
