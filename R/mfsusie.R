@@ -259,7 +259,8 @@ mfsusie <- function(X, Y,
     column_center   = data$wavelet_meta$column_center,
     column_scale    = data$wavelet_meta$column_scale,
     wavelet_filter  = data$wavelet_meta$filter_number,
-    wavelet_family  = data$wavelet_meta$family
+    wavelet_family  = data$wavelet_meta$family,
+    outcome_names   = names(data$D) %||% names(Y)
   )
 
   fit

@@ -30,43 +30,32 @@ library(susieR)
 set.seed(1)
 ```
 
-## Simulated DNAm region
+## Bundled DNAm fixture
 
-Replace this block with your own genotype matrix and CpG-level
-methylation matrix in practice.
+The package bundles `dnam_example`, a simulated cis-mQTL fixture
+shaped after a real DNA methylation profile: 200 SNPs over a real
+LD scaffold (`susieR::N3finemapping$X` columns 101-300), 64
+irregular CpG positions across a ~10-kb region, two causal SNPs
+with overlapping but oppositely-signed Gaussian methylation
+effects. Replace this with your own `(X, Y, pos)` in practice.
 
-```{r simulate}
-data(N3finemapping)
-X <- N3finemapping$X[, seq_len(150)]
-n <- nrow(X); p <- ncol(X)
-
-# Five CpGs in the region, irregularly spaced.
-cpg_pos <- c(120, 320, 480, 540, 1200)
-T_m <- length(cpg_pos)
-
-# Two causal variables with localised effects on subsets of CpGs.
-beta <- matrix(0, nrow = p, ncol = T_m)
-beta[42, ] <-  c(0.20, 0.18, 0.05, 0.02, 0.00)   # 5'-side cluster
-beta[97, ] <-  c(0.00, 0.00, 0.03, 0.10, 0.12)   # 3'-side cluster
-
-methyl_logit <- X %*% beta + matrix(rnorm(n * T_m, sd = 0.05), n)
-# Beta values are bounded in [0, 1]; logit on a baseline of 0.5.
-Y <- 1 / (1 + exp(-(methyl_logit + qlogis(0.5))))
-Y_df <- as.data.frame(cbind(Y, X[, c(42, 97)]))
-colnames(Y_df) <- c(paste0("CpG_", seq_len(T_m)), "snp_42", "snp_97")
-head(Y_df, 3)
+```{r load-data}
+data(dnam_example)
+str(dnam_example, max.level = 1)
+dnam_example$causal_snps
 ```
 
-The CpG positions are irregular; `fsusie()` (via `mfsusie()`) remaps
-the response onto a power-of-two grid before the wavelet step (see
-`?mfsusieR:::remap_data`).
+The CpG positions are irregular; `fsusie()` remaps the response
+onto a power-of-two grid before the wavelet step.
 
 ## Fit
 
 ```{r fit}
-fit <- fsusie(Y, X, pos = cpg_pos, L = 3, verbose = FALSE)
+fit <- fsusie(dnam_example$Y, dnam_example$X,
+              pos = dnam_example$pos, L = 3, verbose = FALSE)
 fit$niter; fit$converged
 fit$sets$cs
+fit$pip[dnam_example$causal_snps]
 ```
 
 ## Inspecting the fit
@@ -94,7 +83,7 @@ sapply(coef(fit), dim)
 ## Predictions on new genotypes
 
 ```{r predict}
-fitted_curves <- predict(fit, newx = X[1:3, ])[[1]]
+fitted_curves <- predict(fit, newx = dnam_example$X[1:3, ])[[1]]
 pos_remap <- fit$dwt_meta$pos[[1]]
 matplot(pos_remap, t(fitted_curves), type = "l", lty = 1,
         col = c("#E69F00", "#56B4E9", "#009E73"), lwd = 1.5,
