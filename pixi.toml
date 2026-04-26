@@ -35,7 +35,6 @@ r45 = {features = ["r45"]}
 "r-wavethresh" = "*"
 "r-mixsqp" = "*"
 "r-ashr" = "*"
-"r-smashr" = "*"
 "r-matrixstats" = "*"
 
 # SuSiE-suite peers used by vignettes (cross-platform via
@@ -84,6 +83,13 @@ r45 = {features = ["r45"]}
 # example. Linux-64 only (depends on Bioconductor packages that
 # do not ship osx-arm64 builds).
 "r-coloc" = "*"
+
+# `smashr` is used by `mf_post_smooth(method = "smash")`. Linux-64
+# only on the dnachun channel; macOS users can install from GitHub
+# (https://github.com/stephenslab/smashr) if they need that
+# smoother. The smash method gates on requireNamespace("smashr"),
+# so the package builds on osx-arm64 without it.
+"r-smashr" = "*"
 
 # Vignette-only render dependencies for the methylation
 # case-study data panels. Linux-64 only because some of these
