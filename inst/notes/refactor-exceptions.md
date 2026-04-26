@@ -313,13 +313,14 @@ entry SHALL be blocked.
     algorithmic justification for the deletion (Rabiner 1989
     §III.B, Cappé-Moulines-Rydén 2005 §6: state reindexing in an
     HMM is consistent only if all state-indexed quantities are
-    reindexed together). Pattern A per refactor-discipline section
-    3: `tests/testthat/test_post_smooth_HMM.R` switches from
-    bit-identity to (a) bit-identity in the contiguous-prefix
-    regime, (b) assertion of correct emission alignment in a
-    constructed non-contiguous case, and (c) explicit numerical
-    documentation of the upstream divergence. fsusieR upstream
-    issue should be opened referencing 9f89333 and fc806a5.
+    reindexed together).
+  Resolution (2026-04-26): fsusieR pull request
+    stephenslab/fsusieR#31 restored the `mu <- mu[idx_comp]`
+    line. Both the contiguous-prefix and non-contiguous
+    regimes now bit-match upstream at `tolerance = 0`; the
+    Pattern A deviation-asserting test in
+    `tests/testthat/test_post_smooth_HMM.R` is replaced by
+    a uniform bit-identity assertion across both regimes.
 
 
 ### PR group ?? (R/adjust_covariates.R + R/em_helpers.R, 2026-04-26)

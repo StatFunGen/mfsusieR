@@ -1,19 +1,15 @@
-# Tests for the HMM post-smoother. Two regimes:
+# Tests for the HMM post-smoother. Bit-identity with
+# `fsusieR::fit_hmm` at tolerance = 0 in both the contiguous-prefix
+# regime and the non-contiguous `idx_comp` regime where the
+# `mu <- mu[idx_comp]` subset is required for state-emission
+# alignment.
 #
-#  1. Non-manifestation cases (idx_comp = 1..K_full): assert bit-
-#     identity with `fsusieR::fit_hmm` at tolerance = 0. Our port-
-#     source fix (subsetting `mu` alongside `prob` and `P`) leaves
-#     these cases numerically untouched because mu[k] == mu[idx_comp[k]]
-#     when idx_comp is the contiguous prefix.
-#
-#  2. Manifestation cases (idx_comp non-contiguous): assert that
-#     our smoother corresponds to the corrected HMM model
-#     (state k <-> grid index idx_comp[k]). Upstream fsusieR has a
-#     known regression here (commits 9f89333 -> fc806a5) and is
-#     expected to differ. See `inst/notes/refactor-exceptions.md`
-#     entry "HMM-mu-subset".
-#
-# Pattern A per refactor-discipline.md section 3.
+# Historical: the non-contiguous regime previously diverged from
+# upstream because fsusieR commit fc806a5 (2026-03-12) dropped the
+# `mu <- mu[idx_comp]` line in a Baum-Welch restructure. fsusieR
+# pull request stephenslab/fsusieR#31 restored the line. Both
+# regimes now bit-match. See `inst/notes/refactor-exceptions.md`
+# entry "HMM-mu-subset" for the full history.
 
 skip_if_no_fsusier_for_HMM <- function() {
   testthat::skip_if_not_installed("fsusieR")
