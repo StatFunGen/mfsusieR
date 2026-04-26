@@ -36,6 +36,9 @@ jobs:
 
       - name: Install susieR from GitHub master
         # mfsusieR depends on susieR internals not yet in r-susier conda.
+        # GITHUB_PAT avoids the bundled-PAT 401 rate limit failure.
+        env:
+          GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
         run: pixi run --environment ${{ matrix.environment }} --manifest-path /tmp/pixi/pixi.toml R -e 'remotes::install_github("stephenslab/susieR", upgrade = "never")'
 
       - name: Run unit tests
@@ -75,6 +78,8 @@ jobs:
           run-install: false
 
       - name: Install susieR from GitHub master
+        env:
+          GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
         run: pixi run --environment ${{ matrix.environment }} --manifest-path /tmp/pixi/pixi.toml R -e 'remotes::install_github("stephenslab/susieR", upgrade = "never")'
 
       - name: Run unit tests
