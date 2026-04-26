@@ -28,6 +28,7 @@ Imports:
     wavethresh,
     mixsqp,
     ashr,
+    smashr,
     matrixStats,
     stats
 LinkingTo:
@@ -43,8 +44,7 @@ Suggests:
     GenomicRanges,
     AnnotationDbi,
     TxDb.Hsapiens.UCSC.hg38.knownGene,
-    org.Hs.eg.db,
-    smashr
+    org.Hs.eg.db
 VignetteBuilder: knitr
 Encoding: UTF-8
 LazyData: true

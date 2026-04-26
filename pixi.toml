@@ -35,6 +35,7 @@ r45 = {features = ["r45"]}
 "r-wavethresh" = "*"
 "r-mixsqp" = "*"
 "r-ashr" = "*"
+"r-smashr" = "*"
 "r-matrixstats" = "*"
 
 # SuSiE-suite peers used by vignettes (cross-platform via
