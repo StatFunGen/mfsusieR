@@ -33,7 +33,8 @@ mfsusie(
   low_count_filter = 0,
   quantile_norm = FALSE,
   control_mixsqp = NULL,
-  mixsqp_null_penalty = 0.7
+  mixsqp_null_penalty = 0.7,
+  model_init = NULL
 )
 }
 \arguments{
@@ -138,6 +139,15 @@ arguments forwarded to the per-(outcome, scale) M-step.}
 
 \item{mixsqp_null_penalty}{numeric, mixsqp null-component penalty (internal).
 Default 0.7.}
+
+\item{model_init}{optional \code{mfsusie} fit object from a prior
+call. When supplied, the IBSS loop is seeded from the
+supplied \code{alpha}, \code{mu}, \code{mu2}, \code{KL}, \code{lbf}, \code{V}, \code{pi_V},
+\code{sigma2}, \code{fitted}, and \code{intercept} rather than the cold-
+start zero state. The supplied fit must have the same \code{L}
+as the requested \code{L}; otherwise the call errors. Useful
+for resuming a long-running fit after a per-call iteration
+budget. Default \code{NULL} (cold start).}
 }
 \value{
 A list of class \code{c("mfsusie", "susie")} carrying:

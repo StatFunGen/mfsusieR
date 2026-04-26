@@ -61,6 +61,66 @@ initialize_fitted.mf_individual <- function(data, mat_init, ...) {
   list()
 }
 
+# ---- expand_model_init_to_L -----------------------------------
+
+#' Expand a warm-start model to a new L
+#'
+#' When the L_greedy path in `susie_workhorse` grows L between
+#' rounds, the supplied `model_init` from round `k` has `L_prev`
+#' effects but round `k + 1` requests `L_new >= L_prev`. This
+#' helper appends zero-state effects to `alpha`, `mu`, `mu2`,
+#' `V`, `KL`, and `lbf` so the warm-loaded fields have the
+#' requested L. Mirrors `prune_single_effects` from susieR but
+#' for the mfsusieR list-of-list `mu` / `mu2` shape.
+#'
+#' Errors when `L_prev > L_new` (no shrinking; the L_greedy
+#' loop only grows L).
+#'
+#' @keywords internal
+#' @noRd
+expand_model_init_to_L <- function(mi, L_new, p, M, T_basis) {
+  if (is.null(mi$alpha)) {
+    stop("model_init must carry an `alpha` matrix.")
+  }
+  L_prev <- nrow(mi$alpha)
+  if (L_prev > L_new) {
+    stop(sprintf(
+      "model_init has L = %d but the call requested L = %d; shrinking is not supported.",
+      L_prev, L_new))
+  }
+  if (L_prev == L_new) return(mi)
+
+  L_diff <- L_new - L_prev
+
+  mi$alpha <- rbind(mi$alpha,
+                    matrix(1 / p, nrow = L_diff, ncol = p))
+
+  if (!is.null(mi$mu)) {
+    extra_mu <- vector("list", L_diff)
+    for (l in seq_len(L_diff)) {
+      extra_mu[[l]] <- vector("list", M)
+      for (m in seq_len(M)) {
+        extra_mu[[l]][[m]] <- matrix(0, nrow = p, ncol = T_basis[m])
+      }
+    }
+    mi$mu <- c(mi$mu, extra_mu)
+  }
+  if (!is.null(mi$mu2)) {
+    extra_mu2 <- vector("list", L_diff)
+    for (l in seq_len(L_diff)) {
+      extra_mu2[[l]] <- vector("list", M)
+      for (m in seq_len(M)) {
+        extra_mu2[[l]][[m]] <- matrix(0, nrow = p, ncol = T_basis[m])
+      }
+    }
+    mi$mu2 <- c(mi$mu2, extra_mu2)
+  }
+  if (!is.null(mi$V)) mi$V <- c(mi$V, rep(1, L_diff))
+  if (!is.null(mi$KL))  mi$KL  <- c(mi$KL,  rep(NA_real_, L_diff))
+  if (!is.null(mi$lbf)) mi$lbf <- c(mi$lbf, rep(NA_real_, L_diff))
+  mi
+}
+
 # ---- ibss_initialize -------------------------------------------
 
 #' IBSS loop initializer for `mf_individual`
@@ -69,8 +129,11 @@ initialize_fitted.mf_individual <- function(data, mat_init, ...) {
 #' scalar-only validation of `params$residual_variance` (mfsusieR
 #' uses a list-of-vectors per-(scale, outcome) shape) and routes
 #' through the mfsusieR S3 methods for `initialize_susie_model`,
-#' `initialize_fitted`. Model_init / warm-start is deferred.
-#' not supported (param$model_init is ignored).
+#' `initialize_fitted`. When `params$model_init` is non-NULL, the
+#' working model is seeded from the supplied fit's `alpha`, `mu`,
+#' `mu2`, `KL`, `lbf`, `V`, `pi_V`, `sigma2`, `fitted`, and
+#' `intercept` so the IBSS loop resumes from the prior posterior
+#' state rather than the zero state.
 #'
 #' @keywords internal
 #' @noRd
@@ -83,7 +146,21 @@ ibss_initialize.mf_individual <- function(data, params) {
     params$residual_variance <- var_y
   }
 
-  mat_init   <- initialize_susie_model(data, params, var_y)
+  mat_init <- initialize_susie_model(data, params, var_y)
+
+  if (!is.null(params$model_init)) {
+    mi <- expand_model_init_to_L(params$model_init, params$L,
+                                 data$p, data$M, data$T_basis)
+    warm_fields <- c("alpha", "mu", "mu2", "V", "V_grid",
+                     "pi_V", "G_prior", "sigma2", "fitted",
+                     "intercept")
+    for (f in warm_fields) {
+      if (!is.null(mi[[f]])) mat_init[[f]] <- mi[[f]]
+    }
+    mat_init$KL  <- rep(NA_real_, params$L)
+    mat_init$lbf <- rep(NA_real_, params$L)
+  }
+
   fitted     <- initialize_fitted(data, mat_init)
 
   model_class <- class(mat_init)

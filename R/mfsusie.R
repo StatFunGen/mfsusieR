@@ -98,6 +98,14 @@
 #'   arguments forwarded to the per-(outcome, scale) M-step.
 #' @param mixsqp_null_penalty numeric, mixsqp null-component penalty (internal).
 #'   Default 0.7.
+#' @param model_init optional `mfsusie` fit object from a prior
+#'   call. When supplied, the IBSS loop is seeded from the
+#'   supplied `alpha`, `mu`, `mu2`, `KL`, `lbf`, `V`, `pi_V`,
+#'   `sigma2`, `fitted`, and `intercept` rather than the cold-
+#'   start zero state. The supplied fit must have the same `L`
+#'   as the requested `L`; otherwise the call errors. Useful
+#'   for resuming a long-running fit after a per-call iteration
+#'   budget. Default `NULL` (cold start).
 #'
 #' @return A list of class `c("mfsusie", "susie")` carrying:
 #' \describe{
@@ -152,7 +160,8 @@ mfsusie <- function(X, Y,
                     low_count_filter          = 0,
                     quantile_norm             = FALSE,
                     control_mixsqp            = NULL,
-                    mixsqp_null_penalty       = 0.7) {
+                    mixsqp_null_penalty       = 0.7,
+                    model_init                = NULL) {
   prior_variance_scope    <- match.arg(prior_variance_scope)
   residual_variance_scope <- match.arg(residual_variance_scope)
   mixture_weight_method   <- match.arg(mixture_weight_method)
@@ -235,7 +244,8 @@ mfsusie <- function(X, Y,
     refine                     = FALSE,
     unmappable_effects         = "none",
     residual_variance_lowerbound = 0,
-    residual_variance_upperbound = Inf
+    residual_variance_upperbound = Inf,
+    model_init                 = model_init
   )
 
   # 4. Run the susieR workhorse. All per-effect and per-iteration

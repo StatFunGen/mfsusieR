@@ -404,3 +404,22 @@ entry SHALL be blocked.
     sigma2, posterior shrinkage on near-null effects), and
     (iii) numerical agreement with upstream within the bug-
     magnitude tolerance documented per-scenario.
+
+- mvf.susie.alpha/R/multfsusie.R::multfsusie.obj
+  Behavior: legacy mid-run resume via `multfsusie.obj = m_prev`,
+    coupled with a separate `max_step` per-call iteration cap.
+  Decision: replaced-by-`R/ibss_methods.R::ibss_initialize.mf_individual`
+  Reason: mfsusieR delegates to susieR's IBSS workhorse, which
+    already supports warm-start through `model_init`. The
+    mfsusieR S3 override now honors `params$model_init` by
+    copying `alpha`, `mu`, `mu2`, `V`, `pi_V`, `G_prior`,
+    `sigma2`, `fitted`, and `intercept` from the supplied
+    fit before the IBSS loop runs, and resetting `KL`/`lbf`
+    to NA. The legacy `multfsusie.obj` plus `max_step`
+    workaround is retired in favor of the single
+    `model_init` argument and the single `max_iter` budget.
+    The L_greedy cross-round path threads `model_init` from
+    one round to the next; `expand_model_init_to_L` mirrors
+    `prune_single_effects` from susieR for the mfsusieR
+    list-of-list `mu` / `mu2` shape, appending zero-state
+    effect slots up to the requested L.
