@@ -19,18 +19,25 @@ build_warm_sim <- function(seed = 17L, n = 100L, T_m = 64L,
 
 # --- 1. Convergence shortcut -------------------------------------
 
-test_that("warm-started fit from a converged fit converges in <= 1 iteration", {
+test_that("warm-started fit from a converged fit hits the convergence floor", {
+  # The IBSS convergence check requires `abs(elbo[iter+1] -
+  # elbo[iter]) < tol` and elbo[1] = -Inf is the sentinel, so
+  # `niter = 2` is the absolute floor (one real ELBO comparison
+  # against the seeded posterior). A warm-started fit from a
+  # converged cold fit hits that floor; the cold fit takes
+  # strictly more iterations.
   sim <- build_warm_sim()
   fit_cold <- fsusie(sim$Y, sim$X, L = 5,
                      verbose = FALSE)
   expect_true(fit_cold$converged)
-  expect_gte(fit_cold$niter, 2L)
+  expect_gte(fit_cold$niter, 4L)
 
   fit_warm <- fsusie(sim$Y, sim$X, L = 5,
                      model_init = fit_cold,
                      verbose = FALSE)
   expect_true(fit_warm$converged)
-  expect_lte(fit_warm$niter, 2L)
+  expect_equal(fit_warm$niter, 2L)
+  expect_lt(fit_warm$niter, fit_cold$niter)
 })
 
 # --- 2. End-to-end agreement -------------------------------------
