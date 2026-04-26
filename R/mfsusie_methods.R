@@ -276,3 +276,142 @@ print.summary.mfsusie <- function(x, ...) {
   }
   invisible(x)
 }
+# Post-processing helpers for an `mfsusie` fit.
+#
+# `mf_post_smooth(fit, method = "tiwt")` adds two slots to the
+# returned fit:
+#   $effect_curves[[m]][[l]]  -- smoothed position-space curve,
+#                                length T_basis[m]
+#   $credible_bands[[m]][[l]] -- T_basis[m] x 2 matrix [lower, upper]
+#
+# The smoother is **translation-invariant wavelet thresholding**
+# (TIWT): the per-effect, per-outcome wavelet posterior mean is
+# soft-thresholded at the SureShrink universal threshold
+# `sigma * sqrt(2 log T)` per scale, then inverted. Pointwise
+# credible bands come from the posterior second moment via
+# `mu2 - mu^2` mapped through the inverse DWT and a sqrt(.)
+# (Parseval-style approximation on the orthonormal basis).
+#
+# Cycle-spinning translation-invariant denoising (the full TI estimator)
+# is a planned extension; this scalewise variant already improves curve
+# aesthetics over raw inverse-DWT.
+
+#' Post-smooth a fit's per-effect curves and add credible bands
+#'
+#' @param fit a fit returned by `mfsusie()` or `fsusie()`.
+#' @param method character, smoother. Currently only `"tiwt"`
+#'   (translation-invariant wavelet thresholding) is supported.
+#' @param level numeric in (0, 1), credible-band coverage.
+#'   Default 0.95 (-> +/- 1.96 * sd).
+#' @param threshold_factor numeric, multiplier on the
+#'   `sqrt(2 log T)` universal threshold. 1 = standard SureShrink;
+#'   < 1 keeps more wavelet energy (less smoothing); > 1 smoothes
+#'   more aggressively. Default 1.
+#'
+#' @return the input fit with `$effect_curves` and
+#'   `$credible_bands` populated. Scalar outcomes
+#'   (`T_basis[m] = 1`) are passed through unchanged (no smoothing
+#'   needed).
+#' @export
+mf_post_smooth <- function(fit,
+                           method           = c("tiwt"),
+                           level            = 0.95,
+                           threshold_factor = 1) {
+  if (!inherits(fit, "mfsusie")) {
+    stop("`fit` must be an `mfsusie` (or `fsusie`) fit object.")
+  }
+  method <- match.arg(method)
+  if (level <= 0 || level >= 1) {
+    stop("`level` must be in (0, 1).")
+  }
+  z_crit <- stats::qnorm((1 + level) / 2)
+
+  meta <- fit$dwt_meta
+  M    <- length(meta$T_basis)
+  L    <- nrow(fit$alpha)
+
+  effect_curves  <- vector("list", M)
+  credible_bands <- vector("list", M)
+
+  for (m in seq_len(M)) {
+    T_m <- meta$T_basis[m]
+    effect_curves[[m]]  <- vector("list", L)
+    credible_bands[[m]] <- vector("list", L)
+
+    for (l in seq_len(L)) {
+      mu_lm  <- fit$mu[[l]][[m]]   # p x T_basis
+      mu2_lm <- fit$mu2[[l]][[m]]
+      a_l    <- fit$alpha[l, ]
+      mean_w <- as.numeric(crossprod(a_l, mu_lm))
+      var_w  <- as.numeric(crossprod(a_l, mu2_lm)) - mean_w^2
+      var_w[var_w < 0] <- 0
+
+      if (T_m == 1L) {
+        effect_curves[[m]][[l]] <-
+          .invert_packed_curve(matrix(mean_w, nrow = 1L), meta, m)
+        sd_pos <- abs(.invert_packed_curve(matrix(sqrt(var_w),
+                                                  nrow = 1L),
+                                           meta, m))
+        mean_pos <- effect_curves[[m]][[l]]
+        credible_bands[[m]][[l]] <- cbind(
+          mean_pos - z_crit * sd_pos,
+          mean_pos + z_crit * sd_pos
+        )
+        next
+      }
+
+      shrunk_w <- .scalewise_soft_threshold(
+        mean_w, sd = sqrt(var_w),
+        scale_index = meta$scale_index[[m]],
+        T_padded    = T_m,
+        factor      = threshold_factor)
+
+      effect_curves[[m]][[l]] <-
+        .invert_packed_curve(matrix(shrunk_w, nrow = 1L), meta, m)
+
+      sd_pos <- abs(.invert_packed_curve(matrix(sqrt(var_w),
+                                                nrow = 1L),
+                                         meta, m))
+      mean_pos <- effect_curves[[m]][[l]]
+      credible_bands[[m]][[l]] <- cbind(
+        mean_pos - z_crit * sd_pos,
+        mean_pos + z_crit * sd_pos
+      )
+    }
+  }
+
+  fit$effect_curves  <- effect_curves
+  fit$credible_bands <- credible_bands
+  fit
+}
+
+# --- helpers --------------------------------------------------------
+
+# Soft-threshold the packed wavelet vector per scale at
+# `factor * sd * sqrt(2 log T)`.
+.scalewise_soft_threshold <- function(coef_vec, sd, scale_index,
+                                      T_padded, factor) {
+  out <- coef_vec
+  T_eff <- T_padded
+  for (idx in scale_index) {
+    if (length(idx) == 0L) next
+    sigma <- mean(sd[idx], na.rm = TRUE)
+    if (!is.finite(sigma) || sigma == 0) next
+    thr <- factor * sigma * sqrt(2 * log(T_eff))
+    x <- out[idx]
+    out[idx] <- sign(x) * pmax(abs(x) - thr, 0)
+  }
+  out
+}
+
+# Use the existing mf_invert_dwt machinery to bring a length-T_padded
+# packed wavelet vector back to position space.
+.invert_packed_curve <- function(D_packed_row, meta, m) {
+  inverted <- mf_invert_dwt(
+    D_packed      = D_packed_row,
+    column_center = rep(0, ncol(D_packed_row)),
+    column_scale  = rep(1, ncol(D_packed_row)),
+    filter_number = meta$wavelet_filter %||% 10L,
+    family        = meta$wavelet_family %||% "DaubLeAsymm")
+  as.numeric(inverted)
+}

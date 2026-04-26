@@ -4,9 +4,9 @@
 \name{mfsusieR-package}
 \alias{mfsusieR}
 \alias{mfsusieR-package}
-\title{mfsusieR: Multi-Modality Sum of Single Functions Regression}
+\title{mfsusieR: Multi-Outcome Functional Regression with the Sum of Single Effects Model}
 \description{
-A multi-modality generalisation of the 'Sum of Single Functions' (SuSiF) model for variable selection in regression with mixtures of functional and scalar responses. Built on the 'susieR' backbone, with wavelet-based functional priors and a per-(scale, modality) variance structure.
+Bayesian variable selection for functional regression problems with one or many outcomes. Each outcome may be a scalar or a curve sampled at a grid of positions. The method is built on the 'susieR' backbone via S3 dispatch and uses a wavelet-based functional prior so a variable that affects several spatially correlated positions is jointly identified. Motivated by molecular QTL fine-mapping, where outcomes are genome-scale molecular traits such as DNA methylation profiles and chromatin accessibility tracks; applies to any functional regression problem with sparsely-active variables.
 }
 \seealso{
 Useful links:
@@ -21,9 +21,8 @@ Useful links:
 
 Authors:
 \itemize{
-  \item William R. P. Denault
   \item Anjing Liu
-  \item Matthew Stephens
+  \item William R. P. Denault
 }
 
 }

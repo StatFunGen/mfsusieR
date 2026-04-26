@@ -1,5 +1,38 @@
 # Design
 
+## Decisions locked
+
+- **Smoother**: ship a minimal TIWT post-processor now,
+  `mf_post_smooth(fit, method = "tiwt")`. Adds
+  `$effect_curves` (smoothed position-space curves) and
+  `$credible_bands` (`mean +/- 2*sd` pointwise) to the fit.
+  Full smash / HMM ports stay deferred. New vignette
+  `post_processing.Rmd` shows before / after.
+- **Color palette**: Okabe-Ito (colorblind-friendly, modern).
+  Vector: `c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2",
+  "#D55E00", "#CC79A7", "#999999")`. Scales by recycling.
+- **Multi-outcome layout**: dense grid via
+  `par(mfrow = c(rows, cols))` with `rows * cols >= M + 1`,
+  `cols = ceiling(sqrt(M + 1))`. Top-left panel is the shared PIP
+  plot; remaining panels are per-outcome effect plots.
+- **Real-data fixtures**: trim CASS4 (`data/fig_4_data/CASS4/`) and
+  CR1/CR2 (`data/fig_4_data/CR1_CR2_obj.RData`) from
+  `~/GIT/fsusie-experiments`. Each trimmed to ~250 KB by
+  subsampling variables + individuals + positions to a
+  vignette-scale fixture; total package size budget ~500 KB.
+- **De-identification (binding)**: the build scripts under
+  `data-raw/` SHALL strip every personally identifying field from
+  the genotype matrix `X` and the molecular phenotype matrix `Y`
+  before saving. Concretely: `rownames(X)` and `rownames(Y)` are
+  replaced with anonymous indices `S001, S002, ...`; any
+  `colnames` carrying participant IDs (e.g., subject IDs in
+  pheno matrices) are stripped or replaced; covariates with PHI
+  (sex, age, batch, cohort) are dropped. Only the SNP IDs (chr,
+  position, alleles) and CpG positions are retained as
+  identifiers, since those are public reference information.
+  A `de_identified = TRUE` attribute is set on each saved object
+  for traceability.
+
 ## Plot function structure
 
 Three layers, base R only:
