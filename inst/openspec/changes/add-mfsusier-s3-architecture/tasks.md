@@ -398,15 +398,15 @@ Depends on 7.1 (`mfsusie()`) and 6b (post-processors).
 
 Depends on 7.1.
 
-- [ ] 7e.1 Implement `R/fsusie.R` with the public `fsusie(Y, X, pos,
+- [x] 7e.1 Implement `R/fsusie.R` with the public `fsusie(Y, X, pos,
       ...)` thin wrapper per `mf-public-api/spec.md` and design.md
       D8d. Argument order matches `fsusieR::susiF` `(Y, X, ...)`.
       Errors if the user passes any argument that is not meaningful
       for the `M = 1` case (e.g., `cross_modality_prior`).
-- [ ] 7e.2 Test (smoke): `fsusie()` runs end-to-end on the
+- [x] 7e.2 Test (smoke): `fsusie()` runs end-to-end on the
       single-modality fixture, returns a class `c("mfsusie",
       "susie")` fit with the documented shape.
-- [ ] 7e.3 Test (drop-in compatibility): `fsusie(Y_matrix, X, pos)`
+- [x] 7e.3 Test (drop-in compatibility): `fsusie(Y_matrix, X, pos)`
       and `mfsusie(X, list(Y_matrix), list(pos))` produce
       element-wise identical fits at tolerance `1e-12` (the wrapper
       is just a canonicalizer; no numerics added).
