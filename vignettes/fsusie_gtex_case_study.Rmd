@@ -87,64 +87,58 @@ and read-count tracks, `mfsusieR` ships a worked example using
 `Gviz`. The Bioconductor packages it depends on (`Gviz`,
 `GenomicRanges`, `IRanges`) are listed as `Suggests` only.
 
-```{r gviz, eval = requireNamespace("Gviz", quietly = TRUE), fig.height = 7}
+```{r gviz, eval = requireNamespace("Gviz", quietly = TRUE), fig.height = 9}
 suppressPackageStartupMessages({
   library(Gviz); library(GenomicRanges); library(IRanges)
 })
 
-cs <- 1L                         # which credible set to feature
-markers <- fit_s$sets$cs[[cs]]
-lead    <- markers[which.max(fit_s$pip[markers])]
-x_lead  <- gtex_example$X[, lead]
+n_cs   <- length(fit_s$sets$cs)
+chrom  <- gtex_example$chrom
+pos    <- gtex_example$pos
+gr     <- GRanges(chrom, IRanges(pos, pos + 1L))
 
-# Effect curve + 95% band on the gene-body grid. The default
-# smoother on this fit is TI; its result lives at
+# Default smoother on this fit is TI; its result lives at
 # `fit_s$smoothed$TI`.
 smooth_payload <- fit_s$smoothed$TI
-band   <- smooth_payload$credible_bands[[1L]][[cs]]
-effect <- smooth_payload$effect_curves[[1L]][[cs]]
+cs_palette <- c("#1f78b4", "#33a02c", "#e31a1c", "#ff7f00",
+                "#6a3d9a", "#b15928")[seq_len(n_cs)]
 
-# Allele-stratified mean log1p coverage at the lead variant.
-# The genotype matrix is mean-centered, so a 0/1 split on the
-# sign of the dosage approximates a reference / carrier split.
-g0 <- which(x_lead < 0)   # reference (below-mean dosage)
-g1 <- which(x_lead >= 0)  # carrier (above-mean dosage)
+# Build one effect track per CS: solid mean line + two dashed
+# credible-band lines, layered via OverlayTrack.
+effect_tracks <- lapply(seq_len(n_cs), function(cs) {
+  band   <- smooth_payload$credible_bands[[1L]][[cs]]
+  effect <- smooth_payload$effect_curves[[1L]][[cs]]
+  ylim_e <- range(c(effect, band)) * c(1.1, 1.1)
+  e_main <- DataTrack(range = gr, data = effect, type = "l", lwd = 2,
+                      col = cs_palette[cs],
+                      name = sprintf("CS %d", cs),
+                      ylim = ylim_e,
+                      background.title = "white",
+                      col.axis = "black", col.title = "black",
+                      fontface.title = 1)
+  e_lo   <- DataTrack(range = gr, data = band[, 1L], type = "l",
+                      lty = 2, col = cs_palette[cs], ylim = ylim_e)
+  e_hi   <- DataTrack(range = gr, data = band[, 2L], type = "l",
+                      lty = 2, col = cs_palette[cs], ylim = ylim_e)
+  OverlayTrack(trackList = list(e_main, e_lo, e_hi),
+               background.title = "white")
+})
+
+# Use CS 1 lead variant for the allele-stratified coverage panel
+# (one panel; coloring by all leads gets cluttered).
+markers_1 <- fit_s$sets$cs[[1L]]
+lead_1    <- markers_1[which.max(fit_s$pip[markers_1])]
+x_lead_1  <- gtex_example$X[, lead_1]
+g0 <- which(x_lead_1 < 0)
+g1 <- which(x_lead_1 >= 0)
 mu0 <- colMeans(gtex_example$Y[g0, , drop = FALSE])
 mu1 <- colMeans(gtex_example$Y[g1, , drop = FALSE])
-
-chrom <- gtex_example$chrom
-pos   <- gtex_example$pos
-
-gr     <- GRanges(chrom, IRanges(pos, pos + 1L))
-ylim_e <- range(c(effect, band)) * c(1.1, 1.1)
-
-# Effect track: solid mean line with two dashed credible-band
-# lines, layered via OverlayTrack so all three render on the
-# same panel.
-e_main <- DataTrack(range = gr, data = effect, type = "l", lwd = 2,
-                    col = "#1f78b4", name = sprintf("Effect CS %d", cs),
-                    ylim = ylim_e,
-                    background.title = "white", col.axis = "black",
-                    col.title = "black", fontface.title = 1)
-e_lo   <- DataTrack(range = gr, data = band[, 1L], type = "l",
-                    lty = 2, col = "#1f78b4", ylim = ylim_e)
-e_hi   <- DataTrack(range = gr, data = band[, 2L], type = "l",
-                    lty = 2, col = "#1f78b4", ylim = ylim_e)
-effect_track <- OverlayTrack(trackList = list(e_main, e_lo, e_hi),
-                             background.title = "white")
-
-obs_diff_track <- DataTrack(range = gr, data = mu1 - mu0,
-                            type = "p", pch = 16, cex = 0.5,
-                            col = "#1f78b4",
-                            name = "Observed difference",
-                            background.title = "white",
-                            col.axis = "black", col.title = "black",
-                            fontface.title = 1)
 
 ylim_c <- range(c(mu0, mu1))
 c_ref  <- DataTrack(range = gr, data = mu0, type = "p", pch = 16,
                     cex = 0.5, col = "navy",
-                    name = "Avg. log1p count", ylim = ylim_c,
+                    name = "Avg log1p (CS 1 lead split)",
+                    ylim = ylim_c,
                     background.title = "white", col.axis = "black",
                     col.title = "black", fontface.title = 1)
 c_alt  <- DataTrack(range = gr, data = mu1, type = "p", pch = 16,
@@ -156,9 +150,6 @@ axis_track <- GenomeAxisTrack(col = "black", fontcolor = "black",
                               col.title = "black",
                               background.title = "white")
 
-# Gene-region track (simulated exon / intron structure shipped
-# with `gtex_example`): two isoforms of the AHCYL1-like gene plus
-# a 5' L1 element, drawn as exon boxes connected by intron lines.
 gene_track <- GeneRegionTrack(gtex_example$gene_track,
                               chromosome = chrom,
                               name = "", showId = TRUE,
@@ -167,14 +158,19 @@ gene_track <- GeneRegionTrack(gtex_example$gene_track,
                               background.title = "white",
                               col.axis = "black", col.title = "black")
 
-plotTracks(list(axis_track, effect_track, obs_diff_track,
-                count_track, gene_track),
-           from = gtex_example$locus[1L],
-           to   = gtex_example$locus[2L],
-           sizes = c(1, 3, 3, 3, 2),
-           main  = sprintf("%s cis-eQTL: CS %d (lead SNP rank %d, %d ref / %d carrier)",
-                           gtex_example$gene, cs, lead,
-                           length(g0), length(g1)),
+# Each effect track gets equal vertical real estate; coverage
+# track gets 1.5x; gene track gets 2x.
+track_sizes <- c(1, rep(2, n_cs), 2.5, 2)
+cs_leads <- vapply(fit_s$sets$cs, function(idx)
+  idx[which.max(fit_s$pip[idx])], integer(1L))
+plotTracks(c(list(axis_track), effect_tracks,
+             list(count_track, gene_track)),
+           from  = gtex_example$locus[1L],
+           to    = gtex_example$locus[2L],
+           sizes = track_sizes,
+           main  = sprintf("%s cis-eQTL: %d credible sets at SNPs %s",
+                           gtex_example$gene, n_cs,
+                           paste(cs_leads, collapse = ", ")),
            cex.main = 1.0)
 ```
 
