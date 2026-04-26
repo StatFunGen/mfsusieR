@@ -105,14 +105,18 @@ test_that("wavelet_eb agrees with port source up to documented bug magnitude", {
 
 # --- Error paths -------------------------------------------------
 
-test_that("unsupported preprocessing flags error cleanly", {
+test_that("preprocessing flags accept valid values and reject bad ones", {
   sim <- build_cov_sim()
+  expect_silent(suppressWarnings(
+    mf_adjust_for_covariates(sim$Y, sim$Z, low_count_filter = 0.01)))
+  expect_silent(suppressWarnings(
+    mf_adjust_for_covariates(sim$Y, sim$Z, quantile_norm = TRUE)))
   expect_error(
-    mf_adjust_for_covariates(sim$Y, sim$Z, thresh_lowcount = 0.01),
-    "not supported in v1")
+    mf_adjust_for_covariates(sim$Y, sim$Z, low_count_filter = -0.1),
+    "non-negative")
   expect_error(
-    mf_adjust_for_covariates(sim$Y, sim$Z, quantile_trans = TRUE),
-    "not supported in v1")
+    mf_adjust_for_covariates(sim$Y, sim$Z, quantile_norm = "yes"),
+    "TRUE` or `FALSE`")
 })
 
 test_that("non-power-of-two T is rejected by wavelet_eb", {

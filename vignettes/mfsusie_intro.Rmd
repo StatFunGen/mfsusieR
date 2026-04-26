@@ -102,6 +102,25 @@ sapply(B_hat, dim)
 Switch between them by changing one argument; the rest of the API and
 the fit object structure are identical.
 
+## Wavelet-domain preprocessing
+
+Two arguments control preprocessing of the per-outcome wavelet
+matrix before the IBSS loop:
+
+- `low_count_filter` (default `0`): wavelet columns with
+  `median(|column|) <= low_count_filter` are masked, contributing
+  `(Bhat = 0, Shat = 1)` to the SER step. Use a small positive
+  value when the response has sparse non-zero entries (e.g.,
+  ATAC-seq read pileups).
+- `quantile_norm` (default `FALSE`): when `TRUE`, applies a
+  column-wise rank-based normal quantile transform to the
+  wavelet matrix. Use when the per-outcome residuals are
+  heavy-tailed or visibly non-Gaussian.
+
+Both flags route through `mf_adjust_for_covariates()` as well.
+See `vignette("practical_data_applications")` for an applied
+walk-through on a multi-region ATAC-seq example dataset.
+
 ## When to reach for mfsusie over fsusie
 
 Use `mfsusie()` when:

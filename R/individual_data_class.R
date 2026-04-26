@@ -43,6 +43,8 @@ create_mf_individual <- function(X,
                                  standardize           = TRUE,
                                  intercept             = TRUE,
                                  save_residuals        = TRUE,
+                                 low_count_filter      = 0,
+                                 quantile_norm         = FALSE,
                                  verbose               = FALSE) {
   # ---- Input validation --------------------------------------------------
   if (!is.matrix(X) || !is.numeric(X)) {
@@ -108,6 +110,7 @@ create_mf_individual <- function(X,
   pos_grid      <- vector("list", M)
   column_center <- vector("list", M)
   column_scale  <- vector("list", M)
+  lowc_idx      <- vector("list", M)
 
   for (m in seq_len(M)) {
     out <- mf_dwt(Y[[m]],
@@ -122,6 +125,28 @@ create_mf_individual <- function(X,
     pos_grid[[m]]      <- out$pos
     column_center[[m]] <- out$column_center
     column_scale[[m]]  <- out$column_scale
+
+    # Optional preprocessing: column-wise rank-based normal quantile
+    # transform on the wavelet-domain response. Applied BEFORE the
+    # low-count index computation so the median check sees the
+    # transformed scale.
+    if (quantile_norm && T_basis[m] > 1L) {
+      D[[m]] <- mf_quantile_normalize(D[[m]])
+    }
+
+    # Optional preprocessing: low-count column indices. With the
+    # default threshold 0 the set is empty when every column has
+    # at least one nonzero absolute value across samples.
+    if (T_basis[m] > 1L) {
+      lowc_idx[[m]] <- mf_low_count_indices(D[[m]],
+                                            threshold = low_count_filter)
+      if (length(lowc_idx[[m]]) > 0L) {
+        D[[m]][, lowc_idx[[m]]] <- 0
+      }
+    } else {
+      lowc_idx[[m]] <- integer(0)
+    }
+
     # Cache the post-remap Y on the padded grid for downstream
     # residual computation; the wavelet representation lives in `D`.
     Y_remapped[[m]] <- if (T_basis[m] == 1L) {
@@ -140,6 +165,7 @@ create_mf_individual <- function(X,
     pos          = pos_grid,
     D            = D,
     scale_index  = scale_index,
+    lowc_idx     = lowc_idx,
     T_basis     = T_basis,
     csd        = X_scale,
     xtx_diag = colSums(X_processed^2),  # X'X diagonal, cached

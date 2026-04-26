@@ -18,6 +18,63 @@ is_wholenumber <- function(x, tol = .Machine$double.eps^0.5) {
   abs(x - round(x)) < tol
 }
 
+#' Index of low-count wavelet-coefficient columns
+#'
+#' Returns the column indices `t` of `Y_wd` where
+#' `median(|Y_wd[, t]|) <= threshold`. With the default
+#' `threshold = 0`, only columns whose absolute-value median is
+#' exactly zero are flagged; raising the threshold widens the
+#' set of columns considered uninformative.
+#'
+#' @param Y_wd numeric matrix; the wavelet-domain response
+#'   `cbind(W$D, W$C)`.
+#' @param threshold non-negative numeric.
+#' @return integer vector of column indices; `integer(0)` if no
+#'   column meets the threshold.
+#' @references
+#' Manuscript: methods/online_method.tex
+#' (low-count masking for sparse-coverage wavelet columns).
+#' @importFrom stats median
+#' @keywords internal
+#' @noRd
+mf_low_count_indices <- function(Y_wd, threshold = 0) {
+  if (threshold < 0) {
+    stop("`low_count_filter` must be non-negative.")
+  }
+  col_med <- apply(abs(Y_wd), 2L, median)
+  which(col_med <= threshold)
+}
+
+#' Column-wise rank-based normal quantile transform
+#'
+#' Applies `qnorm(rank(., ties.method = "random") / (n + 1))`
+#' column-by-column, after seeding the RNG to `set.seed(1)` for
+#' tie-break reproducibility. Each input column is mapped to the
+#' standard normal scale via its empirical rank.
+#'
+#' @param Y_wd numeric matrix.
+#' @return numeric matrix; same dimensions as `Y_wd`.
+#' @references
+#' Manuscript: methods/online_method.tex
+#' (column-wise rank-INT for non-Gaussian wavelet coefficients).
+#' @importFrom stats qqnorm
+#' @keywords internal
+#' @noRd
+mf_quantile_normalize <- function(Y_wd) {
+  if (is.null(dim(Y_wd))) {
+    set.seed(1L)
+    return(qqnorm(rank(Y_wd, ties.method = "random"),
+                  plot.it = FALSE)$x)
+  }
+  out <- matrix(0, nrow(Y_wd), ncol(Y_wd))
+  for (j in seq_len(ncol(Y_wd))) {
+    set.seed(1L)
+    out[, j] <- qqnorm(rank(Y_wd[, j], ties.method = "random"),
+                       plot.it = FALSE)$x
+  }
+  out
+}
+
 #' Column-wise centering and scaling
 #'
 #' Centers each column of `x` to mean zero and (optionally) scales to

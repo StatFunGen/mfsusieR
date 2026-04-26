@@ -15,11 +15,11 @@
   `par(mfrow = c(rows, cols))` with `rows * cols >= M + 1`,
   `cols = ceiling(sqrt(M + 1))`. Top-left panel is the shared PIP
   plot; remaining panels are per-outcome effect plots.
-- **Real-data fixtures**: trim CASS4 (`data/fig_4_data/CASS4/`) and
+- **Real-data examples**: trim CASS4 (`data/fig_4_data/CASS4/`) and
   CR1/CR2 (`data/fig_4_data/CR1_CR2_obj.RData`) from
   `~/GIT/fsusie-experiments`. Each trimmed to ~250 KB by
   subsampling variables + individuals + positions to a
-  vignette-scale fixture; total package size budget ~500 KB.
+  vignette-scale example dataset; total package size budget ~500 KB.
 - **De-identification (binding)**: the build scripts under
   `data-raw/` SHALL strip every personally identifying field from
   the genotype matrix `X` and the molecular phenotype matrix `Y`

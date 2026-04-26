@@ -9,7 +9,7 @@ sections demonstrating
 `mfsusie(..., estimate_residual_method = "NIG")`,
 `mfsusie(..., low_count_filter = c)`, and
 `mfsusie(..., quantile_norm = TRUE)` on a real-world
-multi-outcome ATAC-seq fixture. Each section SHALL provide a
+multi-outcome ATAC-seq example dataset. Each section SHALL provide a
 PIP comparison between the option enabled and the default.
 
 #### Scenario: section coverage

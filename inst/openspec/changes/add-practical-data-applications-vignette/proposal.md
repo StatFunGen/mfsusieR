@@ -9,7 +9,7 @@ demonstrates all three on a real-world dataset and provides
 the brief mathematical derivation for the NIG correction.
 
 The dataset at `~/Documents/fsusie_test/` provides 169
-multi-region multi-cell-type ATAC-seq fixtures (n = 84
+multi-region multi-cell-type ATAC-seq example datasets (n = 84
 individuals; 6 cell-type phenotypes per region; T = 10240
 bins per cell-type; ~3500 SNPs per region after MAF filter).
 The small sample size (n = 84) is exactly the regime where
