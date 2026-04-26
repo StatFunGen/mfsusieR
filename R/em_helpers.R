@@ -1,15 +1,15 @@
-# Mixture-weight EM helpers for the per-(modality, scale) prior update.
+# Mixture-weight EM helpers for the per-(outcome, scale) prior update.
 #
 # Two pure-R helpers that build the (p * |idx_s| + 1) x K likelihood
-# matrix consumed by mixsqp and run mixsqp at one (modality, scale)
-# pair. The orchestration (looping over modalities and scales,
+# matrix consumed by mixsqp and run mixsqp at one (outcome, scale)
+# pair. The orchestration (looping over outcomes and scales,
 # reading per-effect zeta from `model$alpha[l, ]`, etc.) happens in
 # `update_model_variance.mf_individual` (R/individual_data_methods.R).
 #
 # Manuscript reference: methods/derivation.tex line 216 (factorized
 # empirical-Bayes mixture-weight update).
 
-#' Build the mixsqp likelihood matrix at one (modality, scale)
+#' Build the mixsqp likelihood matrix at one (outcome, scale)
 #'
 #' Returns a `(p * |idx_s| + 1)` x `K` matrix where:
 #' row 1 is the null-component penalty pseudo-observation
@@ -49,19 +49,19 @@ mf_em_likelihood_per_scale <- function(bhat_slice, shat_slice, sd_grid) {
   rbind(c(100, rep(0, K - 1)), L)
 }
 
-#' Run mixsqp at one (modality, scale)
+#' Run mixsqp at one (outcome, scale)
 #'
 #' Builds the weight vector
-#' `w = (nullweight * idx_size, zeta_repeated)`, calls `mixsqp`,
+#' `w = (mixsqp_null_penalty * idx_size, zeta_repeated)`, calls `mixsqp`,
 #' and collapses to exact null when more than `1 - tol_null_prior` of
 #' the mass lands on the null component.
 #'
 #' @param L mixsqp likelihood matrix from
 #'   `mf_em_likelihood_per_scale`.
-#' @param zeta length-p SNP-level posterior weights (the per-effect
+#' @param zeta length-p variable-level posterior weights (the per-effect
 #'   alpha for the SER step that triggered this update).
 #' @param idx_size integer, |idx_s|, positions in this scale.
-#' @param nullweight numeric, null-component penalty weight.
+#' @param mixsqp_null_penalty numeric, null-component penalty weight.
 #' @param init_pi0_w numeric, starting null-component mass.
 #' @param tol_null_prior numeric, threshold below which non-null
 #'   mass collapses to zero.
@@ -73,11 +73,11 @@ mf_em_likelihood_per_scale <- function(bhat_slice, shat_slice, sd_grid) {
 #' @keywords internal
 #' @noRd
 mf_em_m_step_per_scale <- function(L, zeta, idx_size,
-                                   nullweight     = 0.7,
+                                   mixsqp_null_penalty     = 0.7,
                                    init_pi0_w     = 0.5,
                                    tol_null_prior = 0.001,
                                    control_mixsqp = NULL) {
-  w <- c(nullweight * idx_size, rep(zeta, idx_size))
+  w <- c(mixsqp_null_penalty * idx_size, rep(zeta, idx_size))
   K <- ncol(L)
   ctrl <- if (is.null(control_mixsqp)) list(verbose = FALSE) else {
     if (is.null(control_mixsqp$verbose)) control_mixsqp$verbose <- FALSE

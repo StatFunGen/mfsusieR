@@ -1,9 +1,9 @@
-# Per-modality forward and inverse DWT wrappers.
+# Per-outcome forward and inverse DWT wrappers.
 #
-# `mf_dwt` runs the full pipeline for one modality: position remap to
+# `mf_dwt` runs the full pipeline for one outcome: position remap to
 # a power-of-two grid (when needed), per-position centering and
 # scaling, row-wise DWT, and packing of the resulting D and C
-# coefficients into a single `n x T_padded` matrix. The univariate
+# coefficients into a single `n x T_basis` matrix. The univariate
 # (`T_m = 1`) case short-circuits the wavelet machinery and returns
 # the centered / scaled column directly.
 #
@@ -14,22 +14,22 @@
 # through the S3 methods.
 #
 # Manuscript reference: methods/online_method.tex
-# (wavelet-based functional regression on a per-modality basis).
+# (wavelet-based functional regression on a per-outcome basis).
 
-#' Forward DWT pipeline for one modality
+#' Forward DWT pipeline for one outcome
 #'
 #' Applies, in order: `remap_data` (regrid to a power-of-two grid
 #' when the input is irregular or has a non-power-of-two length),
 #' `col_scale` (center + scale each position column), `dwt_matrix`
 #' (row-wise wavelet transform), and packs the resulting detail (D)
-#' and smoothing (C) coefficients into a single `n x T_padded`
+#' and smoothing (C) coefficients into a single `n x T_basis`
 #' matrix with C in the last column. Returns enough metadata for
 #' `mf_invert_dwt` to recover the position-space curve.
 #'
 #' For univariate inputs (`T_m = 1`), the wavelet machinery is
 #' skipped: the single column is centered and scaled, returned as a
 #' length-1 "wavelet coefficient" with `scale_index = 1L`, and
-#' `T_padded = 1L`. The inverse helper reverses the centering /
+#' `T_basis = 1L`. The inverse helper reverses the centering /
 #' scaling without any wavelet operation.
 #'
 #' @param Y_m numeric matrix `n x T_m`, one curve per row.
@@ -41,10 +41,10 @@
 #'   `wd`.
 #' @param verbose logical, forwarded to `remap_data`.
 #' @return list with elements `D` (packed wavelet matrix `n x
-#'   T_padded`), `scale_index` (integer vector from
-#'   `gen_wavelet_indx`), `T_padded` (integer scalar), `pos`
-#'   (post-remap position grid, length `T_padded`),
-#'   `column_center`, `column_scale` (vectors of length `T_padded`,
+#'   T_basis`), `scale_index` (integer vector from
+#'   `gen_wavelet_indx`), `T_basis` (integer scalar), `pos`
+#'   (post-remap position grid, length `T_basis`),
+#'   `column_center`, `column_scale` (vectors of length `T_basis`,
 #'   for inverse DWT), `family`, `filter_number`.
 #' @keywords internal
 #' @noRd
@@ -73,7 +73,7 @@ mf_dwt <- function(Y_m,
     return(list(
       D             = Y_scaled,
       scale_index   = list(1L),
-      T_padded      = 1L,
+      T_basis      = 1L,
       pos           = pos_m,
       column_center = cm,
       column_scale  = csd,
@@ -98,8 +98,8 @@ mf_dwt <- function(Y_m,
   column_center <- attr(Y_scaled, "scaled:center")
   column_scale  <- attr(Y_scaled, "scaled:scale")
 
-  T_padded   <- ncol(Y_remapped)
-  log2_T_pad <- log2(T_padded)
+  T_basis   <- ncol(Y_remapped)
+  log2_T_pad <- log2(T_basis)
   W <- dwt_matrix(Y_scaled,
                   filter_number = filter_number,
                   family        = family,
@@ -110,7 +110,7 @@ mf_dwt <- function(Y_m,
   list(
     D             = D_packed,
     scale_index   = scale_index,
-    T_padded      = T_padded,
+    T_basis      = T_basis,
     pos           = outing_grid,
     column_center = column_center,
     column_scale  = column_scale,
@@ -119,22 +119,22 @@ mf_dwt <- function(Y_m,
   )
 }
 
-#' Inverse of `mf_dwt` for one modality
+#' Inverse of `mf_dwt` for one outcome
 #'
-#' Takes a packed wavelet representation `n x T_padded` (or a
-#' length-`T_padded` vector for a single curve) and the
+#' Takes a packed wavelet representation `n x T_basis` (or a
+#' length-`T_basis` vector for a single curve) and the
 #' `column_center` / `column_scale` recorded by `mf_dwt`, and
 #' returns the corresponding position-space curve(s). For
 #' univariate inputs the inverse is a single multiply-add. For
 #' functional inputs, the inverse threads through `wr`.
 #'
-#' @param D_packed numeric matrix `n x T_padded` or numeric vector
-#'   of length `T_padded`. The detail coefficients occupy the
-#'   first `T_padded - 1` columns; the smoothing coefficient
+#' @param D_packed numeric matrix `n x T_basis` or numeric vector
+#'   of length `T_basis`. The detail coefficients occupy the
+#'   first `T_basis - 1` columns; the smoothing coefficient
 #'   occupies the last column (the convention `mf_dwt` produces).
-#' @param column_center numeric of length `T_padded`, the
+#' @param column_center numeric of length `T_basis`, the
 #'   per-position centers from `mf_dwt`.
-#' @param column_scale numeric of length `T_padded`, the
+#' @param column_scale numeric of length `T_basis`, the
 #'   per-position scales from `mf_dwt`.
 #' @param filter_number integer, must match the value passed to
 #'   `mf_dwt`.
@@ -153,28 +153,28 @@ mf_invert_dwt <- function(D_packed,
   if (is.null(dim(D_packed))) {
     D_packed <- matrix(D_packed, nrow = 1)
   }
-  T_padded <- ncol(D_packed)
+  T_basis <- ncol(D_packed)
   n <- nrow(D_packed)
 
   # Univariate short-circuit.
-  if (T_padded == 1) {
+  if (T_basis == 1) {
     return(D_packed * column_scale + column_center)
   }
 
   # Build a `wd` skeleton at the right length (filled with zeros);
   # we inject the D and C coefficients per row and call wr().
-  template <- wd(rep(0, T_padded),
+  template <- wd(rep(0, T_basis),
                              filter.number = filter_number,
                              family        = family,
-                             min.scale     = log2(T_padded))
+                             min.scale     = log2(T_basis))
 
-  Y_curves <- matrix(0, nrow = n, ncol = T_padded)
+  Y_curves <- matrix(0, nrow = n, ncol = T_basis)
   for (i in seq_len(n)) {
     w <- template
-    w$D <- D_packed[i, -T_padded]
+    w$D <- D_packed[i, -T_basis]
     # wavethresh stores the C coefficients as a vector spanning all
     # scales; the coarsest (level 0) C lives at the last position.
-    w$C[length(w$C)] <- D_packed[i, T_padded]
+    w$C[length(w$C)] <- D_packed[i, T_basis]
     Y_curves[i, ] <- wr(w)
   }
 

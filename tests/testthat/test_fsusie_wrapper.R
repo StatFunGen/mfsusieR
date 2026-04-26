@@ -67,8 +67,8 @@ test_that("fsusie() errors when the user passes a multi-modality argument", {
   X <- matrix(rnorm(30), nrow = 5)
   Y <- matrix(rnorm(40), nrow = 5)
   expect_error(
-    fsusie(Y, X, cross_modality_prior = list()),
-    "single-modality wrapper"
+    fsusie(Y, X, cross_outcome_prior = list()),
+    "single-outcome wrapper"
   )
 })
 

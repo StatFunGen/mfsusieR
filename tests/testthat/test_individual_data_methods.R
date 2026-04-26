@@ -14,10 +14,10 @@
 
 # ---- Helpers -----------------------------------------------------------
 
-make_data <- function(n = 30, J = 8, T_per_modality = c(64L, 128L)) {
+make_data <- function(n = 30, J = 8, T_per_outcome = c(64L, 128L)) {
   set.seed(mfsusier_test_seed())
   X <- matrix(rnorm(n * J), nrow = n)
-  Y <- lapply(T_per_modality, function(T_m) matrix(rnorm(n * T_m), nrow = n))
+  Y <- lapply(T_per_outcome, function(T_m) matrix(rnorm(n * T_m), nrow = n))
   mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE)
 }
 
@@ -26,15 +26,15 @@ make_model <- function(data, L = 3, sigma2_scalar = 1) {
                  residual_variance = lapply(seq_len(data$M),
                                             function(m) sigma2_scalar))
   var_y <- lapply(seq_len(data$M),
-                  function(m) rep(sigma2_scalar, data$T_padded[m]))
+                  function(m) rep(sigma2_scalar, data$T_basis[m]))
   mfsusieR:::initialize_susie_model.mf_individual(data, params, var_y)
 }
 
-# ---- predictor_weights cache -------------------------------------------
+# ---- xtx_diag cache -------------------------------------------
 
-test_that("data$predictor_weights = colSums(X^2) cached on mf_individual", {
+test_that("data$xtx_diag = colSums(X^2) cached on mf_individual", {
   data <- make_data()
-  expect_equal(data$predictor_weights, colSums(data$X^2), tolerance = 1e-12)
+  expect_equal(data$xtx_diag, colSums(data$X^2), tolerance = 1e-12)
 })
 
 # ---- compute_residuals.mf_individual ----------------------------------
@@ -48,7 +48,7 @@ test_that("compute_residuals returns model with per-modality residuals XtR", {
   expect_identical(length(out$residuals), data$M)
   for (m in seq_len(data$M)) {
     expect_identical(dim(out$residuals[[m]]),
-                     c(data$p, data$T_padded[m]))
+                     c(data$p, data$T_basis[m]))
   }
 })
 
@@ -96,13 +96,13 @@ test_that("compute_ser_statistics returns per-modality betahat, shat2", {
   expect_identical(length(out$shat2), data$M)
   for (m in seq_len(data$M)) {
     expect_identical(dim(out$betahat[[m]]),
-                     c(data$p, data$T_padded[m]))
+                     c(data$p, data$T_basis[m]))
     expect_identical(dim(out$shat2[[m]]),
-                     c(data$p, data$T_padded[m]))
+                     c(data$p, data$T_basis[m]))
   }
 })
 
-test_that("compute_ser_statistics betahat = XtR / predictor_weights", {
+test_that("compute_ser_statistics betahat = XtR / xtx_diag", {
   data <- make_data()
   model <- make_model(data, L = 3, sigma2_scalar = 1)
   model <- mfsusieR:::compute_residuals.mf_individual(data, NULL, model, 1)
@@ -111,7 +111,7 @@ test_that("compute_ser_statistics betahat = XtR / predictor_weights", {
 
   for (m in seq_len(data$M)) {
     expect_equal(out$betahat[[m]],
-                 model$residuals[[m]] / data$predictor_weights,
+                 model$residuals[[m]] / data$xtx_diag,
                  tolerance = 1e-12)
   }
 })
@@ -125,14 +125,14 @@ test_that("compute_ser_statistics shat2 broadcasts scalar sigma2 per modality", 
   out <- mfsusieR:::compute_ser_statistics.mf_individual(data, NULL, model, 1)
 
   for (m in seq_len(data$M)) {
-    expected <- matrix(sigma2 / data$predictor_weights,
-                       nrow = data$p, ncol = data$T_padded[m])
+    expected <- matrix(sigma2 / data$xtx_diag,
+                       nrow = data$p, ncol = data$T_basis[m])
     expect_equal(out$shat2[[m]], expected, tolerance = 1e-12)
   }
 })
 
 test_that("compute_ser_statistics shat2 broadcasts per-scale sigma2", {
-  data <- make_data(T_per_modality = 64L)
+  data <- make_data(T_per_outcome = 64L)
   S_m <- length(data$scale_index[[1]])
   sigma2_per_scale <- seq_len(S_m) * 0.1     # distinct per scale
   model <- make_model(data, L = 3)
@@ -146,7 +146,7 @@ test_that("compute_ser_statistics shat2 broadcasts per-scale sigma2", {
   for (s in seq_along(data$scale_index[[1]])) {
     expected_sigma2_per_pos[data$scale_index[[1]][[s]]] <- sigma2_per_scale[s]
   }
-  expected <- outer(1 / data$predictor_weights, expected_sigma2_per_pos)
+  expected <- outer(1 / data$xtx_diag, expected_sigma2_per_pos)
   expect_equal(out$shat2[[1]], expected, tolerance = 1e-12)
 })
 
@@ -160,13 +160,13 @@ test_that("update_fitted_values reconstructs fitted = fitted_without_l + Xb_l", 
   # Inject deterministic alpha and mu so we can verify the algebra.
   model$alpha[1, ] <- 1 / data$p
   for (m in seq_len(data$M)) {
-    model$mu[[1]][[m]] <- matrix(0.5, nrow = data$p, ncol = data$T_padded[m])
+    model$mu[[1]][[m]] <- matrix(0.5, nrow = data$p, ncol = data$T_basis[m])
   }
 
   out <- mfsusieR:::update_fitted_values.mf_individual(data, NULL, model, 1)
 
   for (m in seq_len(data$M)) {
-    b_lm <- (1 / data$p) * matrix(0.5, nrow = data$p, ncol = data$T_padded[m])
+    b_lm <- (1 / data$p) * matrix(0.5, nrow = data$p, ncol = data$T_basis[m])
     Xb_lm <- data$X %*% b_lm
     expected <- out$fitted_without_l[[m]] + Xb_lm
     expect_equal(out$fitted[[m]], expected, tolerance = 1e-12)
@@ -185,7 +185,7 @@ test_that("zero-effect IBSS sweep keeps fitted at zero", {
   # alpha_l . mu_l == 0 at init, so update keeps fitted == 0 within ULP.
   for (m in seq_len(data$M)) {
     expect_equal(out$fitted[[m]],
-                 matrix(0, nrow = data$n, ncol = data$T_padded[m]),
+                 matrix(0, nrow = data$n, ncol = data$T_basis[m]),
                  tolerance = 1e-12)
   }
 })
@@ -199,15 +199,15 @@ make_model_with_prior <- function(data, L = 3, sigma2_scalar = 1,
     data, prior_variance_grid = prior_variance_grid, null_prior_weight = 1
   )
   params <- list(L = L, prior_weights = NULL, prior = prior,
-                 cross_modality_prior = NULL,
+                 cross_outcome_prior = NULL,
                  residual_variance = lapply(seq_len(data$M),
                                             function(m) sigma2_scalar))
   var_y <- lapply(seq_len(data$M),
-                  function(m) rep(sigma2_scalar, data$T_padded[m]))
+                  function(m) rep(sigma2_scalar, data$T_basis[m]))
   mfsusieR:::initialize_susie_model.mf_individual(data, params, var_y)
 }
 
-test_that("initialize stashes G_prior and cross_modality_combiner on the model", {
+test_that("initialize stashes G_prior and cross_outcome_combiner on the model", {
   data <- make_data()
   model <- make_model_with_prior(data)
   expect_identical(length(model$G_prior), data$M)
@@ -215,8 +215,8 @@ test_that("initialize stashes G_prior and cross_modality_combiner on the model",
     expect_identical(length(model$G_prior[[m]]),
                      length(data$scale_index[[m]]))
   }
-  expect_s3_class(model$cross_modality_combiner,
-                  "mf_prior_cross_modality_independent")
+  expect_s3_class(model$cross_outcome_combiner,
+                  "mf_prior_cross_outcome_independent")
 })
 
 test_that("loglik.mf_individual updates alpha (sums to 1), lbf finite, lbf_variable length J", {
@@ -251,7 +251,7 @@ test_that("loglik.mf_individual returns a scalar lbf_model when l = NULL", {
 
 # ---- calculate_posterior_moments.mf_individual -----------------------
 
-test_that("calculate_posterior_moments shapes mu, mu2 are J x T_padded[m] per modality", {
+test_that("calculate_posterior_moments shapes mu, mu2 are J x T_basis[m] per modality", {
   data <- make_data()
   model <- make_model_with_prior(data)
   model <- mfsusieR:::compute_residuals.mf_individual(data, NULL, model, 1)
@@ -260,9 +260,9 @@ test_that("calculate_posterior_moments shapes mu, mu2 are J x T_padded[m] per mo
 
   for (m in seq_len(data$M)) {
     expect_identical(dim(out$mu[[1]][[m]]),
-                     c(data$p, data$T_padded[m]))
+                     c(data$p, data$T_basis[m]))
     expect_identical(dim(out$mu2[[1]][[m]]),
-                     c(data$p, data$T_padded[m]))
+                     c(data$p, data$T_basis[m]))
     # Second moment satisfies E[X^2] >= (E[X])^2 elementwise.
     expect_true(all(out$mu2[[1]][[m]] >= out$mu[[1]][[m]]^2 - 1e-12))
   }
@@ -276,15 +276,15 @@ test_that("calculate_posterior_moments with broadcast scalar sigma2 matches per-
 
   out <- mfsusieR:::calculate_posterior_moments.mf_individual(data, NULL, model, V = 1, l = 1)
 
-  pw <- data$predictor_weights
+  pw <- data$xtx_diag
   for (m in seq_len(data$M)) {
     Bhat_m <- model$residuals[[m]] / pw
     Shat_m <- sqrt(matrix(model$sigma2[[m]] / pw,
                           nrow = data$p, ncol = ncol(model$residuals[[m]])))
     indx_m <- data$scale_index[[m]]
     G_m <- model$G_prior[[m]]
-    mu_expected  <- matrix(0, nrow = data$p, ncol = data$T_padded[m])
-    mu2_expected <- matrix(0, nrow = data$p, ncol = data$T_padded[m])
+    mu_expected  <- matrix(0, nrow = data$p, ncol = data$T_basis[m])
+    mu2_expected <- matrix(0, nrow = data$p, ncol = data$T_basis[m])
     for (s in seq_along(indx_m)) {
       idx <- indx_m[[s]]
       g_s <- G_m[[s]]$fitted_g
@@ -319,20 +319,20 @@ test_that("loglik / calculate_posterior_moments with K=1, no null reduce to susi
       matrix(1, nrow = length(data$scale_index[[m]]), ncol = 1)
     }),
     null_prior_weight    = 0,
-    prior_variance_scope = "per_scale_modality"
+    prior_variance_scope = "per_scale"
   )
   class(prior) <- "mf_prior_scale_mixture"
   params <- list(L = 1, prior_weights = NULL, prior = prior,
-                 cross_modality_prior = NULL,
+                 cross_outcome_prior = NULL,
                  residual_variance = lapply(seq_len(data$M), function(m) 1))
-  var_y <- lapply(seq_len(data$M), function(m) rep(1, data$T_padded[m]))
+  var_y <- lapply(seq_len(data$M), function(m) rep(1, data$T_basis[m]))
   model <- mfsusieR:::initialize_susie_model.mf_individual(data, params, var_y)
 
   V <- 2.5
   model <- mfsusieR:::compute_residuals.mf_individual(data, NULL, model, 1)
   out <- mfsusieR:::calculate_posterior_moments.mf_individual(data, NULL, model, V = V, l = 1)
 
-  pw <- data$predictor_weights
+  pw <- data$xtx_diag
   for (m in seq_len(data$M)) {
     XtR <- model$residuals[[m]]
     Shat2 <- matrix(model$sigma2[[m]] / pw,
@@ -368,7 +368,7 @@ test_that("SER_posterior_e_loglik matches the per-modality, per-position formula
 
   # Hand re-derive the formula and compare.
   alpha_l <- model$alpha[1, ]
-  pw <- data$predictor_weights
+  pw <- data$xtx_diag
   expected <- 0
   for (m in seq_len(data$M)) {
     Eb_m  <- alpha_l * model$mu[[1]][[m]]
@@ -387,7 +387,7 @@ test_that("SER_posterior_e_loglik matches the per-modality, per-position formula
 })
 
 test_that("SER_posterior_e_loglik handles per-scale sigma2 (model$sigma2 vector)", {
-  data <- make_data(T_per_modality = 64L)  # single modality so per-scale shape is unambiguous
+  data <- make_data(T_per_outcome = 64L)  # single modality so per-scale shape is unambiguous
   model <- make_model_with_prior(data)
   # Per-scale sigma2 vector (length S_m).
   S_m <- length(data$scale_index[[1]])
@@ -402,7 +402,7 @@ test_that("SER_posterior_e_loglik handles per-scale sigma2 (model$sigma2 vector)
 
   # Cross-check the broadcast helper directly on the per-scale path.
   s2_t <- mfsusieR:::mf_sigma2_per_position(data, model, 1)
-  expect_identical(length(s2_t), data$T_padded[1])
+  expect_identical(length(s2_t), data$T_basis[1])
   for (s in seq_len(S_m)) {
     expect_true(all(s2_t[data$scale_index[[1]][[s]]] == model$sigma2[[1]][s]))
   }
@@ -490,7 +490,7 @@ test_that("susieR helpers are cached on the mfsusieR namespace", {
 
 test_that("compute_ser_statistics betahat matches mvf.susie.alpha at 1e-12 (initial residual)", {
   skip_if_no_mvf_alpha()
-  data <- make_data(n = 50, J = 10, T_per_modality = 64L)
+  data <- make_data(n = 50, J = 10, T_per_outcome = 64L)
   model <- make_model(data, L = 3, sigma2_scalar = 1)
 
   # Initial residual (l = 1, all-zero effects): R_m = D[[m]] entirely.

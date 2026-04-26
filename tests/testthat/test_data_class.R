@@ -16,9 +16,9 @@ make_X <- function(n, J, seed = mfsusier_test_seed()) {
   X
 }
 
-make_Y_functional <- function(n, T_per_modality, seed = mfsusier_test_seed()) {
+make_Y_functional <- function(n, T_per_outcome, seed = mfsusier_test_seed()) {
   set.seed(seed + 1)
-  lapply(T_per_modality, function(T_m) matrix(rnorm(n * T_m), nrow = n))
+  lapply(T_per_outcome, function(T_m) matrix(rnorm(n * T_m), nrow = n))
 }
 
 # ---- Constructor input validation --------------------------------------
@@ -72,19 +72,19 @@ test_that("mf_dwt accepts a vector Y_m and coerces to matrix; T_m=1 short-circui
   Y_const <- rep(1.5, 10)
   out <- mfsusieR:::mf_dwt(Y_const, pos_m = seq_len(1),
                            verbose = FALSE)
-  expect_identical(out$T_padded, 1L)
+  expect_identical(out$T_basis, 1L)
   # Centered to zero (Y - mean = 0); csd was forced to 1, so D = 0 vec.
   expect_true(all(out$D == 0))
 })
 
-test_that("mf_invert_dwt handles a length-1 D vector (vector input, T_padded=1)", {
+test_that("mf_invert_dwt handles a length-1 D vector (vector input, T_basis=1)", {
   # A 1-position case: D is just (n,1) matrix; round-trip should yield
   # back a (n,1) matrix when reconstructed.
   set.seed(mfsusier_test_seed())
   X <- matrix(rnorm(10), 5)
   Y <- list(matrix(rnorm(5), 5))   # T_m = 1
   data <- mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE)
-  expect_identical(data$T_padded[1], 1L)
+  expect_identical(data$T_basis[1], 1L)
 })
 
 test_that("create_mf_individual rejects non-matrix X", {
@@ -127,7 +127,7 @@ test_that("M = 1 functional case stores DWT cache with the right shape", {
   expect_identical(obj$M, 1L)
   expect_identical(obj$n, 20L)
   expect_identical(obj$p, 8L)
-  expect_identical(obj$T_padded, 64L)
+  expect_identical(obj$T_basis, 64L)
   expect_identical(length(obj$D), 1L)
   expect_identical(dim(obj$D[[1]]), c(20L, 64L))
   expect_identical(length(obj$scale_index), 1L)
@@ -146,15 +146,15 @@ test_that("ragged modality lengths are stored without padding to a common T", {
   obj <- mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE)
 
   expect_identical(obj$M, 3L)
-  expect_identical(obj$T_padded, c(64L, 128L, 256L))
+  expect_identical(obj$T_basis, c(64L, 128L, 256L))
   expect_identical(dim(obj$D[[1]]), c(20L, 64L))
   expect_identical(dim(obj$D[[2]]), c(20L, 128L))
   expect_identical(dim(obj$D[[3]]), c(20L, 256L))
   for (m in seq_len(3)) {
     expect_identical(length(obj$wavelet_meta$column_center[[m]]),
-                     as.integer(obj$T_padded[m]))
+                     as.integer(obj$T_basis[m]))
     expect_identical(length(obj$wavelet_meta$column_scale[[m]]),
-                     as.integer(obj$T_padded[m]))
+                     as.integer(obj$T_basis[m]))
   }
 })
 
@@ -166,7 +166,7 @@ test_that("T_m = 1 short-circuits the wavelet machinery", {
   obj <- mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE,
                                          pos = list(1))
 
-  expect_identical(obj$T_padded, 1L)
+  expect_identical(obj$T_basis, 1L)
   expect_identical(obj$scale_index[[1]], list(1L))
   expect_identical(dim(obj$D[[1]]), c(20L, 1L))
   expect_equal(mean(obj$D[[1]]), 0, tolerance = 1e-12)
@@ -183,7 +183,7 @@ test_that("mixed (T_1 = 1, T_2 > 1) modalities flow through one constructor", {
                                          pos = list(1, seq_len(64)))
 
   expect_identical(obj$M, 2L)
-  expect_identical(obj$T_padded, c(1L, 64L))
+  expect_identical(obj$T_basis, c(1L, 64L))
   expect_identical(dim(obj$D[[1]]), c(20L, 1L))
   expect_identical(dim(obj$D[[2]]), c(20L, 64L))
 })
@@ -209,13 +209,13 @@ test_that("X scaling applied when standardize = TRUE (default)", {
   expect_equal(col_sds, rep(1, ncol(X)), tolerance = 1e-12)
 })
 
-test_that("zero-variance X column is preserved with csd_X = 1", {
+test_that("zero-variance X column is preserved with csd = 1", {
   X <- make_X(20, 5)
   X[, 3] <- 1                          # constant column
   Y <- make_Y_functional(20, 64)
   obj <- mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE)
 
-  expect_identical(obj$csd_X[3], 1)
+  expect_identical(obj$csd[3], 1)
   expect_true(all(is.finite(obj$X[, 3])))
 })
 
@@ -265,7 +265,7 @@ test_that("the constructor's per-modality D matches a direct mf_dwt call", {
 
   expect_equal(obj$D[[1]], out$D, tolerance = 0)
   expect_identical(obj$scale_index[[1]], out$scale_index)
-  expect_identical(obj$T_padded[1], out$T_padded)
+  expect_identical(obj$T_basis[1], out$T_basis)
 })
 
 # ---- Default pos is seq_len(T_m) per modality --------------------------

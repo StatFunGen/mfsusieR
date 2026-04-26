@@ -16,7 +16,7 @@ knitr::opts_chunk$set(
 )
 ```
 
-Joint multi-modality fits over many ATAC-seq conditions, dense
+Joint multi-outcome fits over many ATAC-seq conditions, dense
 position grids, or large `p` (number of predictors) can run beyond
 the wall time of a typical cluster job. This vignette covers
 practical patterns for handling those cases.
@@ -46,7 +46,7 @@ Y_list <- lapply(T_func, function(T_m) {
 })
 
 fit_short <- mfsusie(X, Y_list, L = 5, max_iter = 5,
-                     prior_variance_scope = "per_modality",
+                     prior_variance_scope = "per_outcome",
                      verbose = FALSE)
 fit_short$niter
 fit_short$converged
@@ -58,7 +58,7 @@ few iterations, the fix is more iterations.
 
 ```{r run-full}
 fit_full <- mfsusie(X, Y_list, L = 5, max_iter = 100,
-                    prior_variance_scope = "per_modality",
+                    prior_variance_scope = "per_outcome",
                     verbose = FALSE)
 fit_full$niter
 fit_full$converged
@@ -98,7 +98,7 @@ For diagnostic monitoring inside a long run, consider:
 ```{r monitor, eval = FALSE}
 fit <- mfsusie(X, Y_list, L = 5,
                max_iter = 100, tol = 1e-3,
-               prior_variance_scope = "per_modality",
+               prior_variance_scope = "per_outcome",
                verbose = TRUE,                # logs per-iter ELBO
                track_fit = TRUE)              # records full trajectory
 ```
@@ -107,13 +107,13 @@ fit <- mfsusie(X, Y_list, L = 5,
 `fit$trace`, which is useful for debugging slow convergence at the
 cost of memory.
 
-## When the bottleneck is `T_padded` rather than iterations
+## When the bottleneck is `T_basis` rather than iterations
 
-A fit on a single modality with `T_m = 4096` can be slow at the
+A fit on a single outcome with `T_m = 4096` can be slow at the
 wavelet step regardless of iteration count. Two levers:
 
 - `max_padded_log2` caps the wavelet grid size. The default is `10`
-  (i.e., `T_padded <= 1024`). Drop it for a sanity check.
+  (i.e., `T_basis <= 1024`). Drop it for a sanity check.
 - Drop `coverage` from `0.95` to a coarser `0.9` to reduce the size
   of credible-set search.
 

@@ -13,11 +13,11 @@
 }
 \value{
 list of length \code{M}; each element an \verb{L x T_m} matrix
-whose row \code{l} is effect \code{l}'s coefficient curve for modality
+whose row \code{l} is effect \code{l}'s coefficient curve for outcome
 \code{m}.
 }
 \description{
-Returns the per-effect, per-modality coefficient curves on the
+Returns the per-effect, per-outcome coefficient curves on the
 original (unstandardized) X scale, projected back through the
 inverse wavelet transform to the original position grid.
 }

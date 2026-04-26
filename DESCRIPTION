@@ -1,7 +1,7 @@
 Type: Package
 Package: mfsusieR
 Title: Multi-Modality Sum of Single Functions Regression
-Version: 0.0.0.9000
+Version: 0.0.1
 Date: 2026-04-25
 Authors@R: c(
     person("Gao", "Wang", role = c("aut", "cre"),

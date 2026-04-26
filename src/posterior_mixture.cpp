@@ -1,4 +1,4 @@
-// Per-(SNP, scale) mixture-of-normals kernels for the mfsusieR per-effect
+// Per-(variable, scale) mixture-of-normals kernels for the mfsusieR per-effect
 // SER step. cpp11 implementation; pure-R oracles in
 // `R/reference_implementations.R` (`mixture_log_bf_per_scale_R`,
 // `mixture_posterior_per_scale_R`) match these at <= 1e-12 in unit tests.
@@ -31,7 +31,7 @@ inline double log_normal_zero_mean(double x, double var) {
 
 }  // namespace
 
-// Per-(SNP, scale) log-Bayes factor for the mixture-of-normals prior.
+// Per-(variable, scale) log-Bayes factor for the mixture-of-normals prior.
 // Returns a length-J vector. See `mixture_log_bf_per_scale_R` for the
 // reference R implementation.
 [[cpp11::register]]
@@ -91,7 +91,7 @@ doubles mixture_log_bf_per_scale_cpp(doubles_matrix<> bhat,
   return out;
 }
 
-// Per-(SNP, position) posterior mean and second moment under the
+// Per-(variable, position) posterior mean and second moment under the
 // per-scale mixture-of-normals prior. Returns a list with `pmean` and
 // `pmean2`. See `mixture_posterior_per_scale_R` for the R reference.
 [[cpp11::register]]

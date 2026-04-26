@@ -10,13 +10,13 @@
 # `<kernel>` (no suffix) for the cpp11 kernel, matching mvsusieR.
 
 # =============================================================================
-# Mixture-of-normals per-(SNP, scale) helpers (oracle for src/posterior_mixture.cpp)
+# Mixture-of-normals per-(variable, scale) helpers (oracle for src/posterior_mixture.cpp)
 # =============================================================================
 
-#' Per-(SNP, scale) log-Bayes factor: pure-R oracle
+#' Per-(variable, scale) log-Bayes factor: pure-R oracle
 #'
 #' Closed-form log-BF for the per-scale mixture-of-normals prior.
-#' For SNP j and the scale's |idx_s| positions, computes
+#' For variable j and the scale's |idx_s| positions, computes
 #' `sum_i logSumExp_k(log(pi_k) + log dnorm(Bhat[j,i]; 0, V*sd_k^2 + Shat[j,i]^2)
 #'                                    - log dnorm(Bhat[j,i]; 0, Shat[j,i]^2))`.
 #' The null component (`sd_k = 0`) contributes `log(pi_k)` per position.
@@ -61,7 +61,7 @@ mixture_log_bf_per_scale_R <- function(bhat_slice,
   rowSums(m + log(s))
 }
 
-#' Per-(SNP, position) posterior moments: pure-R oracle
+#' Per-(variable, position) posterior moments: pure-R oracle
 #'
 #' Closed-form posterior mean and second moment under the per-scale
 #' mixture-of-normals prior, treating each position as conditionally

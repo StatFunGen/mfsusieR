@@ -16,7 +16,7 @@ list of length \code{M}; each element a numeric matrix
 \verb{n x T_m} of fitted curves.
 }
 \description{
-Projects the running per-modality fit \code{fit$fitted[[m]]} (which
+Projects the running per-outcome fit \code{fit$fitted[[m]]} (which
 lives in the wavelet domain) back to the original position grid
 via the inverse wavelet transform. Equivalent to
 \code{predict(object, newx = X_train)}.

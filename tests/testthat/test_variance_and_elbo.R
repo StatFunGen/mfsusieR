@@ -1,7 +1,7 @@
 # PR group 6: variance components, mixture-weight update, ELBO.
 #
 # Apple-to-apple comparisons:
-#   - shared_per_modality variance update vs the per-position formula
+#   - per_outcome variance update vs the per-position formula
 #     in mvf.susie.alpha::estimate_residual_variance (R/computational_routine.R#L395-L431).
 #   - mixsqp output vs fsusieR::scale_m_step on a canonical fixture
 #     (machine precision; the cpp11 kernels and the ported helpers
@@ -14,10 +14,10 @@
 
 # ---- ER2 helper ----------------------------------------------------
 
-make_data_for_ev <- function(n = 30, J = 8, T_per_modality = c(64L, 128L)) {
+make_data_for_ev <- function(n = 30, J = 8, T_per_outcome = c(64L, 128L)) {
   set.seed(mfsusier_test_seed())
   X <- matrix(rnorm(n * J), nrow = n)
-  Y <- lapply(T_per_modality, function(T_m) matrix(rnorm(n * T_m), nrow = n))
+  Y <- lapply(T_per_outcome, function(T_m) matrix(rnorm(n * T_m), nrow = n))
   mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE)
 }
 
@@ -26,21 +26,21 @@ make_model_with_post <- function(data, L = 2, sigma2_scalar = 1) {
     data, prior_variance_grid = c(0.1, 0.5, 2), null_prior_weight = 1
   )
   params <- list(L = L, prior_weights = NULL, prior = prior,
-                 cross_modality_prior = NULL,
+                 cross_outcome_prior = NULL,
                  residual_variance = lapply(seq_len(data$M),
                                             function(m) sigma2_scalar))
   var_y <- lapply(seq_len(data$M),
-                  function(m) rep(sigma2_scalar, data$T_padded[m]))
+                  function(m) rep(sigma2_scalar, data$T_basis[m]))
   model <- mfsusieR:::initialize_susie_model.mf_individual(data, params, var_y)
   # Inject deterministic non-zero alpha + mu so ER2 / Eloglik are non-trivial.
   for (l in seq_len(L)) {
     model$alpha[l, ] <- runif(data$p)
     model$alpha[l, ] <- model$alpha[l, ] / sum(model$alpha[l, ])
     for (m in seq_len(data$M)) {
-      model$mu[[l]][[m]]  <- matrix(rnorm(data$p * data$T_padded[m], sd = 0.1),
+      model$mu[[l]][[m]]  <- matrix(rnorm(data$p * data$T_basis[m], sd = 0.1),
                                     nrow = data$p)
       model$mu2[[l]][[m]] <- model$mu[[l]][[m]]^2 +
-                             matrix(runif(data$p * data$T_padded[m], 0.05, 0.2),
+                             matrix(runif(data$p * data$T_basis[m], 0.05, 0.2),
                                     nrow = data$p)
     }
   }
@@ -48,7 +48,7 @@ make_model_with_post <- function(data, L = 2, sigma2_scalar = 1) {
   # `mf_get_ER2_per_position` (which reads `model$fitted[[m]]`) is
   # consistent with `alpha * mu`.
   for (m in seq_len(data$M)) {
-    postF <- matrix(0, nrow = data$p, ncol = data$T_padded[m])
+    postF <- matrix(0, nrow = data$p, ncol = data$T_basis[m])
     for (l in seq_len(L)) {
       postF <- postF + model$alpha[l, ] * model$mu[[l]][[m]]
     }
@@ -65,14 +65,14 @@ test_that("mf_get_ER2_per_position matches the susieR-style formula", {
     er2 <- mfsusieR:::mf_get_ER2_per_position(data, model, m)
 
     # Hand-recompute.
-    pw     <- data$predictor_weights
-    postF  <- matrix(0, nrow = data$p, ncol = data$T_padded[m])
+    pw     <- data$xtx_diag
+    postF  <- matrix(0, nrow = data$p, ncol = data$T_basis[m])
     for (l in seq_len(model$L)) {
       postF <- postF + model$alpha[l, ] * model$mu[[l]][[m]]
     }
     res    <- data$D[[m]] - data$X %*% postF
     rss_t  <- colSums(res^2)
-    bias_t <- numeric(data$T_padded[m])
+    bias_t <- numeric(data$T_basis[m])
     for (l in seq_len(model$L)) {
       a   <- model$alpha[l, ]
       Bl  <- a * model$mu[[l]][[m]]
@@ -86,25 +86,25 @@ test_that("mf_get_ER2_per_position matches the susieR-style formula", {
 
 # ---- update_variance_components --------------------------------
 
-test_that("update_variance_components shared_per_modality returns a scalar per modality", {
+test_that("update_variance_components per_outcome returns a scalar per modality", {
   data  <- make_data_for_ev()
   model <- make_model_with_post(data)
-  params <- list(residual_variance_method = "shared_per_modality")
+  params <- list(residual_variance_scope = "per_outcome")
 
   out <- mfsusieR:::update_variance_components.mf_individual(data, params, model)
   for (m in seq_len(data$M)) {
     expect_length(out$sigma2[[m]], 1L)
     er2 <- mfsusieR:::mf_get_ER2_per_position(data, model, m)
     expect_equal(out$sigma2[[m]],
-                 sum(er2) / (data$n * data$T_padded[m]),
+                 sum(er2) / (data$n * data$T_basis[m]),
                  tolerance = 1e-12)
   }
 })
 
-test_that("update_variance_components per_scale_modality returns length-S_m vector per modality", {
+test_that("update_variance_components per_scale returns length-S_m vector per modality", {
   data  <- make_data_for_ev()
   model <- make_model_with_post(data)
-  params <- list(residual_variance_method = "per_scale_modality")
+  params <- list(residual_variance_scope = "per_scale")
 
   out <- mfsusieR:::update_variance_components.mf_individual(data, params, model)
   for (m in seq_len(data$M)) {
@@ -119,7 +119,7 @@ test_that("update_variance_components per_scale_modality returns length-S_m vect
   }
 })
 
-test_that("update_variance_components defaults to per_scale_modality when method is unset", {
+test_that("update_variance_components defaults to per_scale when method is unset", {
   data  <- make_data_for_ev()
   model <- make_model_with_post(data)
   out_default <- mfsusieR:::update_variance_components.mf_individual(data, list(), model)
@@ -233,16 +233,16 @@ test_that("get_objective with per-scale sigma2 + non-uniform model$pi", {
 # ---- Edge cases ------------------------------------------------
 
 test_that("M = 1 single modality: variance / Eloglik / objective all return finite scalars", {
-  data  <- make_data_for_ev(T_per_modality = 64L)
+  data  <- make_data_for_ev(T_per_outcome = 64L)
   expect_identical(data$M, 1L)
   model <- make_model_with_post(data, L = 2)
 
   v_shared <- mfsusieR:::update_variance_components.mf_individual(
-    data, list(residual_variance_method = "shared_per_modality"), model)
+    data, list(residual_variance_scope = "per_outcome"), model)
   expect_length(v_shared$sigma2[[1]], 1L)
 
   v_per <- mfsusieR:::update_variance_components.mf_individual(
-    data, list(residual_variance_method = "per_scale_modality"), model)
+    data, list(residual_variance_scope = "per_scale"), model)
   expect_length(v_per$sigma2[[1]], length(data$scale_index[[1]]))
 
   el <- mfsusieR:::Eloglik.mf_individual(data, model)
@@ -262,7 +262,7 @@ test_that("L = 1 single effect: ER2 reduces to RSS + single bias correction", {
     a   <- model$alpha[1, ]
     Bl  <- a * model$mu[[1]][[m]]
     XBl <- data$X %*% Bl
-    bias <- colSums((a * data$predictor_weights) * model$mu2[[1]][[m]]) -
+    bias <- colSums((a * data$xtx_diag) * model$mu2[[1]][[m]]) -
             colSums(XBl * XBl)
     expect_equal(er2, rss + bias, tolerance = 1e-12)
   }
@@ -274,7 +274,7 @@ test_that("All-zero alpha (no effects): ER2 = ||D||^2 per position", {
   model <- make_model_with_post(data)
   for (l in seq_len(model$L)) model$alpha[l, ] <- 0
   for (m in seq_len(data$M)) {
-    model$fitted[[m]] <- matrix(0, nrow = data$n, ncol = data$T_padded[m])
+    model$fitted[[m]] <- matrix(0, nrow = data$n, ncol = data$T_basis[m])
   }
 
   for (m in seq_len(data$M)) {
@@ -313,7 +313,7 @@ test_that("update_model_variance.mf_individual orchestrates sigma2 update + deri
   data  <- make_data_for_ev()
   model <- make_model_with_post(data)
   params <- list(estimate_residual_variance = TRUE,
-                 residual_variance_method = "shared_per_modality")
+                 residual_variance_scope = "per_outcome")
 
   out <- mfsusieR:::update_model_variance.mf_individual(data, params, model)
 
@@ -324,7 +324,7 @@ test_that("update_model_variance.mf_individual orchestrates sigma2 update + deri
   }
   # Running fit was synced to current alpha * mu.
   for (m in seq_len(data$M)) {
-    postF <- matrix(0, nrow = data$p, ncol = data$T_padded[m])
+    postF <- matrix(0, nrow = data$p, ncol = data$T_basis[m])
     for (l in seq_len(model$L)) {
       postF <- postF + model$alpha[l, ] * model$mu[[l]][[m]]
     }
@@ -352,7 +352,7 @@ test_that("mf_em_m_step_per_scale matches a hand-rolled mixsqp invocation at <= 
 
   L_mat <- mfsusieR:::mf_em_likelihood_per_scale(bhat, shat, sd_grid)
   ours  <- mfsusieR:::mf_em_m_step_per_scale(L_mat, zeta, idx_size,
-                                             nullweight = 0.7)
+                                             mixsqp_null_penalty = 0.7)
 
   # Hand mixsqp (same arguments, same control).
   w <- c(0.7 * idx_size, rep(zeta, idx_size))
@@ -369,14 +369,14 @@ test_that("mf_em_m_step_per_scale matches a hand-rolled mixsqp invocation at <= 
 
 # ---- update_variance_components on per-scale sigma2 already initialized ----
 
-test_that("update_variance_components per_scale_modality preserves shape when sigma2 was already a vector", {
+test_that("update_variance_components per_scale preserves shape when sigma2 was already a vector", {
   data  <- make_data_for_ev()
   model <- make_model_with_post(data)
   for (m in seq_len(data$M)) {
     model$sigma2[[m]] <- rep(0.5, length(data$scale_index[[m]]))
   }
   out <- mfsusieR:::update_variance_components.mf_individual(
-    data, list(residual_variance_method = "per_scale_modality"), model)
+    data, list(residual_variance_scope = "per_scale"), model)
   for (m in seq_len(data$M)) {
     expect_length(out$sigma2[[m]], length(data$scale_index[[m]]))
     expect_true(all(out$sigma2[[m]] > 0))
@@ -422,7 +422,7 @@ test_that("update_variance_components errors on unrecognized method", {
   model <- make_model_with_post(data)
   expect_error(
     mfsusieR:::update_variance_components.mf_individual(
-      data, list(residual_variance_method = "bogus_mode"), model),
+      data, list(residual_variance_scope = "bogus_mode"), model),
     "must be one of"
   )
 })
@@ -441,20 +441,20 @@ test_that("init_scale_mixture_prior_default errors on NULL groups", {
   )
 })
 
-test_that("initialize_susie_model.mf_individual reads cross_modality_prior from params when supplied", {
+test_that("initialize_susie_model.mf_individual reads cross_outcome_prior from params when supplied", {
   data <- make_data_for_ev()
   prior <- mfsusieR:::mf_prior_scale_mixture(
     data, prior_variance_grid = c(0.1, 0.5), null_prior_weight = 1)
-  custom_xmod <- mfsusieR:::cross_modality_prior_independent()
+  custom_xmod <- mfsusieR:::cross_outcome_prior_independent()
   class(custom_xmod) <- c("custom_combiner", class(custom_xmod))
 
   params <- list(L = 2, prior_weights = NULL, prior = prior,
-                 cross_modality_prior = custom_xmod,
+                 cross_outcome_prior = custom_xmod,
                  residual_variance = lapply(seq_len(data$M), function(m) 1))
   var_y <- lapply(seq_len(data$M),
-                  function(m) rep(1, data$T_padded[m]))
+                  function(m) rep(1, data$T_basis[m]))
   model <- mfsusieR:::initialize_susie_model.mf_individual(data, params, var_y)
-  expect_identical(model$cross_modality_combiner, custom_xmod)
+  expect_identical(model$cross_outcome_combiner, custom_xmod)
 })
 
 test_that("mf_prior_scale_mixture errors when data is not an mf_individual object", {
@@ -464,7 +464,7 @@ test_that("mf_prior_scale_mixture errors when data is not an mf_individual objec
   )
 })
 
-test_that("mf_prior_scale_mixture per_modality scope on data-driven path returns single-row pi", {
+test_that("mf_prior_scale_mixture per_outcome scope on data-driven path returns single-row pi", {
   set.seed(mfsusier_test_seed())
   data <- mfsusieR:::create_mf_individual(
     X = matrix(rnorm(20 * 4), 20),
@@ -473,7 +473,7 @@ test_that("mf_prior_scale_mixture per_modality scope on data-driven path returns
   )
   prior <- mfsusieR:::mf_prior_scale_mixture(
     data, prior_variance_grid = NULL,
-    prior_variance_scope = "per_modality",
+    prior_variance_scope = "per_outcome",
     null_prior_weight = 1
   )
   for (m in seq_len(data$M)) {
@@ -507,8 +507,8 @@ test_that("loglik handles zero-predictor-weight SNPs by zeroing their lbf", {
   data <- make_data_for_ev()
   # Inject a constant column in X so its colSum-of-squares = 0 after centering.
   data$X[, 1] <- 0
-  data$predictor_weights <- colSums(data$X^2)
-  expect_equal(data$predictor_weights[1], 0)
+  data$xtx_diag <- colSums(data$X^2)
+  expect_equal(data$xtx_diag[1], 0)
 
   model <- make_model_with_post(data)
   model <- mfsusieR:::compute_residuals.mf_individual(data, NULL, model, 1)

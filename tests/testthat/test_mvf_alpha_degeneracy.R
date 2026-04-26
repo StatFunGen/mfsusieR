@@ -43,10 +43,10 @@ make_c3_fixture <- function(n = 80, J = 12, T_per = c(32L, 64L),
 }
 
 c3_fit_pair <- function(X, Y, L = 3, max_iter = 30) {
-  # mfsusie with `prior_variance_scope = "per_modality"` to match
+  # mfsusie with `prior_variance_scope = "per_outcome"` to match
   # the (single-grid) mixture_normal prior that multfsusie supports.
   fit_m <- mfsusieR::mfsusie(X, Y, L = L,
-                             prior_variance_scope = "per_modality",
+                             prior_variance_scope = "per_outcome",
                              max_iter = max_iter, tol = 1e-6,
                              verbose = FALSE)
   # multfsusie expects Y as a list with $Y_f (functional matrices)

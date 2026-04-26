@@ -9,13 +9,13 @@
 # truth for fixture contents; the .rds files are generated artefacts.
 #
 # Each fixture contains a self-contained list with at minimum:
-#   - X        : N x J SNP matrix (centered, not scaled),
+#   - X        : N x J variable matrix (centered, not scaled),
 #   - Y        : list with $Y_f (list of N x T_m functional matrices)
 #                and optional $Y_u (N x q_u univariate matrix), matching
 #                the input shape expected by `mvf.susie.alpha::multfsusie`,
-#   - pos      : list of length M, sampling positions per modality,
+#   - pos      : list of length M, sampling positions per outcome,
 #   - L_true   : number of true causal effects,
-#   - true_idx : integer vector of true causal SNP indices,
+#   - true_idx : integer vector of true causal variable indices,
 #   - seed     : the recorded RNG seed used to construct this fixture.
 #
 # This file does NOT depend on `mvf.susie.alpha`. Apple-to-apple fidelity
@@ -33,8 +33,8 @@ dir.create(fixture_dir, showWarnings = FALSE, recursive = TRUE)
 # ---------------------------------------------------------------------------
 # Scenario: minimal (M = 2, T = c(64, 128), N = 200, J = 50, L = 3)
 # ---------------------------------------------------------------------------
-# Two functional modalities of different lengths (ragged T_m), small N and
-# J so the fixture stays under 1 MB. Three true causal SNPs with sparse
+# Two functional outcomes of different lengths (ragged T_m), small N and
+# J so the fixture stays under 1 MB. Three true causal variables with sparse
 # wavelet-domain effects added to Gaussian noise.
 
 make_scenario_minimal <- function() {
@@ -43,8 +43,8 @@ make_scenario_minimal <- function() {
 
   N <- 200L
   J <- 50L
-  T_per_modality <- c(64L, 128L)
-  M <- length(T_per_modality)
+  T_per_outcome <- c(64L, 128L)
+  M <- length(T_per_outcome)
   L_true <- 3L
 
   # Genotype matrix: 0/1/2 dosages with mild minor-allele frequency.
@@ -56,12 +56,12 @@ make_scenario_minimal <- function() {
   X <- scale(X, center = TRUE, scale = FALSE)
   attr(X, "scaled:center") <- NULL
 
-  # True causal SNPs.
+  # True causal variables.
   true_idx <- sort(sample.int(J, L_true))
 
-  # Smooth functional effect for each (effect l, modality m). The signal
-  # is a sum of two Gaussian bumps with modality-specific centres, scaled
-  # so that the per-modality signal-to-noise ratio is moderate.
+  # Smooth functional effect for each (effect l, outcome m). The signal
+  # is a sum of two Gaussian bumps with outcome-specific centres, scaled
+  # so that the per-outcome signal-to-noise ratio is moderate.
   make_func_effect <- function(T_m, l, m) {
     grid <- seq_len(T_m) / T_m
     centre1 <- ((l - 1L) %% 3L) / 3 + 0.15
@@ -74,7 +74,7 @@ make_scenario_minimal <- function() {
 
   Y_f <- vector("list", M)
   for (m in seq_len(M)) {
-    T_m <- T_per_modality[m]
+    T_m <- T_per_outcome[m]
     Y_f[[m]] <- matrix(rnorm(N * T_m, sd = 1.0), nrow = N, ncol = T_m)
     for (l in seq_len(L_true)) {
       eff <- make_func_effect(T_m, l, m)
@@ -83,7 +83,7 @@ make_scenario_minimal <- function() {
     }
   }
 
-  pos <- lapply(T_per_modality, function(T_m) seq_len(T_m))
+  pos <- lapply(T_per_outcome, function(T_m) seq_len(T_m))
 
   list(
     name           = "scenario_minimal",
@@ -91,7 +91,7 @@ make_scenario_minimal <- function() {
     N              = N,
     J              = J,
     M              = M,
-    T_per_modality = T_per_modality,
+    T_per_outcome = T_per_outcome,
     L_true         = L_true,
     true_idx       = true_idx,
     X              = X,

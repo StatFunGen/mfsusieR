@@ -24,7 +24,7 @@
 #   - both fits run to convergence in <= 50 IBSS iterations
 #
 # When fsusieR's ER2 formula is fixed upstream (or mfsusieR adds
-# a `residual_variance_method = "fsusier_legacy"` option that
+# a `residual_variance_scope = "fsusier_legacy"` option that
 # mirrors the buggy formula), this test should be tightened to
 # bit-identity.
 
@@ -133,7 +133,7 @@ test_that("C2 (documented divergence): sigma2 differs by O(1) factor due to fsus
   pair <- c2_fit_pair(fx$X, fx$Y, L = 3)
 
   # Both are positive. sigma2_fsusier uses the buggy formula
-  # (missing predictor_weights factor); sigma2_mfsusie uses
+  # (missing xtx_diag factor); sigma2_mfsusie uses
   # susieR's correct formula. Magnitude differs by an O(n)
   # factor in worst case; for the small n = 80 fixture, the
   # diff is bounded but non-zero. Documented as Pattern A in

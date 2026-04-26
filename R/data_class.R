@@ -1,38 +1,38 @@
 # `mf_individual` data class. Threaded through
 # `susie_workhorse` via S3 dispatch. One class covers
-# univariate (`T_m = 1`), single-modality (`M = 1`), and ragged
-# multi-modality inputs.
+# univariate (`T_m = 1`), single-outcome (`M = 1`), and ragged
+# multi-outcome inputs.
 
 #' Construct the internal `mf_individual` data class
 #'
-#' Validates inputs, centers and scales `X`, runs the per-modality
+#' Validates inputs, centers and scales `X`, runs the per-outcome
 #' wavelet pipeline (`mf_dwt`), and packages everything the IBSS
 #' loop needs into one S3 object of class
 #' `c("mf_individual", "individual")`.
 #'
 #' @param X numeric matrix `n x p`.
 #' @param Y list of length M; each element a numeric matrix
-#'   `n x T_m`. Ragged `T_m` across modalities is permitted; an
+#'   `n x T_m`. Ragged `T_m` across outcomes is permitted; an
 #'   element may have `T_m = 1` (univariate, no DWT).
 #' @param pos optional list of length M; each element a numeric
 #'   vector of length `T_m` recording sampling positions. Defaults
-#'   to `seq_len(T_m)` per modality.
+#'   to `seq_len(T_m)` per outcome.
 #' @param max_padded_log2 integer, log2 cap on the post-remap grid
-#'   length per modality. Default 10.
+#'   length per outcome. Default 10.
 #' @param wavelet_filter_number integer, see
 #'   `filter.select`.
 #' @param wavelet_family character, see `wd`.
 #' @param standardize logical, scale `X` columns to unit variance.
 #' @param intercept logical, center `X` columns to mean zero.
 #' @param save_residuals logical. When `TRUE`, allocate a
-#'   per-modality `residuals` slot so post-processors can read from
+#'   per-outcome `residuals` slot so post-processors can read from
 #'   the fit. When `FALSE`, post-processors must receive `(X, Y)`
 #'   directly.
 #' @param verbose logical, forwarded to `mf_dwt`'s remap step.
 #' @return list of class `c("mf_individual", "individual")`.
 #' @references
 #' Manuscript: `methods/online_method.tex`
-#' (per-modality wavelet decomposition + IBSS dispatch).
+#' (per-outcome wavelet decomposition + IBSS dispatch).
 #' @keywords internal
 #' @noRd
 create_mf_individual <- function(X,
@@ -51,7 +51,7 @@ create_mf_individual <- function(X,
   }
   if (!is.list(Y) || length(Y) == 0L) {
     stop("`Y` must be a non-empty list of numeric matrices, ",
-         "one per modality.")
+         "one per outcome.")
   }
   M <- length(Y)
   n <- nrow(X)
@@ -59,7 +59,7 @@ create_mf_individual <- function(X,
 
   Y <- lapply(Y, function(y) {
     if (is.null(dim(y))) y <- matrix(y, ncol = 1)
-    if (!is.numeric(y)) stop("Every modality matrix in `Y` must be numeric.")
+    if (!is.numeric(y)) stop("Every outcome matrix in `Y` must be numeric.")
     y
   })
 
@@ -76,7 +76,7 @@ create_mf_individual <- function(X,
   } else {
     if (!is.list(pos) || length(pos) != M) {
       stop(sprintf(
-        "`pos` must be a list of length %d (one position vector per modality).",
+        "`pos` must be a list of length %d (one position vector per outcome).",
         M))
     }
     for (m in seq_len(M)) {
@@ -101,11 +101,11 @@ create_mf_individual <- function(X,
     X_processed <- X_centered
   }
 
-  # ---- Per-modality wavelet pipeline -------------------------------------
+  # ---- Per-outcome wavelet pipeline -------------------------------------
   Y_remapped    <- vector("list", M)
   D             <- vector("list", M)
   scale_index   <- vector("list", M)
-  T_padded      <- integer(M)
+  T_basis      <- integer(M)
   pos_grid      <- vector("list", M)
   column_center <- vector("list", M)
   column_scale  <- vector("list", M)
@@ -119,13 +119,13 @@ create_mf_individual <- function(X,
                   verbose         = verbose)
     D[[m]]             <- out$D
     scale_index[[m]]   <- out$scale_index
-    T_padded[m]        <- out$T_padded
+    T_basis[m]        <- out$T_basis
     pos_grid[[m]]      <- out$pos
     column_center[[m]] <- out$column_center
     column_scale[[m]]  <- out$column_scale
     # Cache the post-remap Y on the padded grid for downstream
     # residual computation; the wavelet representation lives in `D`.
-    Y_remapped[[m]] <- if (T_padded[m] == 1L) {
+    Y_remapped[[m]] <- if (T_basis[m] == 1L) {
       Y[[m]]
     } else {
       remap_data(Y[[m]], pos[[m]],
@@ -141,9 +141,9 @@ create_mf_individual <- function(X,
     pos          = pos_grid,
     D            = D,
     scale_index  = scale_index,
-    T_padded     = T_padded,
-    csd_X        = X_scale,
-    predictor_weights = colSums(X_processed^2),  # X'X diagonal, cached
+    T_basis     = T_basis,
+    csd        = X_scale,
+    xtx_diag = colSums(X_processed^2),  # X'X diagonal, cached
                                                  # for SER stats per IBSS sweep
     n            = n,
     p            = p,

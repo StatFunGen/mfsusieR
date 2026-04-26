@@ -2,7 +2,7 @@
 % Please edit documentation in R/mfsusie.R
 \name{mfsusie}
 \alias{mfsusie}
-\title{Multi-functional, multi-modality SuSiE}
+\title{Multi-functional, multi-outcome SuSiE}
 \usage{
 mfsusie(
   X,
@@ -10,12 +10,12 @@ mfsusie(
   pos = NULL,
   L = 10,
   prior_variance_grid = NULL,
-  prior_variance_scope = c("per_scale_modality", "per_modality"),
+  prior_variance_scope = c("per_outcome", "per_scale"),
   null_prior_weight = 2,
-  cross_modality_prior = NULL,
+  cross_outcome_prior = NULL,
   prior_weights = NULL,
   residual_variance = NULL,
-  residual_variance_method = c("per_scale_modality", "shared_per_modality"),
+  residual_variance_scope = c("per_outcome", "per_scale"),
   standardize = TRUE,
   intercept = TRUE,
   save_residuals = TRUE,
@@ -32,7 +32,7 @@ mfsusie(
   wavelet_filter_number = 10,
   wavelet_family = "DaubLeAsymm",
   control_mixsqp = NULL,
-  nullweight = 0.7
+  mixsqp_null_penalty = 0.7
 )
 }
 \arguments{
@@ -43,7 +43,7 @@ mfsusie(
 
 \item{pos}{optional list of length \code{M}; each element a numeric vector
 of length \code{T_m} recording the sampling positions for that
-modality. Defaults to \code{seq_len(T_m)} per modality.}
+outcome. Defaults to \code{seq_len(T_m)} per outcome.}
 
 \item{L}{integer, maximum number of single effects to fit.}
 
@@ -51,35 +51,35 @@ modality. Defaults to \code{seq_len(T_m)} per modality.}
 variances for the scale-mixture-of-normals prior. When \code{NULL},
 the data-driven path
 (\code{compute_marginal_bhat_shat} + \code{ash}) selects the
-grid per modality.}
+grid per outcome.}
 
-\item{prior_variance_scope}{\code{"per_scale_modality"} (default) or
-\code{"per_modality"}. Controls whether the mixture-weight matrix
+\item{prior_variance_scope}{\code{"per_scale"} (default) or
+\code{"per_outcome"}. Controls whether the mixture-weight matrix
 \code{pi_V[[m]]} has a per-scale row dimension or collapses across
 scales.}
 
 \item{null_prior_weight}{numeric, weight on the null prior
 component. Default 2 per the manuscript and design.md D5.}
 
-\item{cross_modality_prior}{optional cross-modality combiner
+\item{cross_outcome_prior}{optional cross-outcome combiner
 object. Defaults to the trivial independence combiner
-(\code{cross_modality_prior_independent()}).}
+(\code{cross_outcome_prior_independent()}).}
 
 \item{prior_weights}{optional length-p numeric vector, the
 variable-selection prior. Defaults to uniform \code{1/p}.}
 
 \item{residual_variance}{optional list of length \code{M}, initial
-residual variance per modality. Defaults to the per-modality
+residual variance per outcome. Defaults to the per-outcome
 sample variance.}
 
-\item{residual_variance_method}{\code{"per_scale_modality"} (default)
-or \code{"shared_per_modality"}. Controls the sigma2 update shape.}
+\item{residual_variance_scope}{\code{"per_scale"} (default)
+or \code{"shared_per_outcome"}. Controls the sigma2 update shape.}
 
 \item{standardize}{logical, scale \code{X} columns to unit variance.}
 
 \item{intercept}{logical, center \code{X} columns to mean zero.}
 
-\item{save_residuals}{logical, store per-modality residuals on
+\item{save_residuals}{logical, store per-outcome residuals on
 the fit (default \code{TRUE}).}
 
 \item{max_iter}{integer, maximum IBSS iterations.}
@@ -88,7 +88,7 @@ the fit (default \code{TRUE}).}
 
 \item{coverage}{numeric in (0, 1), credible-set coverage.}
 
-\item{min_abs_corr}{numeric, minimum SNP-to-SNP correlation
+\item{min_abs_corr}{numeric, minimum variable-to-variable correlation
 inside a credible set (CS purity threshold).}
 
 \item{L_greedy}{integer or \code{NULL}. When non-\code{NULL}, run susieR's
@@ -102,7 +102,7 @@ loop. Default 0.1.}
 \item{mixture_weight_method}{one of \code{"mixsqp"} (default) or
 \code{"none"}. \code{"mixsqp"} runs the per-effect empirical-Bayes
 update of the mixture weights \code{pi_V[[m]]} per
-(modality, scale) using the \code{mixsqp} solver. \code{"none"} holds
+(outcome, scale) using the \code{mixsqp} solver. \code{"none"} holds
 the prior fixed at the initial \code{prior_variance_grid} /
 \code{null_prior_weight}; required by the C1 (susieR) degeneracy
 contract.}
@@ -113,7 +113,7 @@ contract.}
 the fit. Default \code{FALSE}.}
 
 \item{max_padded_log2}{integer, log2 cap on the post-remap grid
-length per modality. Default 10.}
+length per outcome. Default 10.}
 
 \item{wavelet_filter_number}{integer; see
 \code{filter.select}.}
@@ -121,42 +121,42 @@ length per modality. Default 10.}
 \item{wavelet_family}{character; see \code{wd}.}
 
 \item{control_mixsqp}{optional named list of \code{mixsqp} control
-arguments forwarded to the per-(modality, scale) M-step.}
+arguments forwarded to the per-(outcome, scale) M-step.}
 
-\item{nullweight}{numeric, mixsqp null-component penalty weight.
+\item{mixsqp_null_penalty}{numeric, mixsqp null-component penalty (internal).
 Default 0.7.}
 }
 \value{
 A list of class \code{c("mfsusie", "susie")} carrying:
 \describe{
 \item{\code{alpha}}{\verb{L x p} posterior inclusion probabilities.}
-\item{\code{mu}, \code{mu2}}{\code{list[L]} of \code{list[M]} of \verb{p x T_padded[m]}
-matrices: per-effect, per-modality posterior mean and second
+\item{\code{mu}, \code{mu2}}{\code{list[L]} of \code{list[M]} of \verb{p x T_basis[m]}
+matrices: per-effect, per-outcome posterior mean and second
 moment in the wavelet domain.}
 \item{\code{pi_V}}{\code{list[M]} of \verb{S_m x K} mixture-weight matrices.}
 \item{\code{G_prior}}{\code{list[M]} of \code{list[S_m]} ash-shaped prior
 records (mutated by the IBSS loop).}
 \item{\code{sigma2}}{\code{list[M]} of either scalar (legacy mode) or
-length-\code{S_m} per-(scale, modality) residual variances.}
+length-\code{S_m} per-(scale, outcome) residual variances.}
 \item{\code{elbo}}{numeric vector of ELBO values per iteration.}
 \item{\code{niter}, \code{converged}}{IBSS termination metadata.}
 \item{\code{pip}}{length-p posterior inclusion probabilities.}
 \item{\code{sets}}{credible sets via \code{susie_get_cs}.}
-\item{\code{fitted}}{\code{list[M]} of running per-modality fits in the
+\item{\code{fitted}}{\code{list[M]} of running per-outcome fits in the
 wavelet domain.}
-\item{\code{residuals}}{\code{list[M]} per-modality residuals, when
+\item{\code{residuals}}{\code{list[M]} per-outcome residuals, when
 \code{save_residuals = TRUE}.}
 }
 }
 \description{
-Fit the multi-functional, multi-modality Sum of Single Effects
-(mfSuSiE) regression model. Each modality \code{m} carries a per-sample
+Fit the multi-functional, multi-outcome Sum of Single Effects
+(mfSuSiE) regression model. Each outcome \code{m} carries a per-sample
 functional response \code{Y_m} of length \code{T_m}; \code{T_m} may differ across
-modalities, and either \code{T_m = 1} (univariate response) or \code{T_m > 1}
+outcomes, and either \code{T_m = 1} (univariate response) or \code{T_m > 1}
 (functional response on a regular grid) is supported. mfsusieR runs
-a per-modality wavelet decomposition, then dispatches into susieR's
+a per-outcome wavelet decomposition, then dispatches into susieR's
 IBSS workhorse with mfsusieR-specific S3 methods that handle the
-per-(scale, modality) mixture-of-normals prior and residual
+per-(scale, outcome) mixture-of-normals prior and residual
 variance.
 }
 \references{

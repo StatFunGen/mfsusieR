@@ -4,8 +4,8 @@
 #   M = 1, T_1 = 1 (univariate trait, DWT short-circuits)
 #   prior_variance_grid of length 1 (single mixture component)
 #   null_prior_weight = 0 (no null component)
-#   prior_variance_scope = "per_modality"
-#   residual_variance_method = "shared_per_modality"
+#   prior_variance_scope = "per_outcome"
+#   residual_variance_scope = "per_outcome"
 #   estimate_prior_method = "none" (V held fixed; equivalent to
 #     susieR's `estimate_prior_variance = FALSE`)
 #   L_greedy = NULL
@@ -48,9 +48,9 @@ c1_fit_pair <- function(X, y, L = 5, V = 0.2) {
     X, list(matrix(y, ncol = 1)),
     L                        = L,
     prior_variance_grid      = V,
-    prior_variance_scope     = "per_modality",
+    prior_variance_scope     = "per_outcome",
     null_prior_weight        = 0,
-    residual_variance_method = "shared_per_modality",
+    residual_variance_scope = "per_outcome",
     mixture_weight_method    = "none",
     L_greedy                 = NULL,
     max_iter = 100, tol = 1e-8,

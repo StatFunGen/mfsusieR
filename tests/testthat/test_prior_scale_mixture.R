@@ -13,10 +13,10 @@
 
 # ---- Helpers -----------------------------------------------------------
 
-make_data <- function(n = 30, J = 8, T_per_modality = c(64L, 128L)) {
+make_data <- function(n = 30, J = 8, T_per_outcome = c(64L, 128L)) {
   set.seed(mfsusier_test_seed())
   X <- matrix(rnorm(n * J), nrow = n)
-  Y <- lapply(T_per_modality,
+  Y <- lapply(T_per_outcome,
               function(T_m) matrix(rnorm(n * T_m), nrow = n))
   mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE)
 }
@@ -48,7 +48,7 @@ test_that("user-supplied grid is honored, no ash fit runs", {
   prior <- mfsusieR:::mf_prior_scale_mixture(
     data,
     prior_variance_grid = v_grid,
-    prior_variance_scope = "per_scale_modality",
+    prior_variance_scope = "per_scale",
     null_prior_weight = 2
   )
 
@@ -67,7 +67,7 @@ test_that("user-supplied grid weights match distribute_mixture_weights", {
   prior <- mfsusieR:::mf_prior_scale_mixture(
     data,
     prior_variance_grid = v_grid,
-    prior_variance_scope = "per_scale_modality",
+    prior_variance_scope = "per_scale",
     null_prior_weight = null_w
   )
 
@@ -84,11 +84,11 @@ test_that("user-supplied grid weights match distribute_mixture_weights", {
 
 test_that("susieR-degeneracy contract C1 inputs produce single-component prior", {
   # Per design.md D11a: prior_variance_grid of length 1, null = 0.
-  data <- make_data(T_per_modality = 1L)
+  data <- make_data(T_per_outcome = 1L)
   prior <- mfsusieR:::mf_prior_scale_mixture(
     data,
     prior_variance_grid = 0.5,           # length-1 grid
-    prior_variance_scope = "per_modality",
+    prior_variance_scope = "per_outcome",
     null_prior_weight = 0                 # no null component
   )
 
@@ -103,11 +103,11 @@ test_that("susieR-degeneracy contract C1 inputs produce single-component prior",
 test_that("data-driven init matches fsusieR::init_prior.default at 1e-12", {
   skip_if_not_installed("fsusieR")
   set.seed(2)
-  n <- 50; p <- 10; T_padded <- 64
+  n <- 50; p <- 10; T_basis <- 64
   X <- matrix(rnorm(n * p), nrow = n)
   X <- scale(X, center = TRUE, scale = FALSE)
-  Y_m <- matrix(rnorm(n * T_padded), nrow = n)
-  scale_index <- mfsusieR:::gen_wavelet_indx(log2(T_padded))
+  Y_m <- matrix(rnorm(n * T_basis), nrow = n)
+  scale_index <- mfsusieR:::gen_wavelet_indx(log2(T_basis))
 
   ours <- mfsusieR:::init_scale_mixture_prior_default(
     Y_m = Y_m, X = X,
@@ -134,7 +134,7 @@ test_that("data-driven init matches fsusieR::init_prior.default at 1e-12", {
 # ---- T_m = 1 unification: same code path, no special case --------------
 
 test_that("T_m = 1 with NULL grid runs the data-driven path without crashing", {
-  data <- make_data(T_per_modality = 1L)
+  data <- make_data(T_per_outcome = 1L)
 
   prior <- mfsusieR:::mf_prior_scale_mixture(
     data,
@@ -148,46 +148,46 @@ test_that("T_m = 1 with NULL grid runs the data-driven path without crashing", {
 
 # ---- Per-modality scope branch ----------------------------------------
 
-test_that("per_modality scope collapses scale dimension", {
+test_that("per_outcome scope collapses scale dimension", {
   data <- make_data()
   v_grid <- c(0.1, 0.5)
 
   prior <- mfsusieR:::mf_prior_scale_mixture(
     data,
     prior_variance_grid = v_grid,
-    prior_variance_scope = "per_modality",
+    prior_variance_scope = "per_outcome",
     null_prior_weight = 2
   )
 
   for (m in seq_len(data$M)) {
-    # pi shape: 1 x (K + 1) under per_modality.
+    # pi shape: 1 x (K + 1) under per_outcome.
     expect_identical(dim(prior$pi[[m]]), c(1L, length(v_grid) + 1L))
   }
-  expect_identical(prior$prior_variance_scope, "per_modality")
+  expect_identical(prior$prior_variance_scope, "per_outcome")
 })
 
-# ---- Cross-modality independent prior (combine_modality_lbfs) ---------
+# ---- Cross-modality independent prior (combine_outcome_lbfs) ---------
 
-test_that("cross_modality_prior_independent has the right class hierarchy", {
-  prior <- mfsusieR:::cross_modality_prior_independent()
+test_that("cross_outcome_prior_independent has the right class hierarchy", {
+  prior <- mfsusieR:::cross_outcome_prior_independent()
   expect_identical(class(prior),
-                   c("mf_prior_cross_modality_independent",
-                     "mf_prior_cross_modality"))
+                   c("mf_prior_cross_outcome_independent",
+                     "mf_prior_cross_outcome"))
 })
 
-test_that("combine_modality_lbfs sums per-modality lbfs (independent default)", {
-  prior <- mfsusieR:::cross_modality_prior_independent()
+test_that("combine_outcome_lbfs sums per-modality lbfs (independent default)", {
+  prior <- mfsusieR:::cross_outcome_prior_independent()
   modality_lbfs <- list(c(1, 2, 3), c(0.1, 0.2, 0.3), c(-1, -2, -3))
 
-  out <- mfsusieR:::combine_modality_lbfs(prior, modality_lbfs,
+  out <- mfsusieR:::combine_outcome_lbfs(prior, modality_lbfs,
                                            model_state = NULL)
 
   expect_equal(out, c(0.1, 0.2, 0.3), tolerance = 1e-12)
 })
 
-test_that("combine_modality_lbfs with single modality returns the input", {
-  prior <- mfsusieR:::cross_modality_prior_independent()
-  out <- mfsusieR:::combine_modality_lbfs(prior, list(c(1, 2, 3)),
+test_that("combine_outcome_lbfs with single modality returns the input", {
+  prior <- mfsusieR:::cross_outcome_prior_independent()
+  out <- mfsusieR:::combine_outcome_lbfs(prior, list(c(1, 2, 3)),
                                            model_state = NULL)
   expect_equal(out, c(1, 2, 3), tolerance = 0)
 })

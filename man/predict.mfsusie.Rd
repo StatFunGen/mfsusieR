@@ -18,12 +18,12 @@ fitted values (equivalent to \code{fitted(object)}).}
 \value{
 list of length \code{M}; each element a numeric matrix
 \verb{n_new x T_m} of predicted curves on the original position
-grid for that modality.
+grid for that outcome.
 }
 \description{
 Projects the posterior coefficient curves through new covariate
 values to produce predicted response curves on the original Y
-scale, per modality. The wavelet pipeline that built the fit
+scale, per outcome. The wavelet pipeline that built the fit
 (column scaling, padding, DWT) is inverted to yield curves on
-each modality's original position grid \code{pos[[m]]}.
+each outcome's original position grid \code{pos[[m]]}.
 }

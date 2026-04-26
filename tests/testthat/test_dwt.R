@@ -16,7 +16,7 @@ test_that("mf_dwt forward shape on a power-of-two functional input", {
 
   out <- mfsusieR:::mf_dwt(Y_m, pos, max_padded_log2 = 10)
 
-  expect_identical(out$T_padded, 64L)
+  expect_identical(out$T_basis, 64L)
   expect_identical(dim(out$D), c(20L, 64L))
   expect_identical(length(out$pos), 64L)
   expect_identical(length(out$column_center), 64L)
@@ -31,7 +31,7 @@ test_that("mf_dwt univariate short-circuit (T_m = 1)", {
 
   out <- mfsusieR:::mf_dwt(y, pos_m = 1)
 
-  expect_identical(out$T_padded, 1L)
+  expect_identical(out$T_basis, 1L)
   expect_identical(out$scale_index, list(1L))
   expect_identical(dim(out$D), c(20L, 1L))
   # The "wavelet coefficient" is just the centered+scaled column.
@@ -129,7 +129,7 @@ test_that("mf_dwt forward output matches fsusieR's susiF DWT pipeline (C2 fideli
   # Pattern B for the per-position centering / scaling computed via
   # `col_scale`, which the d-attribute test in test_utils_wavelet
   # already pins).
-  expect_identical(out$T_padded, ncol(Y_m))
+  expect_identical(out$T_basis, ncol(Y_m))
   expect_equal(out$pos, pos, tolerance = 0)  # power-of-two regular
   expect_equal(out$column_center,
                attr(Y_scaled, "scaled:center"), tolerance = 0)
@@ -158,7 +158,7 @@ test_that("mf_dwt forward output matches mvf.susie.alpha::DWT2 row-wise (C3 fide
   expect_equal(out$D, D_ref, tolerance = 0)
 
   # Per-modality metadata mirrors the C2 contract checks above.
-  expect_identical(out$T_padded, ncol(Y_m))
+  expect_identical(out$T_basis, ncol(Y_m))
   expect_equal(out$pos, pos, tolerance = 0)
   expect_equal(out$column_center,
                attr(Y_scaled, "scaled:center"), tolerance = 0)

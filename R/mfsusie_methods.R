@@ -1,27 +1,27 @@
 # User-facing S3 methods on `mfsusie` fit objects.
 #
 # - predict / coef / fitted: project the posterior coefficients
-#   back to the original Y scale via the per-modality inverse
-#   wavelet transform stored on `fit$mf_meta`.
+#   back to the original Y scale via the per-outcome inverse
+#   wavelet transform stored on `fit$dwt_meta`.
 # - print / summary: terse and detailed reports.
 #
-# All methods read `fit$mf_meta` (a stash of the wavelet pipeline
+# All methods read `fit$dwt_meta` (a stash of the wavelet pipeline
 # parameters set by `mfsusie()`) so the user does not need to keep
 # the original `mf_individual` data class around.
 
 # ---- helpers --------------------------------------------------
 
-# Per-modality inverse-wavelet projection of one p x T_padded
+# Per-outcome inverse-wavelet projection of one p x T_basis
 # coefficient matrix back to a p x T_m matrix on the original
-# position grid. `coef_wavelet` rows are SNPs (or some other
+# position grid. `coef_wavelet` rows are variables (or some other
 # index); each row is inverted independently.
-mf_invert_per_modality <- function(coef_wavelet, m, mf_meta) {
-  T_pad <- mf_meta$T_padded[m]
-  pos_m <- mf_meta$pos[[m]]
-  cm    <- mf_meta$column_center[[m]]
-  csd   <- mf_meta$column_scale[[m]]
+mf_invert_per_outcome <- function(coef_wavelet, m, dwt_meta) {
+  T_pad <- dwt_meta$T_basis[m]
+  pos_m <- dwt_meta$pos[[m]]
+  cm    <- dwt_meta$column_center[[m]]
+  csd   <- dwt_meta$column_scale[[m]]
 
-  # Each row of `coef_wavelet` is a length-T_padded wavelet vector.
+  # Each row of `coef_wavelet` is a length-T_basis wavelet vector.
   # mf_invert_dwt applies wr() per row internally; pass row-by-row
   # via a small loop since mf_invert_dwt expects (n x T) input where
   # n is the row count.
@@ -29,8 +29,8 @@ mf_invert_per_modality <- function(coef_wavelet, m, mf_meta) {
     D_packed       = coef_wavelet,
     column_center  = cm,
     column_scale   = csd,
-    filter_number  = mf_meta$wavelet_filter,
-    family         = mf_meta$wavelet_family
+    filter_number  = dwt_meta$wavelet_filter,
+    family         = dwt_meta$wavelet_family
   )
   # `inverted` is row-by-row reconstructed; if T_pad > length(pos_m)
   # the columns beyond the original positions are padding -- keep
@@ -41,17 +41,17 @@ mf_invert_per_modality <- function(coef_wavelet, m, mf_meta) {
   inverted
 }
 
-# Per-effect coefficient matrix (p x T_padded) for effect l, modality m,
+# Per-effect coefficient matrix (p x T_basis) for effect l, outcome m,
 # on the standardized X scale: alpha_lj * mu_lj_t.
 mf_effect_wavelet <- function(fit, l, m) {
   fit$alpha[l, ] * fit$mu[[l]][[m]]
 }
 
-# Coefficient sum across all L effects per modality, on standardized
+# Coefficient sum across all L effects per outcome, on standardized
 # X scale, in the wavelet domain.
 mf_total_wavelet <- function(fit, m) {
   p     <- ncol(fit$alpha)
-  T_pad <- fit$mf_meta$T_padded[m]
+  T_pad <- fit$dwt_meta$T_basis[m]
   out   <- matrix(0, nrow = p, ncol = T_pad)
   for (l in seq_len(nrow(fit$alpha))) {
     out <- out + mf_effect_wavelet(fit, l, m)
@@ -65,9 +65,9 @@ mf_total_wavelet <- function(fit, m) {
 #'
 #' Projects the posterior coefficient curves through new covariate
 #' values to produce predicted response curves on the original Y
-#' scale, per modality. The wavelet pipeline that built the fit
+#' scale, per outcome. The wavelet pipeline that built the fit
 #' (column scaling, padding, DWT) is inverted to yield curves on
-#' each modality's original position grid `pos[[m]]`.
+#' each outcome's original position grid `pos[[m]]`.
 #'
 #' @param object an `mfsusie` fit returned by `mfsusie()`.
 #' @param newx numeric matrix `n_new x p` of new covariates on the
@@ -76,7 +76,7 @@ mf_total_wavelet <- function(fit, m) {
 #' @param ... ignored.
 #' @return list of length `M`; each element a numeric matrix
 #'   `n_new x T_m` of predicted curves on the original position
-#'   grid for that modality.
+#'   grid for that outcome.
 #' @export
 predict.mfsusie <- function(object, newx = NULL, ...) {
   if (is.null(newx)) return(fitted.mfsusie(object))
@@ -87,7 +87,7 @@ predict.mfsusie <- function(object, newx = NULL, ...) {
       ncol(newx), ncol(object$alpha)))
   }
 
-  meta <- object$mf_meta
+  meta <- object$dwt_meta
   # Apply the same X centering / scaling used at fit time.
   newx_std <- sweep(newx, 2, meta$X_center, "-")
   if (any(meta$X_scale != 1)) {
@@ -97,9 +97,9 @@ predict.mfsusie <- function(object, newx = NULL, ...) {
   M   <- meta$M
   out <- vector("list", M)
   for (m in seq_len(M)) {
-    coef_wavelet <- mf_total_wavelet(object, m)        # p x T_padded
-    pred_wavelet <- newx_std %*% coef_wavelet           # n_new x T_padded
-    out[[m]] <- mf_invert_per_modality(pred_wavelet, m, meta)
+    coef_wavelet <- mf_total_wavelet(object, m)        # p x T_basis
+    pred_wavelet <- newx_std %*% coef_wavelet           # n_new x T_basis
+    out[[m]] <- mf_invert_per_outcome(pred_wavelet, m, meta)
   }
   out
 }
@@ -108,36 +108,36 @@ predict.mfsusie <- function(object, newx = NULL, ...) {
 
 #' Per-effect coefficient curves on the original X scale
 #'
-#' Returns the per-effect, per-modality coefficient curves on the
+#' Returns the per-effect, per-outcome coefficient curves on the
 #' original (unstandardized) X scale, projected back through the
 #' inverse wavelet transform to the original position grid.
 #'
 #' @param object an `mfsusie` fit.
 #' @param ... ignored.
 #' @return list of length `M`; each element an `L x T_m` matrix
-#'   whose row `l` is effect `l`'s coefficient curve for modality
+#'   whose row `l` is effect `l`'s coefficient curve for outcome
 #'   `m`.
 #' @export
 coef.mfsusie <- function(object, ...) {
-  meta <- object$mf_meta
+  meta <- object$dwt_meta
   L    <- nrow(object$alpha)
   M    <- meta$M
   out  <- vector("list", M)
   for (m in seq_len(M)) {
-    coef_l_wavelet <- matrix(0, nrow = L, ncol = meta$T_padded[m])
+    coef_l_wavelet <- matrix(0, nrow = L, ncol = meta$T_basis[m])
     for (l in seq_len(L)) {
       # alpha_lj * mu_lj_t summed over j (one effect's curve = sum_j of
-      # per-SNP contribution; equivalent to `colSums(alpha[l,] * mu[[l]][[m]])`).
+      # per-variable contribution; equivalent to `colSums(alpha[l,] * mu[[l]][[m]])`).
       coef_l_wavelet[l, ] <- colSums(object$alpha[l, ] * object$mu[[l]][[m]])
     }
-    # Rescale by 1/csd_X mean -- effects are stored on standardized X
+    # Rescale by 1/csd mean -- effects are stored on standardized X
     # but coef() returns on the original X scale. The standardize
-    # rescaling is `b_orig = b_std / csd_X` per-SNP, then summed.
-    # When summed across SNPs the `1/csd_X` factor depends on which
-    # SNP carried the effect. The aggregate L x T_m output stays on
-    # the standardized scale; the per-SNP coefficients are recovered
-    # by `alpha * mu / csd_X` element-wise. Document this below.
-    out[[m]] <- mf_invert_per_modality(coef_l_wavelet, m, meta)
+    # rescaling is `b_orig = b_std / csd` per-variable, then summed.
+    # When summed across variables the `1/csd` factor depends on which
+    # variable carried the effect. The aggregate L x T_m output stays on
+    # the standardized scale; the per-variable coefficients are recovered
+    # by `alpha * mu / csd` element-wise. Document this below.
+    out[[m]] <- mf_invert_per_outcome(coef_l_wavelet, m, meta)
   }
   out
 }
@@ -146,7 +146,7 @@ coef.mfsusie <- function(object, ...) {
 
 #' Fitted response curves on the training X
 #'
-#' Projects the running per-modality fit `fit$fitted[[m]]` (which
+#' Projects the running per-outcome fit `fit$fitted[[m]]` (which
 #' lives in the wavelet domain) back to the original position grid
 #' via the inverse wavelet transform. Equivalent to
 #' `predict(object, newx = X_train)`.
@@ -157,11 +157,11 @@ coef.mfsusie <- function(object, ...) {
 #'   `n x T_m` of fitted curves.
 #' @export
 fitted.mfsusie <- function(object, ...) {
-  meta <- object$mf_meta
+  meta <- object$dwt_meta
   M    <- meta$M
   out  <- vector("list", M)
   for (m in seq_len(M)) {
-    out[[m]] <- mf_invert_per_modality(object$fitted[[m]], m, meta)
+    out[[m]] <- mf_invert_per_outcome(object$fitted[[m]], m, meta)
   }
   out
 }
@@ -178,13 +178,13 @@ fitted.mfsusie <- function(object, ...) {
 #' @return `invisible(x)`.
 #' @export
 print.mfsusie <- function(x, ...) {
-  meta <- x$mf_meta
+  meta <- x$dwt_meta
   cat("mfsusie fit\n")
   cat(sprintf("  p (predictors): %d\n", ncol(x$alpha)))
   cat(sprintf("  L (effects):    %d\n", nrow(x$alpha)))
-  cat(sprintf("  M (modalities): %d\n", meta$M))
-  T_str <- paste(meta$T_padded, collapse = ", ")
-  cat(sprintf("  T_padded:       (%s)\n", T_str))
+  cat(sprintf("  M (outcomes): %d\n", meta$M))
+  T_str <- paste(meta$T_basis, collapse = ", ")
+  cat(sprintf("  T_basis:       (%s)\n", T_str))
   cat(sprintf("  iterations:     %d %s\n", x$niter %||% 0L,
               if (isTRUE(x$converged)) "(converged)" else "(NOT converged)"))
   if (!is.null(x$elbo)) {
@@ -219,7 +219,7 @@ print.mfsusie <- function(x, ...) {
 #' @return an object of class `summary.mfsusie` (a list).
 #' @export
 summary.mfsusie <- function(object, ...) {
-  meta <- object$mf_meta
+  meta <- object$dwt_meta
   alpha <- object$alpha
   pip   <- object$pip
   sets  <- object$sets
@@ -242,9 +242,9 @@ summary.mfsusie <- function(object, ...) {
 
   out <- list(
     n_effects   = nrow(alpha),
-    n_snps      = ncol(alpha),
-    n_modalities = meta$M,
-    T_padded    = meta$T_padded,
+    n_variables      = ncol(alpha),
+    n_outcomes = meta$M,
+    T_basis    = meta$T_basis,
     converged   = isTRUE(object$converged),
     n_iter      = object$niter %||% 0L,
     elbo_final  = if (!is.null(object$elbo)) object$elbo[length(object$elbo)] else NA_real_,
@@ -258,11 +258,11 @@ summary.mfsusie <- function(object, ...) {
 #' @export
 print.summary.mfsusie <- function(x, ...) {
   cat(sprintf("mfsusie summary: p=%d, L=%d, M=%d, %s in %d iter\n",
-              x$n_snps, x$n_effects, x$n_modalities,
+              x$n_variables, x$n_effects, x$n_outcomes,
               if (x$converged) "converged" else "NOT converged",
               x$n_iter))
-  cat(sprintf("  T_padded per modality: (%s)\n",
-              paste(x$T_padded, collapse = ", ")))
+  cat(sprintf("  T_basis per outcome: (%s)\n",
+              paste(x$T_basis, collapse = ", ")))
   cat(sprintf("  Final ELBO: %.4f\n", x$elbo_final))
   if (!is.null(x$cs) && nrow(x$cs) > 0L) {
     cat("  Credible sets:\n")
