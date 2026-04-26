@@ -112,7 +112,7 @@ test_that("data-driven init matches fsusieR::init_prior.default at 1e-12", {
   ours <- mfsusieR:::init_scale_mixture_prior_default(
     Y_m = Y_m, X = X,
     prior_class = "mixture_normal_per_scale",
-    scale_index = scale_index
+    groups      = scale_index
   )
   ref <- fsusieR::init_prior(
     Y = Y_m, X = X, prior = "mixture_normal_per_scale",

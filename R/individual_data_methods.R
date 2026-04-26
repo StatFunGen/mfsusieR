@@ -152,10 +152,12 @@ loglik.mf_individual <- function(data, params, model, V, ser_stats, l = NULL, ..
     Bhat_m <- ser_stats$betahat[[m]]
     Shat_m <- sqrt(ser_stats$shat2[[m]])
     G_m    <- model$G_prior[[m]]
-    indx_m <- data$scale_index[[m]]
     lbf_m  <- 0
-    for (s in seq_along(indx_m)) {
-      idx <- indx_m[[s]]
+    # Iterate G_prior groups directly; each entry carries the
+    # column indices it covers (`$idx`). One uniform loop for
+    # `per_modality` (length 1) and `per_scale_modality` (length S_m).
+    for (s in seq_along(G_m)) {
+      idx <- G_m[[s]]$idx
       g_s <- G_m[[s]]$fitted_g
       lbf_m <- lbf_m + mixture_log_bf_per_scale(
         Bhat_m[, idx, drop = FALSE],
@@ -213,11 +215,10 @@ calculate_posterior_moments.mf_individual <- function(data, params, model, V, l,
     shat_m <- sqrt(bs$shat2)
 
     G_m    <- model$G_prior[[m]]
-    indx_m <- data$scale_index[[m]]
     mu_lm  <- matrix(0, nrow = J, ncol = data$T_padded[m])
     mu2_lm <- matrix(0, nrow = J, ncol = data$T_padded[m])
-    for (s in seq_along(indx_m)) {
-      idx <- indx_m[[s]]
+    for (s in seq_along(G_m)) {
+      idx <- G_m[[s]]$idx
       g_s <- G_m[[s]]$fitted_g
       out <- mixture_posterior_per_scale(
         bhat_m[, idx, drop = FALSE],
@@ -427,11 +428,15 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
   for (m in seq_len(data$M)) {
     bhat_m <- ser_stats$betahat[[m]]
     shat_m <- sqrt(ser_stats$shat2[[m]])
-    indx_m <- data$scale_index[[m]]
-
-    for (s in seq_along(indx_m)) {
-      idx <- indx_m[[s]]
-      sd_grid <- model$G_prior[[m]][[s]]$fitted_g$sd
+    G_m    <- model$G_prior[[m]]
+    # Uniform group loop: each G_prior entry holds the column
+    # indices it covers (`$idx`). For `per_modality` there is one
+    # group spanning every wavelet column (one mixsqp solve over
+    # the full modality); for `per_scale_modality` there are S_m
+    # groups, one per wavelet scale (S_m independent mixsqp solves).
+    for (s in seq_along(G_m)) {
+      idx     <- G_m[[s]]$idx
+      sd_grid <- G_m[[s]]$fitted_g$sd
       L_mat <- mf_em_likelihood_per_scale(
         bhat_m[, idx, drop = FALSE],
         shat_m[, idx, drop = FALSE],

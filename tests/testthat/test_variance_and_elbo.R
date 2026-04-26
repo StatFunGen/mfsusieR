@@ -429,15 +429,15 @@ test_that("update_variance_components errors on unrecognized method", {
 
 # ---- loglik.mf_individual zero-pw branch ------------------------
 
-test_that("init_scale_mixture_prior_default errors on NULL scale_index for per_scale prior", {
+test_that("init_scale_mixture_prior_default errors on NULL groups", {
   set.seed(mfsusier_test_seed())
   expect_error(
     mfsusieR:::init_scale_mixture_prior_default(
       Y_m = matrix(rnorm(20), 5),
       X = matrix(rnorm(20), 5),
       prior_class = "mixture_normal_per_scale",
-      scale_index = NULL),
-    "scale_index"
+      groups = NULL),
+    "groups"
   )
 })
 
@@ -492,13 +492,13 @@ test_that("mf_invert_dwt accepts a vector D_packed (single-row coercion)", {
   expect_true(is.numeric(out))
 })
 
-test_that("init_scale_mixture_prior_default with mixture_normal class returns single-element G_prior", {
+test_that("init_scale_mixture_prior_default with one group returns single-element G_prior", {
   set.seed(mfsusier_test_seed())
   out <- mfsusieR:::init_scale_mixture_prior_default(
     Y_m = matrix(rnorm(50), 10),
     X = matrix(rnorm(50), 10),
     prior_class = "mixture_normal",
-    scale_index = NULL)
+    groups      = list(seq_len(5)))
   expect_identical(length(out$G_prior), 1L)
   expect_identical(attr(out$G_prior, "class"), "mixture_normal")
 })
