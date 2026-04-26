@@ -24,9 +24,9 @@ has_ggplot <- requireNamespace("ggplot2", quietly = TRUE) &&
 This vignette compares fSuSiE with two non-functional approaches
 (per-CpG association tests and per-CpG SuSiE) on a simulated
 methylation QTL dataset. fSuSiE returns a single set of
-fine-mapping signals and per-CpG effect estimates; the
-per-CpG approaches return one signal per CpG, leaving the user
-to integrate them by hand.
+fine-mapping signals together with per-CpG effect estimates;
+the per-CpG approaches return one signal per CpG, leaving the
+user to integrate them by hand.
 
 ## Example data
 
@@ -35,8 +35,8 @@ library(mfsusieR)
 library(susieR)
 data(dnam_example)
 str(dnam_example, max.level = 1)
-n <- nrow(dnam_example$X)
-p <- ncol(dnam_example$X)
+n   <- nrow(dnam_example$X)
+p   <- ncol(dnam_example$X)
 T_m <- ncol(dnam_example$Y)
 dnam_example$causal_snps
 ```
@@ -45,36 +45,66 @@ The dataset has `n = `r n`` samples, `p = `r p`` SNPs, and
 `T = `r T_m`` CpGs. Three causal SNPs (1, 9, 3) act on two
 CpG clusters: SNPs 1 and 9 act on CpGs 9-16 with opposite
 signs, and SNP 3 acts on CpGs 25-32. SNP 4 is a high-LD
-near-clone of SNP 3, which the association tests will not be
-able to disambiguate. The simulation script is
+near-clone of SNP 3, which the per-CpG association tests will
+not be able to disambiguate. The simulation script is
 `data-raw/make_data.R`.
+
+To illustrate, the plot below shows the effect of SNP 3 on
+the methylation levels. Each point is one individual at one
+CpG, colored by SNP-3 genotype (0/1/2). The bold lines show
+the per-genotype mean methylation level at each CpG.
 
 ```{r data-by-genotype, fig.height = 2.5, fig.width = 6, eval = has_ggplot}
 suppressPackageStartupMessages({
   library(ggplot2); library(cowplot); library(reshape2)
 })
 X <- dnam_example$X; Y <- dnam_example$Y
-pdat <- data.frame(
+geno_chr <- as.character(X[, 3L])
+pdat_pts <- data.frame(
   cpg        = rep(seq_len(T_m), each = n) +
                 runif(n * T_m, min = -0.2, max = 0.2),
   meth_level = as.vector(Y),
-  geno       = factor(X[, 3]))
-p_data <- ggplot(pdat, aes(x = cpg, y = meth_level, color = geno)) +
+  geno       = factor(rep(geno_chr, T_m)))
+mean_by_geno <- aggregate(Y, by = list(geno = geno_chr), FUN = mean)
+pdat_lines <- do.call(rbind, lapply(seq_len(nrow(mean_by_geno)),
+  function(k) data.frame(
+    cpg        = seq_len(T_m),
+    meth_level = as.numeric(mean_by_geno[k, -1L]),
+    geno       = factor(mean_by_geno[k, "geno"]))))
+p_data <- ggplot(pdat_pts,
+                 aes(x = cpg, y = meth_level, color = geno)) +
   geom_point(shape = 20, size = 1.0) +
   scale_color_manual(values = c("darkblue", "limegreen", "darkorange")) +
   scale_x_continuous(breaks = c(0, seq(4, T_m, 4))) +
+  geom_line(data = pdat_lines,
+            aes(x = cpg, y = meth_level, group = geno),
+            color = "black", linewidth = 1.6) +
+  geom_line(data = pdat_lines,
+            aes(x = cpg, y = meth_level, group = geno),
+            linewidth = 1.0) +
   labs(x = "CpG", y = "methylation", color = "SNP 3 genotype") +
   theme_cowplot(font_size = 10)
 print(p_data)
 ```
 
+The lines diverge over CpGs 25-32: each additional copy of the
+SNP 3 alternate allele lifts the methylation level there. At
+the other CpGs the lines run together; SNP 3 has no direct
+effect outside its causal cluster.
+
 ## Per-CpG association tests
+
+A common QTL-mapping recipe runs a separate association test
+for every CpG-SNP pair. Below we use the linear regression
+function `lm()`. Plotting the resulting `-log10(p-value)`
+matrix in two views (one per SNP, one per CpG) gives a
+SNP-centred and a CpG-centred picture of the signal.
 
 ```{r per-cpg-lm, fig.height = 2.5, fig.width = 6, eval = has_ggplot}
 assoc <- matrix(0, T_m, p)
 for (i in seq_len(T_m)) {
   for (j in seq_len(p)) {
-    assoc[i, j] <- summary(lm(Y[, i] ~ X[, j]))$coefficients[2, 4]
+    assoc[i, j] <- summary(lm(Y[, i] ~ X[, j]))$coefficients[2L, 4L]
   }
 }
 threshold <- -log10(0.05 / (T_m * p))
@@ -107,34 +137,50 @@ p_cpg <- ggplot(pdat_a, aes(x = cpg, y = pval,
   scale_color_manual(values = c("darkblue", "darkorange")) +
   labs(x = "CpG", y = "-log10 p-value") +
   theme_cowplot(font_size = 10)
-plot_grid(p_snp, p_cpg, nrow = 1)
+plot_grid(p_snp, p_cpg, nrow = 1L)
 ```
 
-The per-SNP view identifies two of the three causal SNPs at
-the Bonferroni threshold and does not separate SNP 3 from its
-high-LD partner SNP 4. The per-CpG view shows the affected
-CpGs cluster in two regions but does not assign causal SNPs to
-them.
+The SNP-centred view (left) hits Bonferroni significance
+(`-log10(0.05 / (T*p))`) at two of the three causal SNPs and
+is unable to separate SNP 3 from its high-LD partner SNP 4.
+*But more importantly,* this view alone does not tell us which
+CpGs are affected by the SNPs.
+
+The CpG-centred view (right) shows that the affected CpGs
+cluster in two contiguous regions, but it is less clear which
+CpG sites in these clusters are actually affected. *And this
+view does not tell us which SNPs drive the changes in
+methylation at those CpGs.*
 
 ## Per-CpG SuSiE
+
+A natural follow-up is to run SuSiE separately on each
+associated CpG. This produces one fine-mapping signal per
+CpG, but leaves the user to integrate them.
 
 ```{r per-cpg-susie, fig.height = 2, fig.width = 6, eval = has_ggplot}
 assoc_cpgs <- sort(unique(subset(pdat_a, pval > threshold)$cpg))
 susie_fits <- lapply(assoc_cpgs, function(i)
-  susie(X, Y[, i], L = 3))
+  susieR::susie(X, Y[, i], L = 3L))
 pdat_s <- do.call(rbind, lapply(seq_along(assoc_cpgs), function(k) {
   data.frame(cpg = assoc_cpgs[k], snp = seq_len(p),
              pip = susie_fits[[k]]$pip)
 }))
-pal <- ifelse(pdat_s$cpg < 17, "red", "darkblue")
-p_susie <- ggplot(pdat_s,
-                  aes(x = snp, y = pip,
-                      color = factor(cpg), shape = factor(cpg))) +
+# Color by cluster membership, with one entry per associated
+# CpG. CpGs in cluster A (positions <= 16) are red; cluster B
+# (positions > 16) is darkblue. The shape cycles through three
+# pchs per cluster so multiple CpGs at the same SNP are
+# visually separable.
+cpg_levels <- sort(unique(pdat_s$cpg))
+pal_levels <- ifelse(cpg_levels < 17L, "red", "darkblue")
+shape_cycle <- rep(c(1L, 20L, 4L),
+                   length.out = length(cpg_levels))
+pdat_s$cpg <- factor(pdat_s$cpg, levels = cpg_levels)
+p_susie <- ggplot(pdat_s, aes(x = snp, y = pip,
+                              color = cpg, shape = cpg)) +
   geom_point(size = 1.5) +
-  scale_color_manual(values = unique(pal)[
-                       as.integer(factor(unique(pdat_s$cpg)))]) +
-  scale_shape_manual(values = rep(c(1, 20, 4),
-                       length.out = length(unique(pdat_s$cpg)))) +
+  scale_color_manual(values = pal_levels) +
+  scale_shape_manual(values = shape_cycle) +
   scale_x_continuous(breaks = seq_len(p)) +
   scale_y_continuous(breaks = c(0, 0.5, 1)) +
   labs(x = "SNP", y = "PIP", color = "CpG", shape = "CpG") +
@@ -142,21 +188,29 @@ p_susie <- ggplot(pdat_s,
 print(p_susie)
 ```
 
-Each per-CpG SuSiE fit produces its own set of fine-mapping
-signals. Some CpGs in cluster B prefer SNP 3, others prefer
-SNP 4. There is no principled way to combine these per-CpG
-PIPs into a single per-SNP fine-mapping signal.
+Running `susie()` on each associated CpG independently gives
+one fine-mapping signal per CpG. Two takeaways:
+
+- The signals do not all agree. SNP 1 is identified for the
+  CpGs in cluster A with PIP near 1 (consistent recovery), but
+  for cluster B some CpGs prefer SNP 3 and others SNP 4 — the
+  high-LD partner ambiguity is unresolved in any single fit.
+- More importantly, none of the per-CpG SuSiE fits tells us
+  *which CpGs* are affected by each causal SNP. The output is
+  per-CpG PIPs, not per-SNP affected-CpG sets. fSuSiE solves
+  this directly.
 
 ## fSuSiE
 
 A single `fsusie()` call recovers all three causal SNPs in
-three separate credible sets. HMM post-processing produces the
-per-position lfsr, which the bubble plot below uses.
+three credible sets. HMM post-processing produces the per-CpG
+local false sign rate (lfsr), which the bubble plot below
+uses.
 
 ```{r run-fsusie, message = FALSE}
-fit <- fsusie(Y, X, L = 3,
+fit <- fsusie(Y, X, L = 3L,
               prior_variance_scope = "per_outcome",
-              L_greedy = 5, verbose = TRUE)
+              L_greedy = 5L, verbose = TRUE)
 fit$sets$cs
 fit$pip[dnam_example$causal_snps]
 fit_h <- mf_post_smooth(fit, method = "HMM")
@@ -170,13 +224,17 @@ The PIP panel shows three sharp peaks at the causal SNPs. The
 effect panel rows decompose the per-CS effects across CpGs
 under HMM post-processing.
 
-## lfsr bubble grid
+## Local-false sign rate of effect sizes
 
-`mfsusie_plot_lfsr()` shows the per-position local false sign
-rate as a bubble grid. Dot size is `-log10(lfsr)`; positions
-where `lfsr <= 0.01` (the default threshold) are colored by
-the CS. Passing the simulated `truth_mask` overlays the known
-affected CpGs in CS color and leaves the rest grey.
+`mfsusie_plot_lfsr()` shows the per-CpG local false sign rate
+as a bubble grid. Rows are credible sets, columns are CpGs,
+dot size is `-log10(lfsr)` clamped to `[0, cex_max]`. Color
+behavior depends on whether `truth` is supplied:
+
+- Without `truth`: dots at CpGs where `lfsr <= lfsr_threshold`
+  (default 0.01) get the CS color; the rest are grey.
+- With `truth`: dots at the truly-affected CpGs get the CS
+  color; the rest are grey, regardless of lfsr.
 
 The simulated `truth_mask` is indexed by causal SNP (SNPs 1,
 3, 9). The fit's CS order is determined by IBSS and may not
@@ -193,9 +251,10 @@ truth_per_cs <- lapply(fit_h$sets$cs, function(cs_vars) {
 mfsusie_plot_lfsr(fit_h, truth = truth_per_cs)
 ```
 
-The CS-affected CpGs (large colored dots) align with the
-ground-truth clusters: CSes 1 and 2 cover CpGs 9-16, CS 3
-covers CpGs 25-32.
+CSes 1 and 2 cover CpGs 9-16; CS 3 covers CpGs 25-32. Both
+clusters are recovered cleanly. The legend in the upper-right
+shows the dot-size scale; the lower-right indicates the color
+rule.
 
 ## TI-smoothed effects with errorbars
 
@@ -239,5 +298,5 @@ legend("topright", legend = paste("subject", 1:3),
 For a multi-region or multi-outcome version of the same
 workflow (e.g., methylation across multiple regions with
 expression at the same locus), see
-[the multi-outcome intro](mfsusie_intro.html), which fits
-all outcomes jointly under the mfsusie model.
+[the multi-outcome intro](mfsusie_intro.html), which fits all
+outcomes jointly under the mfsusie model.

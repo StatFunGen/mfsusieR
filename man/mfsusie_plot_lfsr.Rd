@@ -9,6 +9,7 @@ mfsusie_plot_lfsr(
   lfsr_threshold = 0.01,
   truth = NULL,
   cex_max = 6,
+  add_legend = TRUE,
   smooth_method = NULL,
   ...
 )
