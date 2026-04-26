@@ -62,7 +62,7 @@ Y2 <- X %*% beta2 + matrix(rnorm(n * T_m, sd = 0.4), n)
 Y3 <- X %*% beta3 + matrix(rnorm(n * T_m, sd = 0.4), n)
 ```
 
-## Fits
+## Fine-mapping
 
 ```{r coloc-fit}
 fit1 <- fsusie(Y1, X, pos = positions, L = 15, L_greedy = 5, verbose = TRUE)
@@ -70,44 +70,66 @@ fit2 <- fsusie(Y2, X, pos = positions, L = 15, L_greedy = 5, verbose = TRUE)
 fit3 <- fsusie(Y3, X, pos = positions, L = 15, L_greedy = 5, verbose = TRUE)
 ```
 
-`coloc.susie()` reads the SuSiE-class slots (`$sets$cs_index` to
-identify retained effects, `$lbf_variable` for the per-effect log
-Bayes factors over variants) and returns the standard
-PP.H0..PP.H4 posterior table per pair of credible sets.
-`coloc.susie()` expects `colnames(X)` to be present so it can
-label posteriors by variant; both fits run on the same `X`, so
-the labels align by construction.
+## Colocalization
 
-## Shared causal
+`coloc::coloc.susie()` reads the credible-set indices from
+`fit$sets$cs_index` and the per-effect log-Bayes-factor matrix
+from `fit$lbf_variable`. Both are populated by `fsusie()` /
+`mfsusie()` on the standard fit path, so the call is a one-
+liner per pair. The returned `$summary` table reports the
+posterior probabilities of five hypotheses for each pair of
+credible sets:
+
+| | meaning |
+|---|---|
+| `PP.H0.abf` | no causal in either trait |
+| `PP.H1.abf` | causal in trait 1 only |
+| `PP.H2.abf` | causal in trait 2 only |
+| `PP.H3.abf` | causal in both, but at distinct variants |
+| `PP.H4.abf` | shared causal variant |
+
+`hit1` and `hit2` name the lead variant in each fit; `idx1` and
+`idx2` are the credible-set indices being compared.
+
+### Shared causal signals
+
+`fit1` and `fit2` were simulated with the same causal SNP at
+`SNP42`. The coloc summary should put nearly all posterior
+mass on `PP.H4` (shared causal):
 
 ```{r coloc-shared, eval = has_coloc}
 res_shared <- coloc.susie(fit1, fit2)
 res_shared$summary
 ```
 
-`PP.H4.abf` is close to 1 for the (`fit1`, `fit2`) pair: a single
-shared causal variant `SNP42` drives both outcomes.
+`PP.H4.abf` is essentially 1 and `hit1 == hit2 == SNP42`,
+matching the simulation.
 
-## Distinct causals
+### Distinct causal signals
+
+`fit1` carries a signal at SNP42; `fit3` carries one at SNP88.
+The coloc summary should put posterior mass on `PP.H3`
+(both have a causal, but at different variants):
 
 ```{r coloc-distinct, eval = has_coloc}
 res_distinct <- coloc.susie(fit1, fit3)
 res_distinct$summary
 ```
 
-`PP.H3.abf` is close to 1 for (`fit1`, `fit3`): both outcomes have
-a causal in the locus, but the causal variants are different
-(`SNP42` vs `SNP88`).
+`PP.H3.abf` is essentially 1, with `hit1 = SNP42` and
+`hit2 = SNP88`.
 
-The same call works on `mfsusie()` fits, on `susieR::susie()`
-fits, on `mvsusieR::mvsusie()` fits, and on `susieR::susie_rss()`
-fits; the inputs `coloc.susie` reads are part of the SuSiE-class
-contract.
+```{r coloc-skip, eval = !has_coloc, echo = FALSE, results = "asis"}
+cat("> The `coloc` package is not installed in the build ",
+    "environment, so the colocalization tables above are not ",
+    "rendered. Install it with `BiocManager::install(\"coloc\")` ",
+    "to reproduce.\n", sep = "")
+```
 
 ## Notes
 
 - This vignette assumes the user already has a pair of
-  fine-mapping fits, possibly from different SuSiE-suite
+  fine-mapping fits, possibly from different SuSiE Suite
   packages, and wants to test for colocalization between them.
   The natural alternative when subject-level data is available
   for all outcomes is to run `mfsusie()` jointly across them;
@@ -123,4 +145,5 @@ contract.
 - For multi-outcome colocalization across more than two
   outcomes, see [the multi-outcome intro](mfsusie_intro.html),
   which fits all outcomes jointly and avoids the post-hoc
-  combine.
+  combine. The disadvantage is that it would subject to mfSuSiE modelling
+  assumptions and not as modular as integrating SuSiE Suite fits.

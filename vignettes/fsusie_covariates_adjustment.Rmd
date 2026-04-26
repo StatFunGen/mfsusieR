@@ -25,7 +25,7 @@ of a global expression matrix) inflate the residual variance and
 attenuate the genetic signal if left in. The right tool for
 removing such effects on a functional response is a wavelet-
 domain empirical-Bayes regression that accommodates smooth
-position-dependent covariate effects. mfsusieR exposes this
+position-dependent covariate effects. `mfsusieR` exposes this
 through `mf_adjust_for_covariates()`.
 
 ## Setup
@@ -34,131 +34,233 @@ through `mf_adjust_for_covariates()`.
 library(mfsusieR)
 library(susieR)
 library(wavethresh)
-set.seed(2)
+set.seed(2L)
 ```
 
-## Simulated data
+## Generating the data
 
-```{r sim}
+We simulate functional responses with two ingredients:
+
+1. **Genetic signal** — two causal SNPs (positions 25 and 75 in
+   the genotype matrix) with smooth random per-position effects
+   `f1`, `f2`.
+2. **Covariate signal** — three covariates (independent of
+   genotype) acting through smooth random per-position
+   coefficient curves `f1_cov`, `f2_cov`, `f3_cov`.
+
+All effect curves are drawn from
+`mf_simu_ibss_per_level(7)$sim_func`, which samples from the
+IBSS wavelet prior (the same prior class fSuSiE infers).
+
+```{r sim-effects, fig.height = 3.5}
+rsnr    <- 1
+pos1    <- 25L
+pos2    <- 75L
+lev_res <- 7L
+T_m     <- 2L^lev_res
+
+f1     <- mf_simu_ibss_per_level(lev_res)$sim_func
+f2     <- mf_simu_ibss_per_level(lev_res)$sim_func
+f1_cov <- mf_simu_ibss_per_level(lev_res)$sim_func
+f2_cov <- mf_simu_ibss_per_level(lev_res)$sim_func
+f3_cov <- mf_simu_ibss_per_level(lev_res)$sim_func
+
+plot(f1, type = "l", col = "royalblue", lwd = 2,
+     xlab = "position", ylab = "effect")
+abline(h = 0, lty = 3, col = "grey50")
+lines(f2, type = "l", col = "limegreen", lwd = 2)
+legend("topright", legend = c("f1 (SNP 25)", "f2 (SNP 75)"),
+       col = c("royalblue", "limegreen"), lwd = 2, bty = "n")
+```
+
+The observed data is a mixture of covariate-driven confounding
+and genotype signal. `genetic_signal` is the part we want to
+recover; `covariate_signal` is the part we want to remove.
+
+```{r sim-data}
 data(N3finemapping)
-X <- N3finemapping$X[, seq_len(100)]
-n <- nrow(X); p <- ncol(X); T_m <- 128L
-positions <- seq_len(T_m)
+Geno <- N3finemapping$X[, seq_len(100)]
+n    <- nrow(Geno)
 
-# Three covariate functions, each smooth in position. These act
-# like global confounders that influence the response across all
-# CpGs / positions.
-smooth_func <- function() {
-  raw <- rnorm(T_m)
-  w   <- wd(raw, filter.number = 1L, family = "DaubExPhase")
-  for (s in 0L:(log2(T_m) - 1L)) {
-    coefs_s <- accessD(w, level = s)
-    w <- putD(w, level = s,
-              v = coefs_s / (1.5^(log2(T_m) - s)))
-  }
-  wr(w)
+# Three covariates, sd = 2; independent of Geno.
+Cov <- matrix(rnorm(3L * n, sd = 2), ncol = 3L)
+
+genetic_signal   <- matrix(0, n, T_m)
+covariate_signal <- matrix(0, n, T_m)
+for (i in seq_len(n)) {
+  noise_i <- rnorm(T_m, sd = (1 / rsnr) * var(f1))
+  genetic_signal[i, ] <-
+    Geno[i, pos1] * f1 + Geno[i, pos2] * f2 + noise_i
+  covariate_signal[i, ] <-
+    Cov[i, 1L] * f1_cov + Cov[i, 2L] * f2_cov + Cov[i, 3L] * f3_cov
 }
-f1_cov <- smooth_func()
-f2_cov <- smooth_func()
-f3_cov <- smooth_func()
-Cov <- cbind(scale(rnorm(n)), scale(rnorm(n)), scale(rnorm(n)))
-
-# Genetic effect: a single causal SNP at position 42 with a
-# peaked Gaussian effect.
-shape <- exp(-((positions - T_m / 2)^2) / (2 * (T_m / 12)^2))
-beta  <- matrix(0, p, T_m); beta[42L, ] <- 1.2 * shape
-
-# The response: covariate signal + genetic signal + noise.
-Y <- Cov %*% rbind(f1_cov, f2_cov, f3_cov) +
-     X   %*% beta +
-     matrix(rnorm(n * T_m, sd = 0.4), n)
+Y <- covariate_signal + genetic_signal
 ```
 
-## Naive fit, ignoring covariates
+The covariate signal dominates the per-position scale of `Y`,
+so without adjustment fSuSiE's recovered effect curves are
+biased toward the covariate-induced confounding rather than the
+true genetic effect.
 
-```{r naive-fit, message = FALSE}
-fit_naive <- fsusie(Y, X, pos = positions,
-                    L = 15, L_greedy = 5, verbose = TRUE)
-fit_naive$sets$cs
-fit_naive$pip[42L]
-```
+## Account for covariates
 
-The covariate-driven baseline shifts dilute the signal. The
-true causal SNP at position 42 may still be selected but its PIP
-is degraded.
-
-## Adjusting for covariates
-
-`mf_adjust_for_covariates()` fits a wavelet-domain empirical-
-Bayes regression of `Y` on the covariates `Z = Cov` and returns
-the residualised response `Y_adjusted = Y - Z %*% fitted_func`.
-The default method `"wavelet_eb"` is appropriate when covariate
-effects vary smoothly across positions; the closed-form OLS
-alternative `"ols"` is the no-shrinkage limit.
+`mf_adjust_for_covariates(Y, Cov, method = "wavelet_eb")` fits
+a wavelet-domain empirical-Bayes regression of `Y` on the
+covariates `Cov` and returns the residualised response
+`Y_adjusted = Y - Cov %*% fitted_func` along with the fitted
+covariate effect curves.
 
 ```{r adjust, message = FALSE}
-adj <- mf_adjust_for_covariates(Y, Cov,
-                                method = "wavelet_eb")
-str(adj, max.level = 1)
+adj <- mf_adjust_for_covariates(Y, Cov, method = "wavelet_eb")
+str(adj, max.level = 1L)
+```
+
+The first row of `adj$fitted_func` is the recovered effect of
+the first covariate on the response curve; overlay it on the
+truth `f1_cov`:
+
+```{r plot-fitted-cov, fig.height = 3.5}
+plot(adj$fitted_func[1L, ], type = "l", col = "blue",
+     lty = 2, lwd = 2,
+     xlab = "position", ylab = "covariate effect",
+     main = "Covariate 1: estimated vs true")
+lines(f1_cov, lwd = 1.5)
+legend("topright", lwd = c(1.5, 2), lty = c(1, 2),
+       legend = c("true f1_cov", "estimated"), bty = "n")
 ```
 
 `adj$Y_adjusted` is the residualised response on the original
 position grid, ready to feed into `fsusie()`.
 
+## Recovering the genetic signal
+
+A two-panel scatter shows that the adjusted response tracks the
+genetic-only signal far more tightly than the raw response:
+
+```{r recovery-scatter, fig.height = 4, fig.width = 8}
+par(mfrow = c(1L, 2L))
+plot(Y, genetic_signal, pch = 19L, cex = 0.4,
+     xlab = "Observed Y", ylab = "Genetic signal",
+     main = "Before adjustment")
+abline(0, 1, lty = 3, col = "grey50")
+plot(adj$Y_adjusted, genetic_signal, pch = 19L, cex = 0.4,
+     xlab = "Y adjusted", ylab = "Genetic signal",
+     main = "After adjustment")
+abline(0, 1, lty = 3, col = "grey50")
+par(mfrow = c(1L, 1L))
+```
+
 ## Fine-mapping the adjusted response
 
-```{r adjusted-fit, message = FALSE}
-fit_adj <- fsusie(adj$Y_adjusted, X, pos = positions,
-                  L = 15, L_greedy = 5, verbose = TRUE)
+```{r fit-adj, message = FALSE}
+fit_adj <- fsusie(adj$Y_adjusted, Geno, L = 10L, verbose = TRUE)
 fit_adj$sets$cs
-fit_adj$pip[42L]
+fit_adj$pip[c(pos1, pos2)]
 ```
 
-PIP at the causal SNP is sharper after adjustment. The
-recovered effect curve from `mfsusie_plot()`:
-
-```{r adj-plot}
-fit_adj_s <- mf_post_smooth(fit_adj, method = "TI",
-                            wavelet_filter = 1L,
-                            wavelet_family = "DaubExPhase")
-mfsusie_plot(fit_adj_s)
+```{r plot-fit-adj}
+mfsusie_plot(fit_adj)
 ```
 
-## OLS as a closed-form sanity check
+## Comparison with no adjustment
 
-When covariates are few, well-conditioned, and known to act
-linearly per position, the closed-form OLS adjustment is faster
-and shrinkage-free:
+For contrast, fit `fsusie()` directly on `Y` without
+adjustment:
 
-```{r ols, message = FALSE}
-adj_ols <- mf_adjust_for_covariates(Y, Cov, method = "ols")
-fit_ols <- fsusie(adj_ols$Y_adjusted, X, pos = positions,
-                  L = 15, L_greedy = 5, verbose = FALSE)
-fit_ols$sets$cs
-fit_ols$pip[42L]
+```{r fit-unadj, message = FALSE}
+fit_unadj <- fsusie(Y, Geno, L = 10L, verbose = FALSE)
+fit_unadj$sets$cs
+fit_unadj$pip[c(pos1, pos2)]
 ```
 
-The OLS path projects out the covariate column space without
-modelling smoothness. For three uncorrelated covariates with
-n = `r n` and T = `r T_m`, OLS and the wavelet-EB shrinkage give
-qualitatively similar results.
+Match each fitted CS to its causal SNP by lead-PIP, then
+overlay the recovered effect curve from each fit against the
+ground-truth `f1` and `f2`.
 
-## Adjusting the genotype matrix as well
+```{r compare-effects, fig.height = 4, fig.width = 8}
+match_cs <- function(fit, target_snp) {
+  if (length(fit$sets$cs) == 0L) return(NA_integer_)
+  leads <- vapply(fit$sets$cs, function(idx) {
+    idx[which.max(fit$pip[idx])]
+  }, integer(1L))
+  hit <- which(leads == target_snp)
+  if (length(hit) == 0L) NA_integer_ else hit[1L]
+}
 
-When covariates are correlated with genotype, the Frisch-Waugh-
-Lovell correction also residualises `X`. Pass `X` to
-`mf_adjust_for_covariates()` and the function returns
-`X_adjusted = (I - Z (Z'Z)^{-1} Z') X`:
-
-```{r fwl}
-adj_fwl <- mf_adjust_for_covariates(Y, Cov, X = X,
-                                    method = "wavelet_eb")
-fit_fwl <- fsusie(adj_fwl$Y_adjusted, adj_fwl$X_adjusted,
-                  pos = positions, L = 15, L_greedy = 5,
-                  verbose = FALSE)
-fit_fwl$sets$cs
-fit_fwl$pip[42L]
+par(mfrow = c(1L, 2L))
+for (cfg in list(list(snp = pos1, truth = f1, col = "blue",
+                      label = "f1 (SNP 25)"),
+                 list(snp = pos2, truth = f2, col = "darkgreen",
+                      label = "f2 (SNP 75)"))) {
+  plot(cfg$truth, type = "l", lwd = 2, col = "black",
+       xlab = "position", ylab = "effect",
+       main = paste("Estimated effect:", cfg$label))
+  abline(h = 0, lty = 3, col = "grey50")
+  l_adj   <- match_cs(fit_adj,   cfg$snp)
+  l_unadj <- match_cs(fit_unadj, cfg$snp)
+  cf_adj   <- coef(fit_adj)[[1L]]
+  cf_unadj <- coef(fit_unadj)[[1L]]
+  if (!is.na(l_adj))
+    lines(cf_adj[l_adj, ],   col = cfg$col, lwd = 1.5)
+  if (!is.na(l_unadj))
+    lines(cf_unadj[l_unadj, ], col = cfg$col, lwd = 1.5, lty = 2)
+  legend("topright",
+         legend = c("truth", "fSuSiE adjusted", "fSuSiE unadjusted"),
+         col    = c("black", cfg$col, cfg$col),
+         lty    = c(1, 1, 2), lwd = c(2, 1.5, 1.5),
+         bty    = "n", cex = 0.8)
+}
+par(mfrow = c(1L, 1L))
 ```
+
+The adjusted fit tracks the truth on both signals; the
+unadjusted fit is biased toward the covariate-induced
+confounding and the recovered curves drift away from the
+truth.
+
+## Scalar traits: OLS adjustment with the FWL correction
+
+When the response is a scalar (`T = 1`) or smoothness across
+positions is irrelevant, the closed-form OLS residualization
+is the right tool. Pass `method = "ols"` to use it. When the
+covariates are correlated with genotype, also pass `X` so the
+function returns the Frisch-Waugh-Lovell-corrected
+`X_adjusted`:
+
+```{r ols-scalar, message = FALSE}
+# Scalar response derived from the same covariate-confounded
+# data: take the per-individual mean of Y as the scalar trait
+# and wrap it as a single-column matrix.
+Y_scalar <- matrix(rowMeans(Y), ncol = 1L)
+
+adj_ols <- mf_adjust_for_covariates(Y_scalar, Cov, X = Geno,
+                                    method = "ols")
+str(adj_ols, max.level = 1L)
+```
+
+`adj_ols` returns:
+
+- `Y_adjusted`: the scalar response after projecting out the
+  covariate column space.
+- `X_adjusted`: the genotype matrix after the same projection
+  (the FWL correction). When `Cov` is correlated with `Geno`,
+  using `X_adjusted` instead of the original `Geno` removes
+  the bias in the downstream fit.
+
+A scalar `susie()` fit on the OLS-adjusted data:
+
+```{r ols-fit, message = FALSE}
+fit_scalar <- susieR::susie(adj_ols$X_adjusted,
+                            as.numeric(adj_ols$Y_adjusted),
+                            L = 5L, verbose = FALSE)
+fit_scalar$sets$cs
+fit_scalar$pip[c(pos1, pos2)]
+```
+
+For `T > 1` use `method = "wavelet_eb"` (the default
+demonstrated above). Use `method = "ols"` for scalar traits or
+when smooth covariate effects across positions are not
+expected.
 
 ## Next steps
 
