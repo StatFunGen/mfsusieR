@@ -413,21 +413,21 @@ Depends on 7.1.
 
 ## 8. zzz.R registration
 
-- [ ] 8.1 Wire `.onLoad` to register all S3 methods on
+- [x] 8.1 Wire `.onLoad` to register all S3 methods on
       `mf_individual` and `mfsusie` into `susieR`'s namespace,
       mirroring `mvsusieR/R/zzz.R:37-126`.
-- [ ] 8.2 Smoke test: `mfsusie()` and `fsusie()` run end-to-end
+- [x] 8.2 Smoke test: `mfsusie()` and `fsusie()` run end-to-end
       after a fresh `pkgload::load_all`.
 
 ## 9. Documentation
 
-- [ ] 9.1 Add `@references` + `Manuscript: methods/<file>.tex
+- [x] 9.1 Add `@references` + `Manuscript: methods/<file>.tex
       eq:<label>` roxygen entries to every numeric routine.
       Confirm via grep that NO `@references_original`,
       `@manuscript_ref`, `mvf.susie.alpha`, `multfsusie`, `fsusieR`,
       `susiF`, or `original implementation` strings appear in `R/`
       (per `mf-ibss/spec.md` and design.md D12).
-- [ ] 9.2 Render `?mfsusie` and `?fsusie` and confirm every
+- [x] 9.2 Render `?mfsusie` and `?fsusie` and confirm every
       argument has a default and a one-line citation per
       `mf-public-api/spec.md`. The post-processor docs explain the
       residual contract and the rationale for the decoupled API in
@@ -455,7 +455,7 @@ Depends on 7.1.
       and remove the duplicate. Record the audit result as a
       comment block at the top of each file:
       `# modularity-audit: <date>, <reviewer initials>, <result>`.
-- [ ] 9b.2 Add a test `tests/testthat/test_modularity.R` that scans
+- [x] 9b.2 Add a test `tests/testthat/test_modularity.R` that scans
       `R/` for forbidden private reimplementations (e.g., a
       hand-rolled DWT, a hand-rolled mixsqp, a hand-rolled CS
       construction). Use a simple regex check against the function
@@ -463,9 +463,9 @@ Depends on 7.1.
 
 ## 10. Build cleanliness
 
-- [ ] 10.1 `R CMD check --as-cran` returns 0 errors, 0 warnings,
+- [x] 10.1 `R CMD check --as-cran` returns 0 errors, 0 warnings,
       only acceptable notes.
-- [ ] 10.2 `covr::package_coverage()` >= 80% on exported functions.
+- [x] 10.2 `covr::package_coverage()` >= 80% on exported functions.
 - [ ] 10.3 Save the build log under `bench/ci-logs/<commit-hash>.log`.
 - [ ] 10.4 Once Phase 4 fidelity tests (C1, C2, C3) all pass,
       archive this OpenSpec change:
