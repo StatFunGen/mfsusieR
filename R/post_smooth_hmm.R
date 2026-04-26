@@ -10,6 +10,21 @@
 #     (imported in `R/mfsusieR-package.R`); no `:::`.
 #   * `%!in%` is inlined as `!(x %in% y)` rather than a separate
 #     helper.
+#
+# Algorithm structure (driver in this file):
+#   1. R prefilter, init pi / P, build the dnorm emission matrix.
+#   2. cpp11 kernels (src/post_smooth_hmm.cpp) for the
+#      O(T*K^2) forward / backward / xi loops.
+#   3. R idx_comp selection + ash refinement (ash_obj cannot
+#      cross the cpp11 boundary; `set_data` / `calc_loglik` are
+#      R-only).
+#   4. EM loop: per iteration, build the ash-based emission matrix
+#      in R, then call the cpp11 forward / backward / xi kernels.
+# The pure-R reference smoother `mf_fit_hmm_R` lives in
+# `R/reference_implementations.R` and runs the same algorithm with
+# the kernel calls replaced by their `_R` oracles. The cpp11
+# kernels match their R oracles at <= 1e-12 in
+# `tests/testthat/test_post_smooth_hmm_oracle.R`.
 
 #' Forward-backward EM smoother on a hub-and-spoke effect-size grid
 #'
@@ -34,7 +49,8 @@
 #'   `prob` (T x K posterior state probabilities),
 #'   `x_post` (length-T smoothed effect estimate),
 #'   `lfsr` (length-T local false sign rate),
-#'   `mu` (length-K state means), `ll_hmm`, `ll_null`, `log_BF`.
+#'   `mu` (length-K state means after subset-by-`idx_comp`),
+#'   `ll_hmm`, `ll_null`, `log_BF`.
 #' @keywords internal
 #' @noRd
 mf_fit_hmm <- function(x, sd,
@@ -47,23 +63,14 @@ mf_fit_hmm <- function(x, sd,
                        max_zscore       = 20,
                        thresh_sd        = 1e-30,
                        epsilon          = 1e-2) {
-  # Defensive sd / x cleanup.
   too_small <- which(sd < thresh_sd)
   if (length(too_small) > 0L) sd[too_small] <- thresh_sd
   bad <- which(is.na(sd))
-  if (length(bad) > 0L) {
-    x [bad] <- 0
-    sd[bad] <- 1
-  }
+  if (length(bad) > 0L) { x[bad] <- 0; sd[bad] <- 1 }
   bad <- which(!is.finite(sd))
-  if (length(bad) > 0L) {
-    x [bad] <- 0
-    sd[bad] <- 1
-  }
+  if (length(bad) > 0L) { x[bad] <- 0; sd[bad] <- 1 }
   big_z <- which(abs(x / sd) > max_zscore)
-  if (length(big_z) > 0L) {
-    sd[big_z] <- abs(x[big_z]) / max_zscore
-  }
+  if (length(big_z) > 0L) sd[big_z] <- abs(x[big_z]) / max_zscore
 
   K <- 2L * halfK - 1L
   X <- x
@@ -101,50 +108,29 @@ mf_fit_hmm <- function(x, sd,
   pi_init <- rep(epsilon, K)
   pi_init[1L] <- if (K > 1L) 1 - sum(pi_init[-1L]) else 1
 
-  # Pre-EM forward / backward / occupancy on the dnorm emission.
-  emit_dn <- function(t) dnorm(X[t], mean = mu, sd = sd[t])
+  # Pre-EM emission matrix (T_pos x K) of dnorm(X[t] | mu_k, sd[t]).
+  emit_dn <- vapply(seq_len(T_pos),
+                    function(t) dnorm(X[t], mean = mu, sd = sd[t]),
+                    numeric(K))
+  emit_dn <- if (K == 1L) matrix(emit_dn, ncol = 1L) else t(emit_dn)
 
-  alpha_hat   <- matrix(NA_real_, T_pos, K)
-  alpha_tilde <- matrix(NA_real_, T_pos, K)
-  G_t         <- rep(NA_real_, T_pos)
-  alpha_hat[1L, ]   <- pi_init * emit_dn(1L)
-  alpha_tilde[1L, ] <- alpha_hat[1L, ]
-  for (t in seq_len(T_pos - 1L)) {
-    m <- alpha_hat[t, ] %*% P
-    alpha_tilde[t + 1L, ] <- m * emit_dn(t + 1L)
-    G_t[t + 1L] <- sum(alpha_tilde[t + 1L, ])
-    alpha_hat[t + 1L, ] <- alpha_tilde[t + 1L, ] / G_t[t + 1L]
-  }
-
-  beta_hat   <- matrix(NA_real_, T_pos, K)
-  beta_tilde <- matrix(NA_real_, T_pos, K)
-  C_t        <- rep(NA_real_, T_pos)
-  beta_hat[T_pos, ]   <- 1
-  beta_tilde[T_pos, ] <- 1
-  for (t in (T_pos - 1L):1L) {
-    e <- emit_dn(t + 1L)
-    beta_tilde[t, ] <- rowSums(sweep(P, 2L, beta_hat[t + 1L, ] * e, "*"))
-    C_t[t] <- max(beta_tilde[t, ])
-    beta_hat[t, ] <- beta_tilde[t, ] / C_t[t]
-  }
+  # Pre-EM forward / backward / occupancy / xi (cpp11 kernels).
+  fwd <- hmm_forward_cpp(emit_dn, P, pi_init, t1_normalize = FALSE)
+  bwd <- hmm_backward_cpp(emit_dn, P)
+  alpha_hat <- fwd$alpha_hat
+  beta_hat  <- bwd$beta_hat
 
   ab   <- alpha_hat * beta_hat
   prob <- ab / rowSums(ab)
 
-  # Pre-EM transition update + structural-zero enforcement.
-  xi <- matrix(0, K, K)
-  for (t in seq_len(T_pos - 1L)) {
-    xi_t <- outer(alpha_hat[t, ],
-                  beta_hat[t + 1L, ] * emit_dn(t + 1L)) * P
-    xi <- xi + xi_t / sum(xi_t)
-  }
+  xi <- hmm_xi_cpp(alpha_hat, beta_hat, emit_dn, P)
   if (K > 1L) {
     for (i in 2L:K) for (j in 2L:K) if (i != j) xi[i, j] <- 0
   }
   rs <- rowSums(xi); rs[rs == 0] <- 1
-  P <- xi / rs
+  P  <- xi / rs
   P[P < epsilon & P > 0] <- epsilon
-  P <- P / rowSums(P)
+  P  <- P / rowSums(P)
 
   # Pick states whose average posterior occupancy clears `thresh`,
   # always keeping the null state.
@@ -179,48 +165,34 @@ mf_fit_hmm <- function(x, sd,
   # `inst/notes/refactor-exceptions.md` (HMM-mu-subset).
   mu   <- mu[idx_comp]
 
-  # Per-iteration emission: null state is dnorm at zero; non-null
-  # states use exp(calc_loglik(ash_obj[[k]], data_t)).
-  emit_iter <- function(t) {
-    data_t <- set_data(X[t], sd[t])
-    out <- numeric(K)
-    out[1L] <- dnorm(X[t], mean = 0, sd = sd[t])
-    if (K > 1L) for (k in 2L:K)
-      out[k] <- exp(calc_loglik(ash_obj[[k]], data_t))
+  # Build the per-iteration ash-based emission matrix (T_pos x K)
+  # in R, since `ash_obj` and `calc_loglik` cannot cross the cpp11
+  # boundary. Element [t, 1] is the null dnorm at zero; elements
+  # [t, 2..K] are the per-state ash marginal likelihoods.
+  build_emit_iter <- function() {
+    out <- matrix(NA_real_, T_pos, K)
+    for (t in seq_len(T_pos)) {
+      data_t <- set_data(X[t], sd[t])
+      out[t, 1L] <- dnorm(X[t], mean = 0, sd = sd[t])
+      if (K > 1L) for (k in 2L:K)
+        out[t, k] <- exp(calc_loglik(ash_obj[[k]], data_t))
+    }
     out
   }
 
   iter <- 1L
+  G_t  <- NULL
   while (iter < maxiter) {
-    alpha_hat   <- matrix(NA_real_, T_pos, K)
-    alpha_tilde <- matrix(NA_real_, T_pos, K)
-    G_t         <- rep(NA_real_, T_pos)
-
     pi_iter <- prob[1L, ]
     pi_iter[pi_iter < epsilon] <- epsilon
     pi_iter <- pi_iter / sum(pi_iter)
-    alpha_tilde[1L, ] <- pi_iter * emit_iter(1L)
-    G_t[1L] <- sum(alpha_tilde[1L, ])
-    alpha_hat[1L, ] <- alpha_tilde[1L, ] / G_t[1L]
 
-    for (t in seq_len(T_pos - 1L)) {
-      m <- alpha_hat[t, ] %*% P
-      alpha_tilde[t + 1L, ] <- m * emit_iter(t + 1L)
-      G_t[t + 1L] <- sum(alpha_tilde[t + 1L, ])
-      alpha_hat[t + 1L, ] <- alpha_tilde[t + 1L, ] / G_t[t + 1L]
-    }
-
-    beta_hat   <- matrix(NA_real_, T_pos, K)
-    beta_tilde <- matrix(NA_real_, T_pos, K)
-    C_t        <- rep(NA_real_, T_pos)
-    beta_hat[T_pos, ]   <- 1
-    beta_tilde[T_pos, ] <- 1
-    for (t in (T_pos - 1L):1L) {
-      e <- emit_iter(t + 1L)
-      beta_tilde[t, ] <- rowSums(sweep(P, 2L, beta_hat[t + 1L, ] * e, "*"))
-      C_t[t] <- max(beta_tilde[t, ])
-      beta_hat[t, ] <- beta_tilde[t, ] / C_t[t]
-    }
+    emit_iter <- build_emit_iter()
+    fwd       <- hmm_forward_cpp(emit_iter, P, pi_iter, t1_normalize = TRUE)
+    bwd       <- hmm_backward_cpp(emit_iter, P)
+    alpha_hat <- fwd$alpha_hat
+    beta_hat  <- bwd$beta_hat
+    G_t       <- fwd$G_t
 
     ab   <- alpha_hat * beta_hat
     prob <- ab / rowSums(ab)
@@ -236,12 +208,7 @@ mf_fit_hmm <- function(x, sd,
     # Baum-Welch transition update.
     ab   <- alpha_hat * beta_hat
     prob <- ab / rowSums(ab)
-    xi   <- matrix(0, K, K)
-    for (t in seq_len(T_pos - 1L)) {
-      xi_t <- outer(alpha_hat[t, ],
-                    beta_hat[t + 1L, ] * emit_iter(t + 1L)) * P
-      xi <- xi + xi_t / sum(xi_t)
-    }
+    xi   <- hmm_xi_cpp(alpha_hat, beta_hat, emit_iter, P)
     if (K > 1L) {
       for (i in 2L:K) for (j in 2L:K) if (i != j) xi[i, j] <- 0
     }
