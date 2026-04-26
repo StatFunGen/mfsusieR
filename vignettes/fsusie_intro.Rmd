@@ -198,6 +198,24 @@ The PIPs are nearly identical for the variants in either
 credible set. The per-scale prior is the recommended default
 for functional fine-mapping problems.
 
+## Wavelet-domain preprocessing
+
+`fsusie()` exposes two preprocessing flags for the wavelet
+matrix:
+
+- `low_count_filter` (default `0`): wavelet columns with
+  `median(|column|) <= low_count_filter` are masked, contributing
+  `(Bhat = 0, Shat = 1)` to the SER step. Use a small positive
+  value when the response has sparse non-zero entries (e.g.,
+  ATAC-seq read pileups).
+- `quantile_norm` (default `FALSE`): applies a column-wise
+  rank-based normal quantile transform to the wavelet matrix.
+  Use when the per-position residuals are heavy-tailed or
+  visibly non-Gaussian.
+
+See `vignette("practical_data_applications")` for an applied
+walk-through on a multi-region ATAC-seq example dataset.
+
 ## What the fit object carries
 
 ```{r fields}

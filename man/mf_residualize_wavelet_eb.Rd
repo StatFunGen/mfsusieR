@@ -15,7 +15,9 @@ mf_residualize_wavelet_eb(
   null_prior_weight = 10,
   init_pi0_w = 1,
   control_mixsqp = list(verbose = FALSE, eps = 1e-06, numiter.em = 4L),
-  grid_mult = sqrt(2)
+  grid_mult = sqrt(2),
+  low_count_filter = 0,
+  quantile_norm = FALSE
 )
 }
 \arguments{
@@ -51,6 +53,21 @@ args. Default \code{list(verbose = FALSE, eps = 1e-6, numiter.em = 4L)}.}
 
 \item{grid_mult}{numeric, multiplier for the ash mixture grid.
 Default \code{sqrt(2)}.}
+
+\item{low_count_filter}{non-negative numeric. Wavelet-domain
+columns of \code{Y} with \verb{median(|column|) <= low_count_filter}
+are flagged uninformative (\code{Bhat = 0}, \code{Shat = 1}) at every
+outer iteration. Default \code{0}. Useful for sparse-coverage
+responses where many wavelet columns carry negligible
+signal.}
+
+\item{quantile_norm}{logical. When \code{TRUE}, applies a
+column-wise rank-based normal quantile transform to the
+wavelet-domain response before the EB regression loop. The
+returned \code{Y_adjusted} is on the original (un-transformed)
+position scale so downstream \code{fsusie(Y_adjusted, X)} calls
+operate on the same units as the input \code{Y}. Default
+\code{FALSE}.}
 }
 \value{
 Same named-list shape as \code{mf_adjust_for_covariates()}.

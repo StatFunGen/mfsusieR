@@ -39,6 +39,6 @@ For multi-outcome data with `n = 80` and a known set of null variants, the per-o
 
 #### Scenario: small-sample correction sanity
 
-A simulated fixture with `n = 80`, `p = 100`, `M = 3` is fit
+A simulated dataset with `n = 80`, `p = 100`, `M = 3` is fit
 twice. The asserted directions of the differences hold; this
 is a structural, not numerical, test.

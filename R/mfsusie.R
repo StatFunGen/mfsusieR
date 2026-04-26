@@ -81,6 +81,19 @@
 #' @param wavelet_filter_number integer; see
 #'   `filter.select`.
 #' @param wavelet_family character; see `wd`.
+#' @param low_count_filter non-negative numeric. Wavelet-domain
+#'   columns with `median(|column|) <= low_count_filter` are
+#'   flagged as uninformative and treated as `Bhat = 0`,
+#'   `Shat = 1` at every IBSS iteration. Useful for
+#'   sparse-coverage assays where many wavelet columns carry
+#'   negligible signal. Default `0`; with the default the set
+#'   is non-empty only when the response has at least one
+#'   wavelet column whose absolute-value median is exactly zero.
+#' @param quantile_norm logical. When `TRUE`, applies a
+#'   column-wise rank-based normal quantile transform to the
+#'   wavelet-domain response before the IBSS loop. Useful for
+#'   non-Gaussian wavelet coefficients arising from heavy-
+#'   tailed assays. Default `FALSE`.
 #' @param control_mixsqp optional named list of `mixsqp` control
 #'   arguments forwarded to the per-(outcome, scale) M-step.
 #' @param mixsqp_null_penalty numeric, mixsqp null-component penalty (internal).
@@ -136,6 +149,8 @@ mfsusie <- function(X, Y,
                     max_padded_log2           = 10,
                     wavelet_filter_number     = 10,
                     wavelet_family            = "DaubLeAsymm",
+                    low_count_filter          = 0,
+                    quantile_norm             = FALSE,
                     control_mixsqp            = NULL,
                     mixsqp_null_penalty       = 0.7) {
   prior_variance_scope    <- match.arg(prior_variance_scope)
@@ -176,7 +191,8 @@ mfsusie <- function(X, Y,
     wavelet_family        = wavelet_family,
     standardize           = standardize,
     intercept             = intercept,
-
+    low_count_filter      = low_count_filter,
+    quantile_norm         = quantile_norm,
     verbose               = verbose
   )
 

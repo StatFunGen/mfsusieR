@@ -65,8 +65,19 @@
 #'   numiter.em = 4L)`.
 #' @param grid_mult numeric, multiplier for the ash mixture grid.
 #'   Default `sqrt(2)`.
-#' @param thresh_lowcount,quantile_trans not supported in v1; pass
-#'   default values (zero / FALSE) or omit. Any other value errors.
+#' @param low_count_filter non-negative numeric. Wavelet-domain
+#'   columns of `Y` with `median(|column|) <= low_count_filter`
+#'   are flagged uninformative (`Bhat = 0`, `Shat = 1`) at every
+#'   outer iteration. Default `0`. Useful for sparse-coverage
+#'   responses where many wavelet columns carry negligible
+#'   signal.
+#' @param quantile_norm logical. When `TRUE`, applies a
+#'   column-wise rank-based normal quantile transform to the
+#'   wavelet-domain response before the EB regression loop. The
+#'   returned `Y_adjusted` is on the original (un-transformed)
+#'   position scale so downstream `fsusie(Y_adjusted, X)` calls
+#'   operate on the same units as the input `Y`. Default
+#'   `FALSE`.
 #' @return A named list with:
 #'   \describe{
 #'     \item{`Y_adjusted`}{`n x T` matrix, the residualized response.}
@@ -98,8 +109,8 @@ mf_adjust_for_covariates <- function(Y, Z, X = NULL,
                                                                   eps = 1e-6,
                                                                   numiter.em = 4L),
                                      grid_mult             = sqrt(2),
-                                     thresh_lowcount       = 0,
-                                     quantile_trans        = FALSE) {
+                                     low_count_filter      = 0,
+                                     quantile_norm         = FALSE) {
   method <- match.arg(method)
 
   if (!is.matrix(Y) || !is.numeric(Y))
@@ -114,11 +125,11 @@ mf_adjust_for_covariates <- function(Y, Z, X = NULL,
     if (nrow(X) != nrow(Y))
       stop("`X` and `Y` must have the same number of rows.")
   }
-
-  if (!isTRUE(thresh_lowcount == 0))
-    stop("`thresh_lowcount > 0` is not supported in v1.")
-  if (isTRUE(quantile_trans))
-    stop("`quantile_trans = TRUE` is not supported in v1.")
+  if (!is.numeric(low_count_filter) || length(low_count_filter) != 1L ||
+      low_count_filter < 0)
+    stop("`low_count_filter` must be a non-negative scalar.")
+  if (!is.logical(quantile_norm) || length(quantile_norm) != 1L)
+    stop("`quantile_norm` must be `TRUE` or `FALSE`.")
 
   if (method == "ols") {
     return(mf_residualize_ols(Y, Z, X))
@@ -132,7 +143,9 @@ mf_adjust_for_covariates <- function(Y, Z, X = NULL,
                             null_prior_weight     = null_prior_weight,
                             init_pi0_w            = init_pi0_w,
                             control_mixsqp        = control_mixsqp,
-                            grid_mult             = grid_mult)
+                            grid_mult             = grid_mult,
+                            low_count_filter      = low_count_filter,
+                            quantile_norm         = quantile_norm)
 }
 
 #' OLS Frisch-Waugh-Lovell residualization
@@ -179,7 +192,9 @@ mf_residualize_wavelet_eb <- function(Y, Z, X = NULL,
                                       control_mixsqp        = list(verbose = FALSE,
                                                                    eps = 1e-6,
                                                                    numiter.em = 4L),
-                                      grid_mult             = sqrt(2)) {
+                                      grid_mult             = sqrt(2),
+                                      low_count_filter      = 0,
+                                      quantile_norm         = FALSE) {
   n     <- nrow(Y)
   T_pos <- ncol(Y)
 
@@ -204,6 +219,19 @@ mf_residualize_wavelet_eb <- function(Y, Z, X = NULL,
   T_pad   <- ncol(Y_wd)             # equals T_pos
   lev_res <- log2(T_pad)
   indx_lst <- gen_wavelet_indx(lev_res)
+
+  # Optional preprocessing on the wavelet-domain matrix.
+  # `quantile_norm` is applied first; the median-based low-count
+  # mask is computed on the (possibly transformed) coefficients
+  # so flagged columns are treated as uninformative for the rest
+  # of the run.
+  if (quantile_norm) {
+    Y_wd <- mf_quantile_normalize(Y_wd)
+  }
+  lowc_idx <- mf_low_count_indices(Y_wd, threshold = low_count_filter)
+  if (length(lowc_idx) > 0L) {
+    Y_wd[, lowc_idx] <- 0
+  }
 
   # Step 3: prior init via the existing helper.
   prior_obj <- init_scale_mixture_prior_default(
@@ -239,6 +267,12 @@ mf_residualize_wavelet_eb <- function(Y, Z, X = NULL,
         Y = partial_resid)
       bhat_j <- as.numeric(bs$Bhat)
       shat_j <- pmax(as.numeric(bs$Shat), 1e-32)
+      # Low-count mask: flagged columns are treated as
+      # uninformative (Bhat = 0, Shat = 1).
+      if (length(lowc_idx) > 0L) {
+        bhat_j[lowc_idx] <- 0
+        shat_j[lowc_idx] <- 1
+      }
       MLE_wc [j, ] <- bhat_j
       # MLE_wc2 stores the per-coefficient second moment Shat^2
       # so `sqrt(MLE_wc2) = Shat` recovers the standard error

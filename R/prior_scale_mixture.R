@@ -52,6 +52,11 @@ distribute_mixture_weights <- function(K, null_prior_weight) {
 #'   `gen_wavelet_indx`. Required for `mixture_normal_per_scale`.
 #' @param grid_multiplier numeric, forwarded to `ash` as
 #'   `gridmult`.
+#' @param lowc_idx integer vector of column indices in `Y_m`
+#'   masked by `low_count_filter`. When non-empty, those
+#'   columns are excluded from the ash sampling pool so
+#'   masked-zero coefficients do not pull the prior toward a
+#'   degenerate spike.
 #' @return list with `G_prior` (the ash fit, possibly replicated)
 #'   and `tt` (the marginal Bhat / Shat from the susieR helper).
 #' @keywords internal
@@ -60,7 +65,8 @@ init_scale_mixture_prior_default <- function(Y_m,
                                              X,
                                              prior_class     = "mixture_normal_per_scale",
                                              groups          = NULL,
-                                             grid_multiplier = sqrt(2)) {
+                                             grid_multiplier = sqrt(2),
+                                             lowc_idx        = integer(0)) {
   prior_class <- match.arg(prior_class,
                            c("mixture_normal", "mixture_normal_per_scale"))
   if (is.null(groups)) {
@@ -69,14 +75,22 @@ init_scale_mixture_prior_default <- function(Y_m,
 
   bs <- compute_marginal_bhat_shat(X, Y_m)
 
+  if (length(lowc_idx) > 0L) {
+    pool_Bhat <- bs$Bhat[, -lowc_idx, drop = FALSE]
+    pool_Shat <- bs$Shat[, -lowc_idx, drop = FALSE]
+  } else {
+    pool_Bhat <- bs$Bhat
+    pool_Shat <- bs$Shat
+  }
+
   sample_size <- if (prior_class == "mixture_normal_per_scale") 50000 else 5000
-  pool_dim    <- prod(dim(bs$Bhat))
+  pool_dim    <- prod(dim(pool_Bhat))
   draw_n      <- min(pool_dim, sample_size)
 
   set.seed(1)
-  betahat <- c(max(abs(bs$Bhat)), sample(bs$Bhat, size = draw_n))
+  betahat <- c(max(abs(pool_Bhat)), sample(pool_Bhat, size = draw_n))
   set.seed(1)
-  sdhat <- c(0.01, sample(bs$Shat, size = draw_n))
+  sdhat <- c(0.01, sample(pool_Shat, size = draw_n))
 
   t_ash <- ash(betahat, sdhat,
                      mixcompdist = "normal",
@@ -189,7 +203,9 @@ mf_prior_scale_mixture <- function(data,
         X               = X,
         prior_class     = prior_class,
         groups          = groups_m,
-        grid_multiplier = grid_multiplier
+        grid_multiplier = grid_multiplier,
+        lowc_idx        = if (!is.null(data$lowc_idx)) data$lowc_idx[[m]]
+                          else integer(0)
       )
       G_prior_per_outcome[[m]] <- out$G_prior
 

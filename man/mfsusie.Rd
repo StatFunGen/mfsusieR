@@ -30,6 +30,8 @@ mfsusie(
   max_padded_log2 = 10,
   wavelet_filter_number = 10,
   wavelet_family = "DaubLeAsymm",
+  low_count_filter = 0,
+  quantile_norm = FALSE,
   control_mixsqp = NULL,
   mixsqp_null_penalty = 0.7
 )
@@ -115,6 +117,21 @@ length per outcome. Default 10.}
 \code{filter.select}.}
 
 \item{wavelet_family}{character; see \code{wd}.}
+
+\item{low_count_filter}{non-negative numeric. Wavelet-domain
+columns with \verb{median(|column|) <= low_count_filter} are
+flagged as uninformative and treated as \code{Bhat = 0},
+\code{Shat = 1} at every IBSS iteration. Useful for
+sparse-coverage assays where many wavelet columns carry
+negligible signal. Default \code{0}; with the default the set
+is non-empty only when the response has at least one
+wavelet column whose absolute-value median is exactly zero.}
+
+\item{quantile_norm}{logical. When \code{TRUE}, applies a
+column-wise rank-based normal quantile transform to the
+wavelet-domain response before the IBSS loop. Useful for
+non-Gaussian wavelet coefficients arising from heavy-
+tailed assays. Default \code{FALSE}.}
 
 \item{control_mixsqp}{optional named list of \code{mixsqp} control
 arguments forwarded to the per-(outcome, scale) M-step.}
