@@ -8,10 +8,12 @@ mfsusie_plot(
   fit,
   m = NULL,
   pos = NULL,
+  effect_style = c("band", "errorbar"),
+  facet_cs = c("auto", "stack", "overlay"),
   show_grid_dots = FALSE,
-  show_lfsr = TRUE,
+  show_lfsr_curve = TRUE,
   show_affected_region = TRUE,
-  lfsr_threshold = 0.05,
+  lfsr_threshold = 0.01,
   lwd = 1.5,
   add_legend = TRUE,
   ...
@@ -20,24 +22,34 @@ mfsusie_plot(
 \arguments{
 \item{fit}{a fit returned by \code{mfsusie()} or \code{fsusie()}.}
 
-\item{m}{optional integer index. When supplied (and \code{M > 1}),
-plot only that outcome's effect panel (no PIP). Default
-\code{NULL}: full layout.}
+\item{m}{optional integer index. When supplied, plot only that
+outcome's effect panel (no PIP). Default \code{NULL}: full layout.}
 
 \item{pos}{optional length-p vector for the PIP x-axis.}
+
+\item{effect_style}{\code{"band"} (default) or \code{"errorbar"}. Style
+of the effect panel.}
+
+\item{facet_cs}{\code{"auto"} (default), \code{"stack"}, or \code{"overlay"}.
+Layout of multiple credible sets within an effect panel.}
 
 \item{show_grid_dots}{logical, draw circles at each post-remap
 grid point on top of the curves. Default \code{FALSE}.}
 
-\item{show_lfsr}{logical, overlay HMM lfsr curves on a secondary
-axis when \code{fit$lfsr_curves} is populated. Default \code{TRUE}.}
+\item{show_lfsr_curve}{logical, overlay HMM lfsr curves on a
+secondary axis when \code{fit$lfsr_curves} is populated. Only
+honored in \code{effect_style = "band"}. Default \code{TRUE}. The
+solid line is the effect (left axis), the dashed line is
+the lfsr (right axis, 0 to 1). For a dedicated per-CS
+lfsr view see \code{mfsusie_plot_lfsr()}.}
 
 \item{show_affected_region}{logical, mark contiguous segments
 where each CS's credible band excludes zero with thick bars
-at the bottom of the effect panel. Default \code{TRUE}.}
+at the bottom of the effect panel (band mode) or with black
+dots on the zero line (errorbar mode). Default \code{TRUE}.}
 
 \item{lfsr_threshold}{numeric, dashed reference line on the lfsr
-secondary axis. Default \code{0.05}.}
+secondary axis. Default \code{0.01}.}
 
 \item{lwd}{numeric, curve line width. Default \code{1.5}.}
 
@@ -59,15 +71,19 @@ the PIP plot in the top-left slot.
 \details{
 Effect curves come from \code{fit$effect_curves} when post-processed
 smoothing has been applied (see \code{mf_post_smooth()}); otherwise
-from the wavelet-domain inverse via \code{coef()}. Pointwise credible
-bands are drawn as transparent ribbons when \code{fit$credible_bands}
-is populated. After \code{mf_post_smooth(method = "HMM")} the
-per-position lfsr curves are overlaid on a secondary axis with a
-threshold line at \code{lfsr_threshold}. Affected regions (where each
-CS's credible band excludes zero) are marked with thick bars at
-the bottom of each effect panel.
+from the wavelet-domain inverse via \code{coef()}. With
+\code{effect_style = "band"} (default) credible bands are drawn as
+transparent ribbons; with \code{effect_style = "errorbar"} each
+position gets a dot at the mean and a vertical bar to the
+credible band (errorbar mode requires post-smoothed credible
+bands and errors otherwise).
 
-For the PIP plot only, see also \code{susie_plot(fit, y = "PIP")}
-(re-exported from susieR), which is the standard SuSiE-family
-PIP plotter.
+Multiple credible sets can be drawn overlaid (\code{facet_cs = "overlay"}) or in stacked rows (\code{facet_cs = "stack"}); the
+default \code{"auto"} picks stack when there are at least 3 CSes or
+when their affected-region masks are pairwise disjoint.
+
+After \code{mf_post_smooth(method = "HMM")} the per-position lfsr
+curves are overlaid on a secondary axis (band mode) with a
+threshold line at \code{lfsr_threshold} (default \code{0.01}). For the
+per-CS lfsr bubble grid see \code{mfsusie_plot_lfsr()}.
 }

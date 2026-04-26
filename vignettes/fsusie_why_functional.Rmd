@@ -33,13 +33,13 @@ set.seed(1)
 
 1. **Per-position SuSiE, then aggregate**: fit `susie(X, y_t)`
    independently for each position `t = 1, ..., T`, then take the
-   per-variable maximum or sum of PIPs. Loses the smoothness of the effect
-   profile and inflates false positives because each fit is
-   under-powered.
+   per-variable maximum or sum of PIPs. The smoothness of the effect
+   profile is discarded, and per-position fits have low power because
+   each conditions on a single noisy outcome.
 2. **Top-PC SuSiE**: project `Y` onto its top principal component and
-   fit `susie(X, Y %*% v_1)`. Keeps the strongest mode of variation in
-   `Y` but discards the variable-driven signal whenever the variable effect
-   loads on a different direction.
+   fit `susie(X, Y %*% v_1)`. The fit retains the strongest mode of
+   variation in `Y` but discards the variable-driven signal whenever
+   the variable effect loads on a different direction.
 
 ## Simulation
 
@@ -104,9 +104,9 @@ length(fit_f$sets$cs)
 
 `fsusie()` integrates over the position dimension under a wavelet-
 basis prior that adapts to the actual smoothness of the effect curve.
-Two causal variables that each affect a localised window get the full
-benefit of within-window pooling without bleeding into variables whose
-effects live in a different window. The scalar shortcuts above either
+Two causal variables that each affect a localised window pool
+information within their own window without spilling signal into
+variables whose effects fall in a different window. The scalar shortcuts above either
 average effects out (top-PC) or fragment them (per-position).
 
 The same argument scales up: if a variable affects multiple correlated

@@ -64,8 +64,8 @@ fit_f$pip[c(5, 17)]
 length(fit_f$sets$cs)
 ```
 
-The `fsusie()` call is a thin canonicalizer: it forwards to
-`mfsusie(X, list(Y), list(pos), ...)` with no numerical change.
+`fsusie()` is a wrapper around `mfsusie(X, list(Y), list(pos),
+...)` with no numerical difference.
 `mfsusie_plot()` works on the result either way:
 
 ```{r fsusie-plot, fig.width = 6, fig.height = 5}

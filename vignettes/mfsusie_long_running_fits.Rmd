@@ -83,8 +83,9 @@ fit_short <- readRDS("fit_progress.rds")
 
 A direct mid-run resume API (`s_init = m_prev`-style) is a planned
 extension. The per-iteration model state is stored on the susieR
-backbone via S3 dispatch; surfacing it as a public argument requires
-a small wiring change but no new numerics.
+backbone via S3 dispatch; surfacing it as a public argument
+requires changes to the function signature and dispatch table but
+no new numerical methods.
 
 Until that extension lands, the recommended pattern is:
 
