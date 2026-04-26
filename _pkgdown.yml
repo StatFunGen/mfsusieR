@@ -80,7 +80,8 @@ articles:
       Fine-mapping a single response. One Y, one set of predictor variables.
     contents:
       - fsusie_intro
-      - fsusie_covariates_and_coloc
+      - fsusie_covariates_adjustment
+      - fsusie_colocalization
       - fsusie_dnam_case_study
       - fsusie_gtex_case_study
       - fsusie_why_functional
@@ -102,3 +103,9 @@ footer:
   structure:
     left: developed_by
     right: built_with
+
+news:
+  releases:
+    - text: "Version 0.0.1"
+      href: https://github.com/StatFunGen/mfsusieR/releases/tag/v0.0.1
+  cran_dates: false
