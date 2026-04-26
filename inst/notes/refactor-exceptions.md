@@ -321,3 +321,85 @@ entry SHALL be blocked.
     documentation of the upstream divergence. fsusieR upstream
     issue should be opened referencing 9f89333 and fc806a5.
 
+
+### PR group ?? (R/adjust_covariates.R + R/em_helpers.R, 2026-04-26)
+
+- fsusieR/R/EBmvFR.R, fsusieR/R/EBmvFR_workhorse.R,
+  fsusieR/R/operation_on_EBmvFR_obj.R (covariate-adjustment
+  pathway only; the `adjust = TRUE` exit branch).
+  Behavior: wavelet-domain empirical-Bayes regression of a
+    functional response Y on a covariate matrix Z, returning
+    `Y_adjusted = Y - Z %*% fitted_func`.
+  Decision: in-scope-as-of-round-2 for the covariate-adjustment
+    use case. Assembled from existing primitives
+    (`init_scale_mixture_prior_default`, `compute_marginal_bhat_shat`,
+    `ashr::postmean/postsd`, `mixsqp::mixsqp`, `dwt_matrix`,
+    `mf_invert_dwt`) plus a new `R/adjust_covariates.R` module.
+    No port of the EBmvFR.R / EBmvFR_workhorse.R files
+    themselves; the algorithm is reassembled. The full EB-
+    multivariate-functional-regression model as a SuSiE
+    alternative remains out of scope (the original
+    out-of-scope-EBmvFR ruling stands for that purpose).
+  Reason: round 2 vignette work needs a public covariate-
+    adjustment utility (`mf_adjust_for_covariates`). The
+    upstream `EBmvFR(adjust = TRUE)` exit pathway is a
+    well-defined subset of the EBmvFR machinery and assembling
+    it from existing mfsusieR primitives stays within the
+    scope-discipline rule for the SuSiE-track ports.
+
+- fsusieR/R/operation_on_EBmvFR_obj.R:351 (update_effect.EBmvFR
+  storing `MLE_wc$Shat` into `obj$MLE_wc2`)
+  Behavior: the slot named `MLE_wc2` (suggesting "second
+    moment", i.e., squared standard error) is upstream
+    populated with `MLE_wc$Shat` (the standard error itself,
+    not the second moment). The downstream `update_prior_EBmvFR`
+    then calls `L_mixsq(..., Shat = sqrt(obj$MLE_wc2[[1]]))`,
+    which evaluates to `sqrt(Shat)`, NOT `Shat`. The
+    "Shat" argument fed to L_mixsq is therefore in units of
+    `sqrt(Shat)`, off by a square root.
+  Decision: fixed-in `R/adjust_covariates.R::mf_residualize_wavelet_eb`.
+    `MLE_wc2[j, ] <- shat_j^2` stores the actual second moment.
+    The L_mixsq call passes `sqrt(MLE_wc2[, idx_s, drop = FALSE]) = Shat`,
+    which is the correct standard error. Pattern A bug fix per
+    refactor-discipline section 3.
+  Reason: this is a slot-name-vs-content bug, not a defensible
+    algorithmic choice. The author labels the slot `_wc2`
+    explicitly to indicate a second moment; the storage line
+    contradicts the label and the downstream consumer treats
+    the value as if it were the second moment. The mathematical
+    consequence is wrong-units arguments to mixsqp.
+
+- fsusieR/R/operation_on_EBmvFR_obj.R:124-132 (get_ER2.EBmvFR
+  formula)
+  Behavior: `sum(t(R) %*% R) - sum(t(postF) %*% postF) + sum(postF2)`
+    where R = Y - X*postF. The first two terms compute the FULL
+    Gram-matrix sum of (T x T) cross-products, which equals
+    `sum_i rowSums(R[i, ])^2` and `sum_j rowSums(postF[j, ])^2`
+    respectively, NOT the diagonal traces `sum(R^2)` and
+    `sum(postF^2)`. The third term `sum(postF2)` is the sum of
+    the posterior variances (since `postF2 = postsd^2`) but is
+    missing the `predictor_weights` factor `pw[j] = colSums(X^2)`
+    that the variational decomposition requires.
+    Denault flagged this himself with the inline TODO at line
+    74: `"not correct, need to correct bottom part"`.
+  Decision: replaced-by-correct-formula in
+    `R/adjust_covariates.R::mf_residualize_wavelet_eb`:
+    `er2 = sum((Y - X*postF)^2) + sum_j pw[j] * sum_t Var(beta[j,t])`
+    where `pw[j] = colSums(X^2)` and `Var(beta[j,t]) = fitted_wc2[j,t]`.
+    Pattern A bug fix per refactor-discipline section 3.
+  Reason: the variational decomposition for the posterior-
+    expected squared error under a factorized posterior is
+    well-known; the upstream formula is dimensionally wrong.
+    Fixing it in our port is the correct call per the
+    "no-buggy-code" rule.
+
+  Joint impact of the two bug fixes above: our
+    `mf_adjust_for_covariates(method = "wavelet_eb")` output
+    is no longer bit-identical to upstream `EBmvFR(adjust = TRUE)`.
+    The deviation is the magnitude of the upstream bug. The
+    `tests/testthat/test_adjust_covariates.R` Pattern A test
+    asserts (i) closed-form closeness for the OLS path, (ii)
+    structural correctness for the wavelet-EB path (positive
+    sigma2, posterior shrinkage on near-null effects), and
+    (iii) numerical agreement with upstream within the bug-
+    magnitude tolerance documented per-scenario.

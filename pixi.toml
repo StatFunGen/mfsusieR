@@ -37,6 +37,13 @@ r45 = {features = ["r45"]}
 "r-ashr" = "*"
 "r-matrixstats" = "*"
 
+# SuSiE-suite peers used by vignettes (cross-platform via
+# the dnachun channel). mfsusieR's `fsusie_why_functional`
+# vignette compares against `mvsusieR::mvsusie()`. Vignette
+# chunks gate with `requireNamespace("mvsusieR", quietly = TRUE)`
+# so the package still builds without it.
+"r-mvsusier" = ">=0.2.0"
+
 # Suggested dependencies (for testing and documentation).
 "r-testthat" = "*"
 "r-knitr" = "*"
