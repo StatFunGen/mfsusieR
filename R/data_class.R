@@ -10,7 +10,7 @@
 #' loop needs into one S3 object of class
 #' `c("mf_individual", "individual")`.
 #'
-#' @param X numeric matrix `n x J`.
+#' @param X numeric matrix `n x p`.
 #' @param Y list of length M; each element a numeric matrix
 #'   `n x T_m`. Ragged `T_m` across modalities is permitted; an
 #'   element may have `T_m = 1` (univariate, no DWT).
@@ -55,7 +55,7 @@ create_mf_individual <- function(X,
   }
   M <- length(Y)
   n <- nrow(X)
-  J <- ncol(X)
+  p <- ncol(X)
 
   Y <- lapply(Y, function(y) {
     if (is.null(dim(y))) y <- matrix(y, ncol = 1)
@@ -89,15 +89,15 @@ create_mf_individual <- function(X,
   }
 
   # ---- Center and scale X ------------------------------------------------
-  X_center <- if (intercept) colMeans(X) else rep(0, J)
+  X_center <- if (intercept) colMeans(X) else rep(0, p)
   X_centered <- if (intercept) sweep(X, 2, X_center, "-") else X
 
   if (standardize) {
-    X_scale <- colSds(X_centered, center = rep(0, J))
+    X_scale <- colSds(X_centered, center = rep(0, p))
     X_scale[X_scale == 0] <- 1
     X_processed <- sweep(X_centered, 2, X_scale, "/")
   } else {
-    X_scale <- rep(1, J)
+    X_scale <- rep(1, p)
     X_processed <- X_centered
   }
 
@@ -146,8 +146,7 @@ create_mf_individual <- function(X,
     predictor_weights = colSums(X_processed^2),  # X'X diagonal, cached
                                                  # for SER stats per IBSS sweep
     n            = n,
-    J            = J,
-    p            = J,    # alias for susieR helpers that read `data$p`
+    p            = p,
     M            = M,
     residuals    = if (save_residuals) vector("list", M) else NULL,
     intercept    = intercept,

@@ -46,13 +46,13 @@ on a length-128 grid.
 ```{r simulate}
 data(N3finemapping)
 X <- N3finemapping$X[, seq_len(200)]
-n <- nrow(X); J <- ncol(X)
+n <- nrow(X); p <- ncol(X)
 T_m <- 128
 
 # Two causal SNPs, smooth bell-shaped effect curve.
 positions <- seq_len(T_m)
 shape <- exp(-((positions - T_m / 2)^2) / (2 * (T_m / 8)^2))
-beta <- matrix(0, nrow = J, ncol = T_m)
+beta <- matrix(0, nrow = p, ncol = T_m)
 beta[37, ] <-  1.5 * shape
 beta[112, ] <- -1.0 * shape
 

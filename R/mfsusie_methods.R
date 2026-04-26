@@ -11,8 +11,8 @@
 
 # ---- helpers --------------------------------------------------
 
-# Per-modality inverse-wavelet projection of one J x T_padded
-# coefficient matrix back to a J x T_m matrix on the original
+# Per-modality inverse-wavelet projection of one p x T_padded
+# coefficient matrix back to a p x T_m matrix on the original
 # position grid. `coef_wavelet` rows are SNPs (or some other
 # index); each row is inverted independently.
 mf_invert_per_modality <- function(coef_wavelet, m, mf_meta) {
@@ -41,7 +41,7 @@ mf_invert_per_modality <- function(coef_wavelet, m, mf_meta) {
   inverted
 }
 
-# Per-effect coefficient matrix (J x T_padded) for effect l, modality m,
+# Per-effect coefficient matrix (p x T_padded) for effect l, modality m,
 # on the standardized X scale: alpha_lj * mu_lj_t.
 mf_effect_wavelet <- function(fit, l, m) {
   fit$alpha[l, ] * fit$mu[[l]][[m]]
@@ -50,9 +50,9 @@ mf_effect_wavelet <- function(fit, l, m) {
 # Coefficient sum across all L effects per modality, on standardized
 # X scale, in the wavelet domain.
 mf_total_wavelet <- function(fit, m) {
-  J     <- ncol(fit$alpha)
+  p     <- ncol(fit$alpha)
   T_pad <- fit$mf_meta$T_padded[m]
-  out   <- matrix(0, nrow = J, ncol = T_pad)
+  out   <- matrix(0, nrow = p, ncol = T_pad)
   for (l in seq_len(nrow(fit$alpha))) {
     out <- out + mf_effect_wavelet(fit, l, m)
   }
@@ -70,7 +70,7 @@ mf_total_wavelet <- function(fit, m) {
 #' each modality's original position grid `pos[[m]]`.
 #'
 #' @param object an `mfsusie` fit returned by `mfsusie()`.
-#' @param newx numeric matrix `n_new x J` of new covariates on the
+#' @param newx numeric matrix `n_new x p` of new covariates on the
 #'   same scale as the training `X`. `NULL` returns the training
 #'   fitted values (equivalent to `fitted(object)`).
 #' @param ... ignored.
@@ -97,7 +97,7 @@ predict.mfsusie <- function(object, newx = NULL, ...) {
   M   <- meta$M
   out <- vector("list", M)
   for (m in seq_len(M)) {
-    coef_wavelet <- mf_total_wavelet(object, m)        # J x T_padded
+    coef_wavelet <- mf_total_wavelet(object, m)        # p x T_padded
     pred_wavelet <- newx_std %*% coef_wavelet           # n_new x T_padded
     out[[m]] <- mf_invert_per_modality(pred_wavelet, m, meta)
   }
@@ -180,7 +180,7 @@ fitted.mfsusie <- function(object, ...) {
 print.mfsusie <- function(x, ...) {
   meta <- x$mf_meta
   cat("mfsusie fit\n")
-  cat(sprintf("  J (SNPs):       %d\n", ncol(x$alpha)))
+  cat(sprintf("  p (predictors): %d\n", ncol(x$alpha)))
   cat(sprintf("  L (effects):    %d\n", nrow(x$alpha)))
   cat(sprintf("  M (modalities): %d\n", meta$M))
   T_str <- paste(meta$T_padded, collapse = ", ")
@@ -257,7 +257,7 @@ summary.mfsusie <- function(object, ...) {
 
 #' @export
 print.summary.mfsusie <- function(x, ...) {
-  cat(sprintf("mfsusie summary: J=%d, L=%d, M=%d, %s in %d iter\n",
+  cat(sprintf("mfsusie summary: p=%d, L=%d, M=%d, %s in %d iter\n",
               x$n_snps, x$n_effects, x$n_modalities,
               if (x$converged) "converged" else "NOT converged",
               x$n_iter))

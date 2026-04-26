@@ -38,13 +38,13 @@ the residualised response. The conventional recipe is to project out
 ```{r covariate-data}
 data(N3finemapping)
 X <- N3finemapping$X[, seq_len(150)]
-n <- nrow(X); J <- ncol(X); T_m <- 64
+n <- nrow(X); p <- ncol(X); T_m <- 64
 
 Z <- cbind(1, scale(rnorm(n)), scale(rnorm(n)))   # intercept + 2 covariates
 gamma <- matrix(rnorm(ncol(Z) * T_m), nrow = ncol(Z))
 positions <- seq_len(T_m)
 shape <- exp(-((positions - T_m / 2)^2) / (2 * (T_m / 6)^2))
-beta <- matrix(0, J, T_m); beta[42, ] <- 1.2 * shape
+beta <- matrix(0, p, T_m); beta[42, ] <- 1.2 * shape
 Y <- Z %*% gamma + X %*% beta + matrix(rnorm(n * T_m, sd = 0.4), n)
 ```
 
@@ -72,10 +72,10 @@ return per-effect `alpha` matrices on the same `X`, the combination is
 a straightforward outer product.
 
 ```{r coloc-data}
-J <- ncol(X)
-beta1 <- matrix(0, J, T_m); beta1[42, ] <- 1.2 * shape
-beta2 <- matrix(0, J, T_m); beta2[42, ] <- 0.9 * shape         # shared causal
-beta3 <- matrix(0, J, T_m); beta3[88, ] <- 0.9 * shape         # distinct
+p <- ncol(X)
+beta1 <- matrix(0, p, T_m); beta1[42, ] <- 1.2 * shape
+beta2 <- matrix(0, p, T_m); beta2[42, ] <- 0.9 * shape         # shared causal
+beta3 <- matrix(0, p, T_m); beta3[88, ] <- 0.9 * shape         # distinct
 Y1 <- X %*% beta1 + matrix(rnorm(n * T_m, sd = 0.4), n)
 Y2 <- X %*% beta2 + matrix(rnorm(n * T_m, sd = 0.4), n)
 Y3 <- X %*% beta3 + matrix(rnorm(n * T_m, sd = 0.4), n)

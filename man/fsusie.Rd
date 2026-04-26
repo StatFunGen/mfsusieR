@@ -10,7 +10,7 @@ fsusie(Y, X, pos = NULL, ...)
 \item{Y}{numeric matrix \verb{n x T} of functional responses on a
 regular position grid (or numeric vector for \code{T = 1}).}
 
-\item{X}{numeric matrix \verb{n x J} of covariates.}
+\item{X}{numeric matrix \verb{n x p} of covariates.}
 
 \item{pos}{optional numeric vector of length \code{T} recording
 sampling positions. Defaults to \code{seq_len(ncol(Y))}.}

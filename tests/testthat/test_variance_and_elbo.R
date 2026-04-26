@@ -34,21 +34,21 @@ make_model_with_post <- function(data, L = 2, sigma2_scalar = 1) {
   model <- mfsusieR:::initialize_susie_model.mf_individual(data, params, var_y)
   # Inject deterministic non-zero alpha + mu so ER2 / Eloglik are non-trivial.
   for (l in seq_len(L)) {
-    model$alpha[l, ] <- runif(data$J)
+    model$alpha[l, ] <- runif(data$p)
     model$alpha[l, ] <- model$alpha[l, ] / sum(model$alpha[l, ])
     for (m in seq_len(data$M)) {
-      model$mu[[l]][[m]]  <- matrix(rnorm(data$J * data$T_padded[m], sd = 0.1),
-                                    nrow = data$J)
+      model$mu[[l]][[m]]  <- matrix(rnorm(data$p * data$T_padded[m], sd = 0.1),
+                                    nrow = data$p)
       model$mu2[[l]][[m]] <- model$mu[[l]][[m]]^2 +
-                             matrix(runif(data$J * data$T_padded[m], 0.05, 0.2),
-                                    nrow = data$J)
+                             matrix(runif(data$p * data$T_padded[m], 0.05, 0.2),
+                                    nrow = data$p)
     }
   }
   # Sync the running fit cache with the injected posterior so
   # `mf_get_ER2_per_position` (which reads `model$fitted[[m]]`) is
   # consistent with `alpha * mu`.
   for (m in seq_len(data$M)) {
-    postF <- matrix(0, nrow = data$J, ncol = data$T_padded[m])
+    postF <- matrix(0, nrow = data$p, ncol = data$T_padded[m])
     for (l in seq_len(L)) {
       postF <- postF + model$alpha[l, ] * model$mu[[l]][[m]]
     }
@@ -66,7 +66,7 @@ test_that("mf_get_ER2_per_position matches the susieR-style formula", {
 
     # Hand-recompute.
     pw     <- data$predictor_weights
-    postF  <- matrix(0, nrow = data$J, ncol = data$T_padded[m])
+    postF  <- matrix(0, nrow = data$p, ncol = data$T_padded[m])
     for (l in seq_len(model$L)) {
       postF <- postF + model$alpha[l, ] * model$mu[[l]][[m]]
     }
@@ -219,7 +219,7 @@ test_that("get_objective with per-scale sigma2 + non-uniform model$pi", {
     model$sigma2[[m]] <- seq_len(S_m) * 0.1
   }
   # Non-uniform variable-selection prior.
-  model$pi <- runif(data$J)
+  model$pi <- runif(data$p)
   model$pi <- model$pi / sum(model$pi)
   model$KL <- runif(model$L, 0.1, 1)
 
@@ -292,8 +292,8 @@ test_that("optimize_prior_variance.mf_individual changes pi vs the initial unifo
   ser   <- mfsusieR:::compute_ser_statistics.mf_individual(data, NULL, model, l = 1)
 
   # Inject a more peaked alpha at SNP 1 so mixsqp has a clear signal.
-  model$alpha[1, ]    <- rep(1e-6, data$J)
-  model$alpha[1, 1]   <- 1 - 1e-6 * (data$J - 1)
+  model$alpha[1, ]    <- rep(1e-6, data$p)
+  model$alpha[1, 1]   <- 1 - 1e-6 * (data$p - 1)
 
   init_pi <- vapply(seq_along(model$G_prior[[1]]),
                     function(s) model$G_prior[[1]][[s]]$fitted_g$pi,
@@ -324,7 +324,7 @@ test_that("update_model_variance.mf_individual orchestrates sigma2 update + deri
   }
   # Running fit was synced to current alpha * mu.
   for (m in seq_len(data$M)) {
-    postF <- matrix(0, nrow = data$J, ncol = data$T_padded[m])
+    postF <- matrix(0, nrow = data$p, ncol = data$T_padded[m])
     for (l in seq_len(model$L)) {
       postF <- postF + model$alpha[l, ] * model$mu[[l]][[m]]
     }

@@ -20,8 +20,8 @@
 #'
 #' @param data an `mf_individual` object from `create_mf_individual`.
 #' @param params named list of fit-time parameters. Required fields:
-#'   `L` (effect-count upper bound), `prior_weights` (length-J
-#'   variable-selection prior, defaults to uniform `1/J` if NULL),
+#'   `L` (effect-count upper bound), `prior_weights` (length-p
+#'   variable-selection prior, defaults to uniform `1/p` if NULL),
 #'   `prior` (an `mf_prior_scale_mixture` object containing
 #'   `V_grid`, `pi`, `null_prior_weight`), and
 #'   `residual_variance` (initial sigma2; either a length-M list
@@ -37,75 +37,68 @@
 #' @noRd
 initialize_susie_model.mf_individual <- function(data, params, var_y, ...) {
   L <- as.integer(params$L)
-  J <- data$J
+  p <- data$p
   M <- data$M
   T_padded <- data$T_padded
 
-  # ---- Per-effect posterior moments (nested list per design.md D2) ----
-  # mu[[l]][[m]] and mu2[[l]][[m]] are J x T_padded[m] matrices.
-  # The nested-list shape lets ragged T_m coexist without padding to
-  # a common T across modalities.
+  # Per-effect posterior moments. mu[[l]][[m]] and mu2[[l]][[m]] are
+  # p x T_padded[m] matrices; the nested-list shape lets ragged T_m
+  # coexist without padding to a common T.
   mu  <- vector("list", L)
   mu2 <- vector("list", L)
   for (l in seq_len(L)) {
     mu[[l]]  <- vector("list", M)
     mu2[[l]] <- vector("list", M)
     for (m in seq_len(M)) {
-      mu[[l]][[m]]  <- matrix(0, nrow = J, ncol = T_padded[m])
-      mu2[[l]][[m]] <- matrix(0, nrow = J, ncol = T_padded[m])
+      mu[[l]][[m]]  <- matrix(0, nrow = p, ncol = T_padded[m])
+      mu2[[l]][[m]] <- matrix(0, nrow = p, ncol = T_padded[m])
     }
   }
 
-  # ---- Prior structure (per design.md D6) ----
-  # V_grid: list[M] of length-K vectors (or list[M] of S_m x K
-  #   matrices when prior_variance_scope = "per_scale_modality").
-  # pi_V:   list[M] of S_m x K mixture-weight matrices.
-  # null_prior_weight: scalar (default 2 per design.md D5/D7).
+  # Prior structure. V_grid: list[M] of length-K vectors (or list[M]
+  # of S_m x K matrices for `per_scale_modality`). pi_V: list[M] of
+  # S_m x K mixture-weight matrices. null_prior_weight: scalar.
   prior <- params$prior
   V_grid             <- if (is.null(prior)) NULL else prior$V_grid
   pi_V               <- if (is.null(prior)) NULL else prior$pi
   null_prior_weight  <- if (is.null(prior)) 0   else prior$null_prior_weight
   G_prior            <- if (is.null(prior)) NULL else prior$G_prior
 
-  # Cross-modality combiner: passed separately from `prior` since it
-  # is a distinct plug-in seam (per design.md D6). Default to the
-  # trivial independence combiner (`combine_modality_lbfs.mf_prior_cross_modality_independent`).
+  # Cross-modality combiner. Defaults to the trivial independence
+  # combiner.
   cross_modality_combiner <- if (is.null(params$cross_modality_prior)) {
     cross_modality_prior_independent()
   } else {
     params$cross_modality_prior
   }
 
-  # ---- Residual variance (per design.md D2) ----
-  # `sigma2` is either a list[M] of scalars (legacy
-  # `shared_per_modality` mode) or a list[M] of length-S_m vectors
-  # (per-(scale, modality) default). Falls back to `var_y` if
+  # Residual variance. `sigma2` is a list[M]: scalar entries under
+  # `shared_per_modality`, length-S_m vectors under
+  # `per_scale_modality` (the default). Falls back to `var_y` when
   # `params$residual_variance` is NULL.
   sigma2 <- params$residual_variance
   if (is.null(sigma2)) {
     sigma2 <- var_y
   }
 
-  # ---- Per-effect scalar scaling of the prior ----
-  # V[l] scales the entire mixture grid for effect l; mvsusieR uses
-  # the same pattern. Initial value 1 (no scaling); the IBSS loop
-  # updates V[l] via `update_model_variance.mf_individual`.
+  # V[l] scales the entire mixture grid for effect l. The IBSS loop
+  # updates it via `update_model_variance.mf_individual`.
   V <- rep(1, L)
 
-  # ---- Variable-selection prior over the J SNPs ----
+  # Variable-selection prior over the p predictors.
   prior_weights <- params$prior_weights
   if (is.null(prior_weights)) {
-    prior_weights <- rep(1 / J, J)
+    prior_weights <- rep(1 / p, p)
   }
 
-  # ---- Per-modality fitted values (running sum of effect curves) ----
+  # Per-modality fitted values (running sum of effect curves).
   fitted_values <- vector("list", M)
   for (m in seq_len(M)) {
     fitted_values[[m]] <- matrix(0, nrow = data$n, ncol = T_padded[m])
   }
 
   model <- list(
-    alpha             = matrix(1 / J, nrow = L, ncol = J),
+    alpha             = matrix(1 / p, nrow = L, ncol = p),
     mu                = mu,
     mu2               = mu2,
     V                 = V,
@@ -116,13 +109,13 @@ initialize_susie_model.mf_individual <- function(data, params, var_y, ...) {
     cross_modality_combiner = cross_modality_combiner,
     KL                = rep(NA_real_, L),
     lbf               = rep(NA_real_, L),
-    lbf_variable      = matrix(NA_real_, nrow = L, ncol = J),
+    lbf_variable      = matrix(NA_real_, nrow = L, ncol = p),
     sigma2            = sigma2,
     pi                = prior_weights,
     fitted            = fitted_values,
     intercept         = rep(0, M),
     L                 = L,
-    J                 = J,
+    p                 = p,
     M                 = M
   )
   class(model) <- c("mfsusie", "susie")
@@ -154,7 +147,7 @@ get_posterior_moments_l.mfsusie <- function(model, l) {
 
 #' Per-effect posterior mean curves (alpha-weighted mu)
 #'
-#' Returns a list of length M where element m is a `J x T_padded[m]`
+#' Returns a list of length M where element m is a `p x T_padded[m]`
 #' matrix; row j of element m is `alpha[l, j] * mu[[l]][[m]][j, ]`,
 #' the contribution of SNP j to the posterior mean of effect l on
 #' modality m.
@@ -167,7 +160,7 @@ get_posterior_mean_l.mfsusie <- function(model, l) {
 
 #' Posterior mean curves summed over all L effects
 #'
-#' Returns a list of length M where element m is a `J x T_padded[m]`
+#' Returns a list of length M where element m is a `p x T_padded[m]`
 #' matrix giving `sum_l alpha[l, j] * mu[[l]][[m]][j, ]`. Used by
 #' `get_posterior_mean_sum` callers in the IBSS dispatch.
 #' @keywords internal

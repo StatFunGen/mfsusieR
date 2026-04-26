@@ -35,7 +35,7 @@ compute_residuals.mf_individual <- function(data, params, model, l, ...) {
 
   alpha_l <- model$alpha[l, ]
   for (m in seq_len(M)) {
-    # alpha_l . mu_l[[m]] is J x T_padded[m]; X is n x J. Xb is n x T_padded[m].
+    # alpha_l . mu_l[[m]] is p x T_padded[m]; X is n x p. Xb is n x T_padded[m].
     b_l_m  <- alpha_l * model$mu[[l]][[m]]
     Xb_l_m <- X %*% b_l_m
 
@@ -61,8 +61,8 @@ compute_residuals.mf_individual <- function(data, params, model, l, ...) {
 #' construction.
 #'
 #' Returned list shape (per modality):
-#'   `betahat[[m]]`  has shape `J x T_padded[m]` and
-#'   `shat2[[m]]`    has shape `J x T_padded[m]`.
+#'   `betahat[[m]]`  has shape `p x T_padded[m]` and
+#'   `shat2[[m]]`    has shape `p x T_padded[m]`.
 #' Plus the optim_init / optim_bounds / optim_scale fields the
 #' susieR IBSS expects.
 #'
@@ -128,7 +128,7 @@ mf_per_modality_bhat_shat <- function(data, model, m) {
 #' For each modality m and scale s, computes the per-(SNP, scale)
 #' log-Bayes factor via the cpp11 kernel
 #' `mixture_log_bf_per_scale`. Sums across scales (within modality)
-#' to get a per-modality log-BF vector of length J, combines across
+#' to get a per-modality log-BF vector of length p, combines across
 #' modalities via the S3 generic `combine_modality_lbfs` (default
 #' independence: `Reduce("+", ...)`), then computes alpha as the
 #' softmax of `lbf_combined + log(model$pi)` and the SuSiE
@@ -208,15 +208,15 @@ loglik.mf_individual <- function(data, params, model, V, ser_stats, l = NULL, ..
 #' @keywords internal
 #' @noRd
 calculate_posterior_moments.mf_individual <- function(data, params, model, V, l, ...) {
-  J <- data$J
+  p <- data$p
   for (m in seq_len(data$M)) {
     bs <- mf_per_modality_bhat_shat(data, model, m)
     bhat_m <- bs$bhat
     shat_m <- sqrt(bs$shat2)
 
     G_m    <- model$G_prior[[m]]
-    mu_lm  <- matrix(0, nrow = J, ncol = data$T_padded[m])
-    mu2_lm <- matrix(0, nrow = J, ncol = data$T_padded[m])
+    mu_lm  <- matrix(0, nrow = p, ncol = data$T_padded[m])
+    mu2_lm <- matrix(0, nrow = p, ncol = data$T_padded[m])
     for (s in seq_along(G_m)) {
       idx <- G_m[[s]]$idx
       g_s <- G_m[[s]]$fitted_g
@@ -481,7 +481,7 @@ update_model_variance.mf_individual <- function(data, params, model, ...) {
 #' @noRd
 update_derived_quantities.mf_individual <- function(data, params, model, ...) {
   for (m in seq_len(data$M)) {
-    postF_m <- matrix(0, nrow = data$J, ncol = data$T_padded[m])
+    postF_m <- matrix(0, nrow = data$p, ncol = data$T_padded[m])
     for (l in seq_len(model$L)) {
       postF_m <- postF_m + model$alpha[l, ] * model$mu[[l]][[m]]
     }
@@ -535,7 +535,7 @@ get_objective.mf_individual <- function(data, params, model, ...) {
 #' Per modality, sets
 #' `model$fitted[[m]] <- model$fitted_without_l[[m]] + X %*% (alpha_l * mu_l_m)`,
 #' where `mu_l_m` is the per-effect, per-modality posterior mean
-#' (a `J x T_padded[m]` matrix). Called after
+#' (a `p x T_padded[m]` matrix). Called after
 #' `calculate_posterior_moments` updates alpha_l, mu_l. Mirrors
 #' the inline susie / mvsusie pattern of recomputing Xr from
 #' Xr_without_l + the new effect contribution.

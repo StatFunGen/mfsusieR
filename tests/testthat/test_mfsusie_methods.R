@@ -90,7 +90,7 @@ test_that("print.mfsusie does not error and returns invisibly", {
 test_that("print.mfsusie output contains key fit metadata", {
   toy <- make_toy_fit()
   txt <- capture.output(print(toy$fit))
-  expect_true(any(grepl("J \\(SNPs\\):", txt)))
+  expect_true(any(grepl("p \\(predictors\\):", txt)))
   expect_true(any(grepl("L \\(effects\\):", txt)))
   expect_true(any(grepl("M \\(modalities\\):", txt)))
   expect_true(any(grepl("iterations:", txt)))

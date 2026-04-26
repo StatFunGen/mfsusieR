@@ -1,6 +1,6 @@
 # Mixture-weight EM helpers for the per-(modality, scale) prior update.
 #
-# Two pure-R helpers that build the (J * |idx_s| + 1) x K likelihood
+# Two pure-R helpers that build the (p * |idx_s| + 1) x K likelihood
 # matrix consumed by mixsqp and run mixsqp at one (modality, scale)
 # pair. The orchestration (looping over modalities and scales,
 # reading per-effect zeta from `model$alpha[l, ]`, etc.) happens in
@@ -11,19 +11,19 @@
 
 #' Build the mixsqp likelihood matrix at one (modality, scale)
 #'
-#' Returns a `(J * |idx_s| + 1)` x `K` matrix where:
+#' Returns a `(p * |idx_s| + 1)` x `K` matrix where:
 #' row 1 is the null-component penalty pseudo-observation
-#' (`c(100, 0, ..., 0)`); rows 2..(J*|idx_s|+1) are
+#' (`c(100, 0, ..., 0)`); rows 2..(p*|idx_s|+1) are
 #' `dnorm(Bhat_jt; 0, sqrt(sd_k^2 + Shat_jt^2)) / sd`,
 #' one per `(j, t)` pair flattened in column-major order.
 #' The first row nudges the mixsqp solution toward the null
 #' component when data is uninformative.
 #'
-#' @param bhat_slice J x |idx_s| numeric matrix.
-#' @param shat_slice J x |idx_s| numeric matrix.
+#' @param bhat_slice p x |idx_s| numeric matrix.
+#' @param shat_slice p x |idx_s| numeric matrix.
 #' @param sd_grid length-K numeric vector of mixture-component standard
 #'   deviations (the null component has `sd = 0`).
-#' @return `(J * |idx_s| + 1)` x `K` numeric matrix.
+#' @return `(p * |idx_s| + 1)` x `K` numeric matrix.
 #' @references
 #' Manuscript: methods/derivation.tex line 216
 #' (factorized empirical-Bayes mixture-weight update).
@@ -58,7 +58,7 @@ mf_em_likelihood_per_scale <- function(bhat_slice, shat_slice, sd_grid) {
 #'
 #' @param L mixsqp likelihood matrix from
 #'   `mf_em_likelihood_per_scale`.
-#' @param zeta length-J SNP-level posterior weights (the per-effect
+#' @param zeta length-p SNP-level posterior weights (the per-effect
 #'   alpha for the SER step that triggered this update).
 #' @param idx_size integer, |idx_s|, positions in this scale.
 #' @param nullweight numeric, null-component penalty weight.

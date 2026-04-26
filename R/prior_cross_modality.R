@@ -17,11 +17,11 @@
 #'
 #' @param prior an mfsusieR cross-modality prior object.
 #' @param modality_lbfs list of length M, each entry a numeric
-#'   vector of length J (per-effect, per-modality log-BFs).
+#'   vector of length p (per-effect, per-modality log-BFs).
 #' @param model_state the running model state (alpha, mu, etc.);
 #'   passed for forward compatibility with priors that condition
 #'   on the current fit.
-#' @return numeric vector of length J, the joint log-BF.
+#' @return numeric vector of length p, the joint log-BF.
 #' @keywords internal
 #' @noRd
 combine_modality_lbfs <- function(prior, modality_lbfs, model_state) {

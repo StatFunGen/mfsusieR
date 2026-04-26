@@ -126,7 +126,7 @@ test_that("M = 1 functional case stores DWT cache with the right shape", {
   expect_identical(class(obj), c("mf_individual", "individual"))
   expect_identical(obj$M, 1L)
   expect_identical(obj$n, 20L)
-  expect_identical(obj$J, 8L)
+  expect_identical(obj$p, 8L)
   expect_identical(obj$T_padded, 64L)
   expect_identical(length(obj$D), 1L)
   expect_identical(dim(obj$D[[1]]), c(20L, 64L))

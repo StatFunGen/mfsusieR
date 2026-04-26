@@ -17,9 +17,9 @@ knitr::opts_chunk$set(
 ```
 
 Joint multi-modality fits over many ATAC-seq conditions, dense
-position grids, or large `J` can run beyond the wall time of a typical
-cluster job. This vignette covers practical patterns for handling
-those cases.
+position grids, or large `p` (number of predictors) can run beyond
+the wall time of a typical cluster job. This vignette covers
+practical patterns for handling those cases.
 
 ```{r setup, message = FALSE}
 library(mfsusieR)
@@ -36,12 +36,12 @@ when `niter == max_iter`, the run terminated by budget.
 ```{r run-short}
 data(N3finemapping)
 X <- N3finemapping$X[, seq_len(120)]
-n <- nrow(X); J <- ncol(X)
+n <- nrow(X); p <- ncol(X)
 T_func <- c(32L, 32L)
-beta1 <- numeric(J); beta1[c(37, 88)] <- c(1, -0.6)
+beta1 <- numeric(p); beta1[c(37, 88)] <- c(1, -0.6)
 
 Y_list <- lapply(T_func, function(T_m) {
-  X %*% matrix(rep(beta1, T_m), nrow = J) +
+  X %*% matrix(rep(beta1, T_m), nrow = p) +
     matrix(rnorm(n * T_m, sd = 0.4), nrow = n)
 })
 

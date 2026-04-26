@@ -9,7 +9,7 @@
 \arguments{
 \item{object}{an \code{mfsusie} fit returned by \code{mfsusie()}.}
 
-\item{newx}{numeric matrix \verb{n_new x J} of new covariates on the
+\item{newx}{numeric matrix \verb{n_new x p} of new covariates on the
 same scale as the training \code{X}. \code{NULL} returns the training
 fitted values (equivalent to \code{fitted(object)}).}
 
