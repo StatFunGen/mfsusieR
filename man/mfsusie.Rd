@@ -59,7 +59,7 @@ grid per outcome.}
 scales.}
 
 \item{null_prior_weight}{numeric, weight on the null prior
-component. Default 2 per the manuscript and design.md D5.}
+component. Default 2.}
 
 \item{cross_outcome_prior}{optional cross-outcome combiner
 object. Defaults to the trivial independence combiner
@@ -73,7 +73,7 @@ residual variance per outcome. Defaults to the per-outcome
 sample variance.}
 
 \item{residual_variance_scope}{\code{"per_scale"} (default)
-or \code{"shared_per_outcome"}. Controls the sigma2 update shape.}
+or \code{"per_outcome"}. Controls the sigma2 update shape.}
 
 \item{standardize}{logical, scale \code{X} columns to unit variance.}
 

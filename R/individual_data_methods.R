@@ -138,7 +138,7 @@ mf_per_outcome_bhat_shat <- function(data, model, m) {
 #' the per-outcome / per-scale aggregation. Stores `model$alpha[l, ]`,
 #' `model$lbf[l]`, `model$lbf_variable[l, ]` when `l` is non-NULL;
 #' otherwise returns the aggregate `lbf_model` scalar (used by the
-#' V-optim caller in `update_model_variance.mf_individual`, PR group 6).
+#' V-optim caller in `update_model_variance.mf_individual`).
 #'
 #' @references
 #' Manuscript: methods/derivation.tex eq:post_alpha
@@ -403,7 +403,7 @@ update_variance_components.mf_individual <- function(data, params, model, ...) {
 #' writes the new mixture weights into both
 #' `model$G_prior[[m]][[s]]$fitted_g$pi` and `model$pi_V[[m]][s, ]`.
 #'
-#' The susieR-style scalar `V[l]` is held at 1 here in v1 since the
+#' The susieR-style scalar `V[l]` is held at 1 since the
 #' mixture weights absorb the per-effect prior shape adaptation.
 #' Returns `list(V = 1, model = updated_model)` per the susieR
 #' generic contract.

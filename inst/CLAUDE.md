@@ -372,15 +372,29 @@ and keep the old names working for one minor version.
 - Public S3 methods: `mfsusie()`, `predict.mfsusie()`, `summary.mfsusie()`,
   `coef.mfsusie()`, `plot.mfsusie()`, `print.mfsusie()`.
 - Internal helpers prefixed with `.` or in `R/utils_*.R`.
-- Class-related code lives in ONE file per class. The constructor
-  AND the S3 methods registered on the class share a single
-  `R/<class>_class.R` file with a section divider between
-  constructor and methods. Do NOT split into `R/<class>_class.R`
-  + `R/<class>_methods.R` — that pattern is appropriate for
-  upstream packages with many constructors and ~15 methods per
-  class (mvsusieR, susieR), but for mfsusieR's smaller scope
-  (one constructor + ~6 accessors per class) the split is
-  gratuitous. Section divider format:
+- Class-related code may be split by lifecycle phase, not by
+  arbitrary "class vs methods" axis. The split mfsusieR uses for
+  `mf_individual`:
+  - `R/individual_data_class.R` -- constructor (`create_mf_individual`)
+  - `R/individual_data_methods.R` -- per-effect SER-step methods
+    (`compute_residuals`, `compute_ser_statistics`, `loglik`,
+    `calculate_posterior_moments`, `optimize_prior_variance`,
+    `update_fitted_values`, etc.)
+  - `R/ibss_methods.R` -- per-iteration IBSS-loop methods
+    (`update_variance_components`, `update_model_variance`,
+    `Eloglik`, `get_objective`, `ibss_initialize`, `cleanup_model`,
+    finalize accessors)
+  Same pattern for `mfsusie` model class:
+  - `R/model_class.R` -- constructor + per-effect accessors
+    (`get_alpha_l`, `get_posterior_mean_l`, etc.)
+  - `R/mfsusie_methods.R` -- user-facing S3 methods
+    (`predict.mfsusie`, `coef.mfsusie`, `summary.mfsusie`,
+    `print.mfsusie`)
+  The lifecycle split keeps file sizes manageable (none > 600
+  lines) and groups code by when it runs rather than which class
+  it belongs to. Each file has a one-paragraph header that names
+  the lifecycle phase it covers. Section divider format inside a
+  file:
   ```r
   # =====================================================================
   # Per-effect getter / setter accessors on the `<class>` model

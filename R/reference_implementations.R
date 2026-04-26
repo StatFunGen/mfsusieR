@@ -1,5 +1,5 @@
 # Pure-R reference implementations of functions with cpp11 counterparts.
-# Used as the oracle for cpp11 unit tests (per design.md D14).
+# Pure-R oracle for cpp11 unit tests.
 # Mirrors the mvsusieR pattern (`mvsusieR/R/reference_implementations.R`).
 #
 # These functions SHALL stay literal-equivalent to the cpp11 kernels:

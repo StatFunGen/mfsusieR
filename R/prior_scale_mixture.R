@@ -1,6 +1,6 @@
 # Scale-mixture-of-normals prior class for mfsusieR.
 #
-# Two paths per spec mf-prior/spec.md "per-outcome init via susieR
+# Two paths "per-outcome init via susieR
 # helper + ash fit":
 #
 #   1. User supplies `prior_variance_grid` -- use it directly,
@@ -41,7 +41,7 @@ distribute_mixture_weights <- function(K, null_prior_weight) {
 #' (`set.seed(1)`) and sample-size caps (5000 for
 #' `mixture_normal`, 50000 for `mixture_normal_per_scale`) are
 #' set to satisfy the C2 fidelity contract at machine precision;
-#' provenance is in `inst/notes/refactor-exceptions.md`.
+#' 
 #'
 #' @param Y_m numeric matrix `n x T_basis[m]` of wavelet
 #'   coefficients for outcome m.
@@ -113,7 +113,7 @@ init_scale_mixture_prior_default <- function(Y_m,
 #' @param prior_variance_scope `"per_scale"` (default,
 #'   stores prior per scale per outcome) or `"per_outcome"`
 #'   (collapses the scale dimension; legacy mode).
-#' @param null_prior_weight scalar, default 2 per design.md D5/D7.
+#' @param null_prior_weight scalar, default 2.
 #' @param grid_multiplier numeric, forwarded to `ash`.
 #' @return list of class `"mf_prior_scale_mixture"`.
 #' @references

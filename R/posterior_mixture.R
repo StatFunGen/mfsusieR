@@ -6,7 +6,7 @@
 # `R/reference_implementations.R` and are tested at <= 1e-12 against
 # the cpp11 output.
 #
-# Per design.md D14 (Phase 3 cpp11 stance).
+# Compiled cpp11 kernels for the per-effect SER hot path.
 #
 # Manuscript references:
 #   methods/derivation.tex eq:post_f_mix
