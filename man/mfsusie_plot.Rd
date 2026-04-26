@@ -16,6 +16,7 @@ mfsusie_plot(
   lfsr_threshold = 0.01,
   lwd = 1.5,
   add_legend = TRUE,
+  smooth_method = NULL,
   ...
 )
 }

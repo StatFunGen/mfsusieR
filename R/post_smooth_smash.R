@@ -49,10 +49,9 @@
                                         out$cred_band[1L, ])
     }
   }
-  fit$effect_curves  <- effect_curves
-  fit$credible_bands <- credible_bands
-  fit$lfsr_curves    <- NULL
-  fit
+  list(effect_curves  = effect_curves,
+       credible_bands = credible_bands,
+       lfsr_curves    = NULL)
 }
 
 #' Per-position smash regression of a multi-position response

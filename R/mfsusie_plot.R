@@ -37,38 +37,42 @@ mf_cs_colors <- function(n_cs) {
   col
 }
 
-# Position-space curve for effect l, outcome m. Reads
-# `fit$effect_curves[[m]][[l]]` if present (post-processed). Else
-# inverts via the existing coef() path.
-.effect_curve <- function(fit, l, m) {
-  if (!is.null(fit$effect_curves) &&
-      !is.null(fit$effect_curves[[m]]) &&
-      !is.null(fit$effect_curves[[m]][[l]])) {
-    return(fit$effect_curves[[m]][[l]])
+# Position-space curve for effect l, outcome m. Reads from a
+# pre-resolved `smoothed` payload (the chosen entry of
+# `fit$smoothed`) if non-NULL, else inverts via the raw coef()
+# path.
+.effect_curve <- function(fit, l, m, smoothed = NULL) {
+  if (!is.null(smoothed) &&
+      !is.null(smoothed$effect_curves) &&
+      !is.null(smoothed$effect_curves[[m]]) &&
+      !is.null(smoothed$effect_curves[[m]][[l]])) {
+    return(smoothed$effect_curves[[m]][[l]])
   }
   coef_lm <- coef(fit)[[m]]   # L x T_basis
   coef_lm[l, ]
 }
 
 # Optional credible band: T x 2 matrix or NULL.
-.credible_band <- function(fit, l, m) {
-  if (is.null(fit$credible_bands) ||
-      is.null(fit$credible_bands[[m]]) ||
-      is.null(fit$credible_bands[[m]][[l]])) {
+.credible_band <- function(fit, l, m, smoothed = NULL) {
+  if (is.null(smoothed) ||
+      is.null(smoothed$credible_bands) ||
+      is.null(smoothed$credible_bands[[m]]) ||
+      is.null(smoothed$credible_bands[[m]][[l]])) {
     return(NULL)
   }
-  fit$credible_bands[[m]][[l]]
+  smoothed$credible_bands[[m]][[l]]
 }
 
 # Optional lfsr curve: numeric vector of length T or NULL. Populated
-# by `mf_post_smooth(method = "HMM")`.
-.lfsr_curve <- function(fit, l, m) {
-  if (is.null(fit$lfsr_curves) ||
-      is.null(fit$lfsr_curves[[m]]) ||
-      is.null(fit$lfsr_curves[[m]][[l]])) {
+# only by the HMM smoother.
+.lfsr_curve <- function(fit, l, m, smoothed = NULL) {
+  if (is.null(smoothed) ||
+      is.null(smoothed$lfsr_curves) ||
+      is.null(smoothed$lfsr_curves[[m]]) ||
+      is.null(smoothed$lfsr_curves[[m]][[l]])) {
     return(NULL)
   }
-  fit$lfsr_curves[[m]][[l]]
+  smoothed$lfsr_curves[[m]][[l]]
 }
 
 # Contiguous (start, end) runs where the credible band excludes
@@ -94,14 +98,14 @@ mf_cs_colors <- function(n_cs) {
 # Resolve facet_cs: "auto" -> "stack" or "overlay". Stack when
 # length(cs) >= 3 OR when affected-region masks are pairwise
 # disjoint (and length(cs) >= 2). Overlay otherwise.
-.resolve_facet <- function(facet_cs, fit, m) {
+.resolve_facet <- function(facet_cs, fit, m, smoothed = NULL) {
   if (facet_cs %in% c("stack", "overlay")) return(facet_cs)
   cs <- fit$sets$cs %||% list()
   K  <- length(cs)
   if (K < 2L) return("overlay")
   if (K >= 3L) return("stack")
   cs_l <- fit$sets$cs_index %||% seq_along(cs)
-  bands <- lapply(cs_l, function(l) .credible_band(fit, l, m))
+  bands <- lapply(cs_l, function(l) .credible_band(fit, l, m, smoothed))
   if (any(vapply(bands, is.null, logical(1)))) return("overlay")
   masks <- lapply(bands, .affected_mask)
   if (any(vapply(masks, length, integer(1)) == 0L)) return("overlay")
@@ -114,7 +118,7 @@ mf_cs_colors <- function(n_cs) {
 # coverage and the minimum CS purity (smallest min-abs-corr
 # across the displayed CSes).
 .pip_title <- function(fit) {
-  base <- "Posterior inclusion probability and credible sets"
+  base <- "Non-zero effects"
   cov  <- fit$sets$requested_coverage
   pur  <- fit$sets$purity
   parts <- character()
@@ -153,13 +157,13 @@ mf_cs_colors <- function(n_cs) {
 
 # Internal: draw the band-style overlay of all `cs_subset` CSes
 # on the current device cell.
-.draw_effect_band <- function(fit, m, cs_subset, pos, pal, lwd,
+.draw_effect_band <- function(fit, m, cs_subset, pos, pal, lwd, smoothed,
                               show_grid_dots, show_affected_region,
                               show_lfsr_curve, lfsr_threshold,
                               add_legend, main, xlab, xaxt) {
-  curves <- lapply(cs_subset, function(l) .effect_curve(fit, l, m))
-  bands  <- lapply(cs_subset, function(l) .credible_band(fit, l, m))
-  lfsrs  <- lapply(cs_subset, function(l) .lfsr_curve(fit, l, m))
+  curves <- lapply(cs_subset, function(l) .effect_curve(fit, l, m, smoothed))
+  bands  <- lapply(cs_subset, function(l) .credible_band(fit, l, m, smoothed))
+  lfsrs  <- lapply(cs_subset, function(l) .lfsr_curve(fit, l, m, smoothed))
   has_lfsr <- show_lfsr_curve && any(!vapply(lfsrs, is.null, logical(1)))
 
   yrange <- range(unlist(curves), unlist(lapply(bands, c)), 0,
@@ -234,11 +238,11 @@ mf_cs_colors <- function(n_cs) {
 
 # Internal: draw the errorbar-style of all `cs_subset` CSes on the
 # current device cell. Errors when no credible bands are available.
-.draw_effect_errorbar <- function(fit, m, cs_subset, pos, pal,
+.draw_effect_errorbar <- function(fit, m, cs_subset, pos, pal, smoothed,
                                   show_affected_region,
                                   add_legend, main, xlab, xaxt) {
-  curves <- lapply(cs_subset, function(l) .effect_curve(fit, l, m))
-  bands  <- lapply(cs_subset, function(l) .credible_band(fit, l, m))
+  curves <- lapply(cs_subset, function(l) .effect_curve(fit, l, m, smoothed))
+  bands  <- lapply(cs_subset, function(l) .credible_band(fit, l, m, smoothed))
 
   if (all(vapply(bands, is.null, logical(1)))) {
     stop("`effect_style = \"errorbar\"` requires post-smoothed ",
@@ -280,18 +284,18 @@ mf_cs_colors <- function(n_cs) {
 # Internal: dispatch by effect_style. Operates on the current
 # device cell.
 .draw_effect_panel <- function(fit, m, cs_subset, effect_style,
-                                pos, pal, lwd,
+                                pos, pal, lwd, smoothed,
                                 show_grid_dots, show_affected_region,
                                 show_lfsr_curve, lfsr_threshold,
                                 add_legend, main,
                                 xlab = "position", xaxt = "s") {
   if (effect_style == "errorbar") {
-    .draw_effect_errorbar(fit, m, cs_subset, pos, pal,
+    .draw_effect_errorbar(fit, m, cs_subset, pos, pal, smoothed,
                           show_affected_region = show_affected_region,
                           add_legend = add_legend,
                           main = main, xlab = xlab, xaxt = xaxt)
   } else {
-    .draw_effect_band(fit, m, cs_subset, pos, pal, lwd,
+    .draw_effect_band(fit, m, cs_subset, pos, pal, lwd, smoothed,
                       show_grid_dots = show_grid_dots,
                       show_affected_region = show_affected_region,
                       show_lfsr_curve = show_lfsr_curve,
@@ -311,14 +315,15 @@ mf_cs_colors <- function(n_cs) {
                          add_legend = TRUE,
                          show_lfsr_curve = TRUE,
                          show_affected_region = TRUE,
-                         lfsr_threshold = 0.01) {
+                         lfsr_threshold = 0.01,
+                         smoothed = NULL) {
   T_basis <- fit$dwt_meta$T_basis[m]
   if (is.null(pos)) pos <- fit$dwt_meta$pos[[m]]
   if (is.null(main)) {
     nm <- fit$dwt_meta$outcome_names[m]
     label <- if (!is.null(nm) && nzchar(nm)) nm else sprintf("Outcome %d", m)
     main <- if (length(fit$dwt_meta$T_basis) == 1L) {
-      sprintf("Effect curves (T = %d)", T_basis)
+      sprintf("Effect sizes (T = %d)", T_basis)
     } else {
       sprintf("%s (T = %d)", label, T_basis)
     }
@@ -334,7 +339,7 @@ mf_cs_colors <- function(n_cs) {
 
   # Scalar outcome: dot plot of per-effect mean.
   if (T_basis == 1L) {
-    eff <- vapply(cs_l, function(l) .effect_curve(fit, l, m), numeric(1))
+    eff <- vapply(cs_l, function(l) .effect_curve(fit, l, m, smoothed), numeric(1))
     plot(seq_along(cs_l), eff, type = "p", pch = 19L,
          col = pal, cex = 1.4,
          xlab = "credible set", ylab = "effect",
@@ -344,7 +349,7 @@ mf_cs_colors <- function(n_cs) {
     return(invisible(NULL))
   }
 
-  facet <- .resolve_facet(facet_cs, fit, m)
+  facet <- .resolve_facet(facet_cs, fit, m, smoothed)
 
   if (facet == "stack") {
     K <- length(cs_l)
@@ -358,6 +363,7 @@ mf_cs_colors <- function(n_cs) {
       .draw_effect_panel(fit, m, cs_subset = cs_l[i],
                          effect_style = effect_style,
                          pos = pos, pal = pal[i], lwd = lwd,
+                         smoothed = smoothed,
                          show_grid_dots = show_grid_dots,
                          show_affected_region = show_affected_region,
                          show_lfsr_curve = show_lfsr_curve,
@@ -372,6 +378,7 @@ mf_cs_colors <- function(n_cs) {
     .draw_effect_panel(fit, m, cs_subset = cs_l,
                        effect_style = effect_style,
                        pos = pos, pal = pal, lwd = lwd,
+                       smoothed = smoothed,
                        show_grid_dots = show_grid_dots,
                        show_affected_region = show_affected_region,
                        show_lfsr_curve = show_lfsr_curve,
@@ -444,12 +451,16 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
                          show_affected_region = TRUE,
                          lfsr_threshold = 0.01,
                          lwd = 1.5,
-                         add_legend = TRUE, ...) {
+                         add_legend = TRUE,
+                         smooth_method = NULL, ...) {
   if (!inherits(fit, "mfsusie")) {
     stop("`fit` must be an `mfsusie` (or `fsusie`) fit object.")
   }
   effect_style <- match.arg(effect_style)
   facet_cs     <- match.arg(facet_cs)
+
+  picked   <- .pick_smooth_method(fit, smooth_method)
+  smoothed <- if (!is.null(picked)) fit$smoothed[[picked]] else NULL
 
   M <- length(fit$dwt_meta$T_basis)
 
@@ -462,7 +473,8 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
                  add_legend          = add_legend,
                  show_lfsr_curve     = show_lfsr_curve,
                  show_affected_region = show_affected_region,
-                 lfsr_threshold      = lfsr_threshold)
+                 lfsr_threshold      = lfsr_threshold,
+                 smoothed            = smoothed)
   }
 
   # Single-outcome focus: just one effect panel.
@@ -519,7 +531,8 @@ plot.mfsusie <- function(x, ...) {
 
 # Internal: draw a single bubble panel for one outcome.
 .draw_lfsr_bubble <- function(fit, m, lfsr_threshold, truth_mask,
-                              cex_max, main = NULL) {
+                              cex_max, main = NULL,
+                              smoothed = NULL) {
   cs   <- fit$sets$cs %||% list()
   cs_l <- fit$sets$cs_index %||% seq_along(cs)
   K    <- length(cs_l)
@@ -531,7 +544,7 @@ plot.mfsusie <- function(x, ...) {
   pos <- fit$dwt_meta$pos[[m]]
   T_m <- length(pos)
 
-  lfsrs <- lapply(cs_l, function(l) .lfsr_curve(fit, l, m))
+  lfsrs <- lapply(cs_l, function(l) .lfsr_curve(fit, l, m, smoothed))
   if (all(vapply(lfsrs, is.null, logical(1)))) {
     stop("`mfsusie_plot_lfsr()` requires HMM-smoothed lfsr ",
          "curves. Call `mf_post_smooth(method = \"HMM\")` first.")
@@ -625,14 +638,25 @@ plot.mfsusie <- function(x, ...) {
 mfsusie_plot_lfsr <- function(fit,
                               lfsr_threshold = 0.01,
                               truth          = NULL,
-                              cex_max        = 6, ...) {
+                              cex_max        = 6,
+                              smooth_method  = NULL, ...) {
   if (!inherits(fit, "mfsusie")) {
     stop("`fit` must be an `mfsusie` (or `fsusie`) fit object.")
   }
-  if (is.null(fit$lfsr_curves)) {
+  # `mfsusie_plot_lfsr` only makes sense for HMM-smoothed fits.
+  # When the user does not name a smoothing, default to HMM if
+  # present; otherwise emit a clear error.
+  if (is.null(smooth_method)) {
+    if (!is.null(fit$smoothed) && !is.null(fit$smoothed[["HMM"]])) {
+      smooth_method <- "HMM"
+    }
+  }
+  if (is.null(smooth_method) ||
+      is.null(fit$smoothed[[smooth_method]]$lfsr_curves)) {
     stop("`mfsusie_plot_lfsr()` requires HMM-smoothed lfsr ",
          "curves. Call `mf_post_smooth(method = \"HMM\")` first.")
   }
+  smoothed <- fit$smoothed[[smooth_method]]
 
   M <- length(fit$dwt_meta$T_basis)
 
@@ -660,7 +684,8 @@ mfsusie_plot_lfsr <- function(fit,
     .draw_lfsr_bubble(fit, m = 1L,
                       lfsr_threshold = lfsr_threshold,
                       truth_mask = per_outcome_truth[[1L]],
-                      cex_max = cex_max)
+                      cex_max = cex_max,
+                      smoothed = smoothed)
     return(invisible(NULL))
   }
 
@@ -672,7 +697,8 @@ mfsusie_plot_lfsr <- function(fit,
     .draw_lfsr_bubble(fit, m = mi,
                       lfsr_threshold = lfsr_threshold,
                       truth_mask = per_outcome_truth[[mi]],
-                      cex_max = cex_max)
+                      cex_max = cex_max,
+                      smoothed = smoothed)
   }
   remaining <- rows * cols - M
   if (remaining > 0L) {

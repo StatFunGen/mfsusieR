@@ -45,18 +45,19 @@ test_that("mf_post_smooth(method = 'TI') matches univariate_TI_regression bit-fo
     Y = Y_pos, X = matrix(x_lead, ncol = 1L),
     filter.number = 1, family = "DaubExPhase", alpha = 0.05)
 
-  expect_equal(fit_s$effect_curves[[m]][[l]],
+  payload <- fit_s$smoothed$TI
+  expect_equal(payload$effect_curves[[m]][[l]],
                as.numeric(ref$effect_estimate),
                tolerance = 0,
                info = "TI effect curve bit-identical")
 
   # Upstream cred_band rows are c("up", "low"); ours is
   # c(lower, upper) by column.
-  expect_equal(fit_s$credible_bands[[m]][[l]][, 2L],
+  expect_equal(payload$credible_bands[[m]][[l]][, 2L],
                as.numeric(ref$cred_band["up", ]),
                tolerance = 0,
                info = "TI upper band bit-identical")
-  expect_equal(fit_s$credible_bands[[m]][[l]][, 1L],
+  expect_equal(payload$credible_bands[[m]][[l]][, 1L],
                as.numeric(ref$cred_band["low", ]),
                tolerance = 0,
                info = "TI lower band bit-identical")

@@ -113,12 +113,47 @@ predict.mfsusie <- function(object, newx = NULL, ...) {
 #' inverse wavelet transform to the original position grid.
 #'
 #' @param object an `mfsusie` fit.
+#' @param smooth_method optional character. When supplied, returns
+#'   the post-smoothed effect curves stored at
+#'   `object$smoothed[[smooth_method]]` instead of the raw
+#'   wavelet-inverse curves. The named smoother must have been
+#'   applied via `mf_post_smooth(object, method = smooth_method)`
+#'   beforehand. When `NULL` (default), `coef.mfsusie` returns
+#'   the raw curves; smoothing is an explicit opt-in.
 #' @param ... ignored.
 #' @return list of length `M`; each element an `L x T_m` matrix
 #'   whose row `l` is effect `l`'s coefficient curve for outcome
-#'   `m`.
+#'   `m`. When `smooth_method` is supplied, the returned curves
+#'   are on the same shape but smoothed by the named method;
+#'   the returned object carries an attribute
+#'   `attr(., "smooth_method")` recording the choice.
 #' @export
-coef.mfsusie <- function(object, ...) {
+coef.mfsusie <- function(object, smooth_method = NULL, ...) {
+  if (!is.null(smooth_method)) {
+    if (is.null(object$smoothed) ||
+        is.null(object$smoothed[[smooth_method]])) {
+      avail <- if (is.null(object$smoothed)) character(0L)
+               else names(object$smoothed)
+      stop(sprintf(
+        "Post-smoothed curves for method = '%s' are not on the fit. ",
+        smooth_method),
+        if (length(avail) > 0L)
+          sprintf("Applied methods: %s. ",
+                  paste(sQuote(avail), collapse = ", "))
+        else "No methods have been applied. ",
+        "Run `mf_post_smooth(fit, method = '", smooth_method, "')` first.")
+    }
+    sm  <- object$smoothed[[smooth_method]]$effect_curves
+    # `effect_curves` is `list[M]` of `list[L]` of length-T_m
+    # numeric vectors. Convert to the same shape `coef.mfsusie`
+    # returns for the raw path: `list[M]` of `L x T_m` matrices.
+    out <- lapply(sm, function(per_outcome) {
+      do.call(rbind, per_outcome)
+    })
+    attr(out, "smooth_method") <- smooth_method
+    return(out)
+  }
+
   meta <- object$dwt_meta
   L    <- nrow(object$alpha)
   M    <- meta$M
@@ -126,17 +161,8 @@ coef.mfsusie <- function(object, ...) {
   for (m in seq_len(M)) {
     coef_l_wavelet <- matrix(0, nrow = L, ncol = meta$T_basis[m])
     for (l in seq_len(L)) {
-      # alpha_lj * mu_lj_t summed over j (one effect's curve = sum_j of
-      # per-variable contribution; equivalent to `colSums(alpha[l,] * mu[[l]][[m]])`).
       coef_l_wavelet[l, ] <- colSums(object$alpha[l, ] * object$mu[[l]][[m]])
     }
-    # Rescale by 1/csd mean -- effects are stored on standardized X
-    # but coef() returns on the original X scale. The standardize
-    # rescaling is `b_orig = b_std / csd` per-variable, then summed.
-    # When summed across variables the `1/csd` factor depends on which
-    # variable carried the effect. The aggregate L x T_m output stays on
-    # the standardized scale; the per-variable coefficients are recovered
-    # by `alpha * mu / csd` element-wise. Document this below.
     out[[m]] <- mf_invert_per_outcome(coef_l_wavelet, m, meta)
   }
   out
@@ -339,7 +365,8 @@ mf_post_smooth <- function(fit,
                            threshold_factor = 1,
                            wavelet_filter   = 1L,
                            wavelet_family   = "DaubExPhase",
-                           halfK            = 20L) {
+                           halfK            = 20L,
+                           overwrite_previous = FALSE) {
   if (!inherits(fit, "mfsusie")) {
     stop("`fit` must be an `mfsusie` (or `fsusie`) fit object.")
   }
@@ -366,12 +393,63 @@ mf_post_smooth <- function(fit,
          "or pick another method.")
   }
 
-  switch(method,
-         "scalewise" = .post_smooth_scalewise(fit, level, threshold_factor),
-         "TI"        = .post_smooth_ti(fit, level, wavelet_filter,
-                                       wavelet_family),
-         "HMM"       = .post_smooth_hmm(fit, level, halfK),
-         "smash"     = .post_smooth_smash(fit, level))
+  if (!isTRUE(overwrite_previous) &&
+      !is.null(fit$smoothed) && !is.null(fit$smoothed[[method]])) {
+    stop(sprintf(
+      "Smoothing for method = '%s' is already on this fit. ",
+      method),
+      "Pass `overwrite_previous = TRUE` to recompute and replace it.")
+  }
+
+  payload <- switch(method,
+    "scalewise" = .post_smooth_scalewise(fit, level, threshold_factor),
+    "TI"        = .post_smooth_ti(fit, level, wavelet_filter,
+                                  wavelet_family),
+    "HMM"       = .post_smooth_hmm(fit, level, halfK),
+    "smash"     = .post_smooth_smash(fit, level))
+
+  if (is.null(fit$smoothed)) fit$smoothed <- list()
+  fit$smoothed[[method]] <- payload
+  fit
+}
+
+# Priority order used by `mfsusie_plot()` and friends when the
+# fit carries multiple smoothings and the user has not named
+# one explicitly.
+.smoother_priority <- c("TI", "smash", "HMM", "scalewise")
+
+# Pick the highest-priority smoothing on `fit$smoothed` and emit
+# a hint listing the others. Returns NULL when no smoothing is
+# present.
+.pick_smooth_method <- function(fit, requested = NULL) {
+  if (!is.null(requested)) {
+    if (is.null(fit$smoothed) || is.null(fit$smoothed[[requested]])) {
+      avail <- if (is.null(fit$smoothed)) character(0L)
+               else names(fit$smoothed)
+      stop(sprintf(
+        "Smoothing for method = '%s' is not on this fit. ", requested),
+        if (length(avail) > 0L)
+          sprintf("Applied methods: %s.",
+                  paste(sQuote(avail), collapse = ", "))
+        else "No smoothings have been applied.")
+    }
+    return(requested)
+  }
+  if (is.null(fit$smoothed) || length(fit$smoothed) == 0L) return(NULL)
+  applied <- intersect(.smoother_priority, names(fit$smoothed))
+  if (length(applied) == 0L) {
+    # Method names off-spec; fall back to first.
+    return(names(fit$smoothed)[1L])
+  }
+  picked <- applied[1L]
+  if (length(applied) > 1L) {
+    others <- setdiff(applied, picked)
+    msg <- sprintf(
+      "Plotting smoothing '%s'. Other smoothings on this fit: %s. Pass `smooth_method = '<name>'` to plot a different one.",
+      picked, paste(sQuote(others), collapse = ", "))
+    warning_message(msg, style = "hint")
+  }
+  picked
 }
 
 # ---- scalewise -----------------------------------------------------
@@ -417,10 +495,9 @@ mf_post_smooth <- function(fit,
                                         mean_pos + z_crit * sd_pos)
     }
   }
-  fit$effect_curves  <- effect_curves
-  fit$credible_bands <- credible_bands
-  fit$lfsr_curves    <- NULL
-  fit
+  list(effect_curves  = effect_curves,
+       credible_bands = credible_bands,
+       lfsr_curves    = NULL)
 }
 
 # ---- TI: cycle-spinning translation-invariant wavelet denoising ----
@@ -446,7 +523,7 @@ mf_post_smooth <- function(fit,
       next
     }
 
-    Y_pos <- .iso_response_pos(fit, m)   # n x T_m: residual + sum_l lead_l*mu_l_lead
+    Y_pos <- .iso_response_pos(fit, m)   # n x T_basis[m]: residual + sum_l lead_l*mu_l_lead
     for (l in seq_len(L)) {
       lead_l <- which.max(fit$alpha[l, ])
       mu_lead_w <- fit$mu[[l]][[m]][lead_l, ]
@@ -466,10 +543,9 @@ mf_post_smooth <- function(fit,
                                                           c(1L, 2L)]
     }
   }
-  fit$effect_curves  <- effect_curves
-  fit$credible_bands <- credible_bands
-  fit$lfsr_curves    <- NULL
-  fit
+  list(effect_curves  = effect_curves,
+       credible_bands = credible_bands,
+       lfsr_curves    = NULL)
 }
 
 # Reconstruct the position-space response by inverting
@@ -649,10 +725,9 @@ mf_post_smooth <- function(fit,
       lfsr_curves[[m]][[l]]    <- out$lfsr
     }
   }
-  fit$effect_curves  <- effect_curves
-  fit$credible_bands <- credible_bands
-  fit$lfsr_curves    <- lfsr_curves
-  fit
+  list(effect_curves  = effect_curves,
+       credible_bands = credible_bands,
+       lfsr_curves    = lfsr_curves)
 }
 
 # HMM helpers live in R/post_smooth_hmm.R: mf_fit_hmm() and

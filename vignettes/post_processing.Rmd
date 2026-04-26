@@ -27,24 +27,35 @@ is correct but visually wiggly: small fine-scale wavelet coefficients
 contribute pointwise noise that obscures the underlying shape, and
 the fit returns no pointwise credible band by default.
 
-The post-processor `mf_post_smooth(fit)` applies translation-invariant
-wavelet thresholding (TIWT) to the per-effect wavelet posterior mean,
-shrinking small fine-scale coefficients to zero, and computes
-pointwise credible bands from the wavelet posterior variance. The
-resulting fit gains two slots:
+The post-processor `mf_post_smooth(fit, method = ...)` runs the
+chosen smoother on the per-effect wavelet posterior mean and
+stores the result on the fit at `fit$smoothed[[method]]`. The
+slot carries:
 
-- `fit$effect_curves[[m]][[l]]` — smoothed position-space curve for
-  outcome `m`, effect `l`.
-- `fit$credible_bands[[m]][[l]]` — `T_basis x 2` matrix
-  `[lower, upper]`.
+- `fit$smoothed[[method]]$effect_curves[[m]][[l]]` — smoothed
+  position-space curve for outcome `m`, effect `l`.
+- `fit$smoothed[[method]]$credible_bands[[m]][[l]]` —
+  `T_basis x 2` matrix `[lower, upper]`.
+- `fit$smoothed$HMM$lfsr_curves[[m]][[l]]` — per-position local
+  false sign rate (HMM only).
 
-`mfsusie_plot()` automatically draws the smoothed curves and
-credible bands when those slots are populated; otherwise it falls
-back to the raw inverse-DWT curves. After `method = "HMM"`
-smoothing the per-position lfsr curves are also overlaid on a
-secondary axis with a threshold line at `lfsr_threshold = 0.05`.
-Affected regions (where each CS's credible band excludes zero)
-are marked with thick bars at the bottom of each effect panel.
+The fit accumulates per-method results: every call to
+`mf_post_smooth(fit, method = ...)` adds (or, with
+`overwrite_previous = TRUE`, replaces) one entry in
+`fit$smoothed`. The raw inverse-DWT curves remain accessible via
+`coef(fit)`; pass `coef(fit, smooth_method = "TI")` to get the
+TI-smoothed curves on the same `list[M]` of `L x T_basis` matrix
+shape.
+
+`mfsusie_plot()` reads from `fit$smoothed` and picks a smoother
+in the priority order `TI > smash > HMM > scalewise` when the
+user does not name one explicitly. When more than one smoother
+has been applied, the plot emits a hint listing the alternatives
+so the user can compare. After `method = "HMM"` smoothing the
+per-position lfsr curves are also overlaid on a secondary axis
+with a threshold line at `lfsr_threshold = 0.05`. Affected
+regions (where each CS's credible band excludes zero) are marked
+with thick bars at the bottom of each effect panel.
 
 ## A small example
 
@@ -86,11 +97,12 @@ mfsusie_plot(fit)
 ## After smoothing
 
 ```{r smooth}
-fit_s <- mf_post_smooth(fit)
+fit_s <- mf_post_smooth(fit)            # default method = "TI"
+names(fit_s$smoothed)                   # which smoothings are on the fit
 ```
 
-The same plot call now uses the smoothed curves and adds 95% pointwise
-credible bands as transparent ribbons:
+The same plot call now reads `fit_s$smoothed$TI` and adds 95%
+pointwise credible bands as transparent ribbons:
 
 ```{r after}
 mfsusie_plot(fit_s)
@@ -98,6 +110,31 @@ mfsusie_plot(fit_s)
 
 The shape is preserved, high-frequency noise is suppressed, and
 the ribbon marks the positions where the band excludes zero.
+
+## Stacking multiple smoothers on one fit
+
+Every call to `mf_post_smooth(fit, method = ...)` adds an entry
+to `fit$smoothed` rather than overwriting the previous result.
+Comparing methods is a few lines:
+
+```{r stack}
+fit_s <- mf_post_smooth(fit_s, method = "HMM")
+fit_s <- mf_post_smooth(fit_s, method = "scalewise")
+names(fit_s$smoothed)
+```
+
+`coef()` exposes the same multi-method state via the
+`smooth_method` argument:
+
+```{r coef-multi}
+str(coef(fit_s),                          max.level = 1L)  # raw inverse DWT
+str(coef(fit_s, smooth_method = "TI"),    max.level = 1L)
+str(coef(fit_s, smooth_method = "HMM"),   max.level = 1L)
+```
+
+Because `coef(fit)` defaults to the raw inverse DWT, smoothing
+is always an explicit opt-in. Pass `smooth_method = "<name>"`
+when you want the post-processed curves.
 
 ## Choosing a smoother
 
@@ -122,15 +159,20 @@ the ribbon marks the positions where the band excludes zero.
   same isolated response. Requires the `smashr` package
   (Suggests).
 
+All four smoothers can coexist on the same fit. `mfsusie_plot()`
+picks one by priority (TI > smash > HMM > scalewise) and emits a
+hint listing the others; pass `smooth_method = "<name>"` to plot
+a specific one.
+
 ```{r tuning-scalewise}
 fit_scalewise <- mf_post_smooth(fit, method = "scalewise",
                                 threshold_factor = 0.5)
-mfsusie_plot(fit_scalewise)
+mfsusie_plot(fit_scalewise, smooth_method = "scalewise")
 ```
 
 ```{r tuning-hmm}
 fit_hmm <- mf_post_smooth(fit, method = "HMM")
-mfsusie_plot(fit_hmm)
+mfsusie_plot(fit_hmm)   # picks HMM (the only smoother on the fit)
 ```
 
 ```{r tuning-smash, eval = requireNamespace("smashr", quietly = TRUE)}
@@ -138,13 +180,25 @@ fit_smash <- mf_post_smooth(fit, method = "smash")
 mfsusie_plot(fit_smash)
 ```
 
+When several smoothers are stacked, plotting picks the
+highest-priority one and lists the others as a hint:
+
+```{r tuning-stacked}
+fit_multi <- mf_post_smooth(fit, method = "TI")
+fit_multi <- mf_post_smooth(fit_multi, method = "HMM")
+fit_multi <- mf_post_smooth(fit_multi, method = "scalewise")
+mfsusie_plot(fit_multi)                              # picks TI; hint prints
+mfsusie_plot(fit_multi, smooth_method = "HMM")       # plot HMM directly
+```
+
 ## Multi-outcome usage
 
 `mf_post_smooth()` works on `mfsusie()` fits the same way; the
-returned fit has `$effect_curves[[m]]` and `$credible_bands[[m]]`
-populated for every functional outcome. Scalar outcomes
-(`T_m = 1`) are passed through (no smoothing needed) and get a
-band derived from the wavelet posterior SD.
+chosen entry of `fit$smoothed[[method]]` carries
+`effect_curves[[m]]` and `credible_bands[[m]]` for every
+functional outcome. Scalar outcomes (`T_m = 1`) are passed
+through (no smoothing needed) and get a band derived from the
+wavelet posterior SD.
 
 ```{r mfsusie}
 # Two functional outcomes at different sampling resolutions
