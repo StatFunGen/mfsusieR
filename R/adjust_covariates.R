@@ -183,8 +183,8 @@ mf_residualize_ols <- function(Y, Z, X = NULL) {
 #' @return Same named-list shape as `mf_adjust_for_covariates()`.
 #' @export
 mf_residualize_wavelet_eb <- function(Y, Z, X = NULL,
-                                      wavelet_filter_number = 1L,
-                                      wavelet_family        = "DaubExPhase",
+                                      wavelet_filter_number = 10L,
+                                      wavelet_family        = "DaubLeAsymm",
                                       max_iter              = 100L,
                                       tol                   = 1e-3,
                                       null_prior_weight     = 10,

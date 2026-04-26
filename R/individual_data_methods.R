@@ -441,7 +441,18 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
   if (is.null(l)) {
     stop("`optimize_prior_variance.mf_individual` requires the effect index `l`.")
   }
-  mixsqp_null_penalty <- params$mixsqp_null_penalty     %||% 0.7
+  # The joint per-effect SNP posterior `model$alpha[l, ]` is the
+  # softmax of the joint log-Bayes-factor across all M outcomes
+  # and S_m scales. Adding M outcomes increases the variance of
+  # the per-SNP joint lbf by ~M, so the dominant alpha values
+  # concentrate ~M-fold relative to the M = 1 case. The mixsqp
+  # M-step's regularization-to-data balance is set by
+  # `nullweight / max_alpha`; to hold this ratio fixed across M
+  # we scale `mixsqp_null_penalty` by M. See
+  # `inst/notes/cross-package-audit-derivations.md` section 1
+  # for the full derivation.
+  mixsqp_null_penalty <- (params$mixsqp_null_penalty %||% 0.7) *
+                        max(1L, data$M)
   control    <- params$control_mixsqp %||% list()
   zeta_l     <- model$alpha[l, ]
 

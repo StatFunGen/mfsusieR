@@ -313,86 +313,94 @@ mf_cs_colors <- function(n_cs) {
   }
 }
 
-# Internal: full effect panel for one outcome with facet handling.
-# Sets up sub-layout when facet = "stack", otherwise draws all CSes
-# on the current cell.
-.draw_effect <- function(fit, m, pos = NULL, main = NULL,
-                         effect_style = "band",
-                         facet_cs = "auto",
-                         show_grid_dots = FALSE, lwd = 2.0,
-                         add_legend = TRUE,
-                         show_lfsr_curve = TRUE,
-                         show_affected_region = TRUE,
-                         lfsr_threshold = 0.01,
-                         smoothed = NULL) {
+# Internal: default outcome label for the effect panel title.
+.outcome_main <- function(fit, m) {
   T_basis <- fit$dwt_meta$T_basis[m]
-  if (is.null(pos)) pos <- fit$dwt_meta$pos[[m]]
-  if (is.null(main)) {
-    nm <- fit$dwt_meta$outcome_names[m]
-    label <- if (!is.null(nm) && nzchar(nm)) nm else sprintf("Outcome %d", m)
-    main <- if (length(fit$dwt_meta$T_basis) == 1L) {
-      sprintf("Effect sizes (T = %d)", T_basis)
-    } else {
-      sprintf("%s (T = %d)", label, T_basis)
-    }
-  }
+  nm      <- fit$dwt_meta$outcome_names[m]
+  label   <- if (!is.null(nm) && nzchar(nm)) nm else sprintf("Outcome %d", m)
+  if (length(fit$dwt_meta$T_basis) == 1L)
+    sprintf("Effect sizes (T = %d)", T_basis)
+  else
+    sprintf("%s (T = %d)", label, T_basis)
+}
+
+# Internal: scalar (T = 1) outcome dot plot.
+.draw_scalar_effect <- function(fit, m, smoothed, main) {
+  cs   <- fit$sets$cs %||% list()
+  cs_l <- fit$sets$cs_index %||% seq_along(cs)
+  pal  <- mf_cs_colors(length(cs))
+  eff  <- vapply(cs_l, function(l) .effect_curve(fit, l, m, smoothed),
+                 numeric(1))
+  plot(seq_along(cs_l), eff, type = "p", pch = 19L,
+       col = pal, cex = 1.4,
+       xlab = "credible set", ylab = "effect",
+       xaxt = "n", main = main, las = 1)
+  axis(1, at = seq_along(cs_l), labels = paste0("CS", seq_along(cs_l)))
+  abline(h = 0, lty = 2, col = "grey60")
+}
+
+# Internal: single-cell overlay effect panel (all CSes on one cell).
+# Always draws into the current device cell. Caller owns the layout.
+.draw_effect_in_cell <- function(fit, m, smoothed,
+                                  effect_style, pos, lwd,
+                                  show_grid_dots, show_affected_region,
+                                  show_lfsr_curve, lfsr_threshold,
+                                  add_legend, main = NULL) {
+  T_basis <- fit$dwt_meta$T_basis[m]
+  if (is.null(pos))  pos  <- fit$dwt_meta$pos[[m]]
+  if (is.null(main)) main <- .outcome_main(fit, m)
   cs <- fit$sets$cs %||% list()
   if (length(cs) == 0L) {
-    plot.new()
-    title(main = paste(main, "\n(no credible sets)"))
+    plot.new(); title(main = paste(main, "\n(no credible sets)"))
+    return(invisible(NULL))
+  }
+  if (T_basis == 1L) {
+    .draw_scalar_effect(fit, m, smoothed, main)
     return(invisible(NULL))
   }
   cs_l <- fit$sets$cs_index %||% seq_along(cs)
   pal  <- mf_cs_colors(length(cs))
+  .draw_effect_panel(fit, m, cs_subset = cs_l,
+                     effect_style = effect_style,
+                     pos = pos, pal = pal, lwd = lwd,
+                     smoothed = smoothed,
+                     show_grid_dots = show_grid_dots,
+                     show_affected_region = show_affected_region,
+                     show_lfsr_curve = show_lfsr_curve,
+                     lfsr_threshold = lfsr_threshold,
+                     add_legend = add_legend,
+                     main = main)
+}
 
-  # Scalar outcome: dot plot of per-effect mean.
-  if (T_basis == 1L) {
-    eff <- vapply(cs_l, function(l) .effect_curve(fit, l, m, smoothed), numeric(1))
-    plot(seq_along(cs_l), eff, type = "p", pch = 19L,
-         col = pal, cex = 1.4,
-         xlab = "credible set", ylab = "effect",
-         xaxt = "n", main = main, las = 1)
-    axis(1, at = seq_along(cs_l), labels = paste0("CS", seq_along(cs_l)))
-    abline(h = 0, lty = 2, col = "grey60")
-    return(invisible(NULL))
+# Internal: K stacked per-CS effect cells. Caller has already
+# allocated K cells via `layout()`. `mar_cs` lets the M = 1 path
+# tighten margins for the stacked sub-panels.
+.draw_effect_stack_cells <- function(fit, m, smoothed, K,
+                                     effect_style, pos, lwd,
+                                     show_grid_dots, show_affected_region,
+                                     show_lfsr_curve, lfsr_threshold,
+                                     add_legend,
+                                     mar_cs = NULL) {
+  cs   <- fit$sets$cs %||% list()
+  cs_l <- fit$sets$cs_index %||% seq_along(cs)
+  pal  <- mf_cs_colors(length(cs))
+  if (is.null(pos)) pos <- fit$dwt_meta$pos[[m]]
+  if (!is.null(mar_cs)) {
+    op <- par(mar = mar_cs); on.exit(par(op), add = TRUE)
   }
-
-  facet <- .resolve_facet(facet_cs, fit, m, smoothed)
-
-  if (facet == "stack") {
-    K <- length(cs_l)
-    op_layout <- par(mfrow = c(K, 1L), mar = c(2.5, 4, 1.5, 4),
-                     oma = c(2.5, 0, 1.5, 0))
-    on.exit(par(op_layout), add = TRUE)
-    for (i in seq_len(K)) {
-      # Show the line-style legend (solid = effect, dashed =
-      # lfsr) on the first panel only. The CS color is implicit
-      # in the panel's CS<i> title.
-      .draw_effect_panel(fit, m, cs_subset = cs_l[i],
-                         effect_style = effect_style,
-                         pos = pos, pal = pal[i], lwd = lwd,
-                         smoothed = smoothed,
-                         show_grid_dots = show_grid_dots,
-                         show_affected_region = show_affected_region,
-                         show_lfsr_curve = show_lfsr_curve,
-                         lfsr_threshold = lfsr_threshold,
-                         add_legend = (i == 1L),
-                         main = sprintf("CS%d", i),
-                         xaxt = if (i == K) "s" else "n",
-                         xlab = if (i == K) "outcome position" else "")
-    }
-    mtext(main, side = 3, outer = TRUE, line = 0.2, cex = 0.95)
-  } else {
-    .draw_effect_panel(fit, m, cs_subset = cs_l,
+  for (i in seq_len(K)) {
+    .draw_effect_panel(fit, m, cs_subset = cs_l[i],
                        effect_style = effect_style,
-                       pos = pos, pal = pal, lwd = lwd,
+                       pos = pos, pal = pal[i], lwd = lwd,
                        smoothed = smoothed,
                        show_grid_dots = show_grid_dots,
                        show_affected_region = show_affected_region,
                        show_lfsr_curve = show_lfsr_curve,
                        lfsr_threshold = lfsr_threshold,
-                       add_legend = add_legend,
-                       main = main)
+                       add_legend = (i == 1L) && add_legend,
+                       main = sprintf("CS%d", i),
+                       xaxt = if (i == K) "s" else "n",
+                       xlab = if (i == K) "outcome position" else "")
   }
 }
 
@@ -471,73 +479,85 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
   smoothed <- if (!is.null(picked)) fit$smoothed[[picked]] else NULL
 
   M <- length(fit$dwt_meta$T_basis)
+  K <- length(fit$sets$cs %||% list())
 
-  draw_one_effect <- function(mi) {
-    .draw_effect(fit, m = mi, pos = NULL,
-                 effect_style        = effect_style,
-                 facet_cs            = facet_cs,
-                 show_grid_dots      = show_grid_dots,
-                 lwd                 = lwd,
-                 add_legend          = add_legend,
-                 show_lfsr_curve     = show_lfsr_curve,
-                 show_affected_region = show_affected_region,
-                 lfsr_threshold      = lfsr_threshold,
-                 smoothed            = smoothed)
+  # Resolve facet for the outcome we are about to render. Stack
+  # only fires when there are at least 2 credible sets and the
+  # caller did not force overlay. M > 1 always uses overlay (one
+  # cell per outcome in the tiled grid; stack would re-allocate
+  # the device and clobber the outer mfrow).
+  resolve_facet_for <- function(mi) {
+    if (K < 2L) return("overlay")
+    .resolve_facet(facet_cs, fit, mi, smoothed)
   }
 
-  # Single-outcome focus: just one effect panel.
+  draw_overlay_cell <- function(mi, main = NULL) {
+    .draw_effect_in_cell(fit, m = mi, smoothed = smoothed,
+                         effect_style = effect_style,
+                         pos = NULL, lwd = lwd,
+                         show_grid_dots = show_grid_dots,
+                         show_affected_region = show_affected_region,
+                         show_lfsr_curve = show_lfsr_curve,
+                         lfsr_threshold = lfsr_threshold,
+                         add_legend = add_legend, main = main)
+  }
+  draw_stack_cells <- function(mi, main_outer) {
+    .draw_effect_stack_cells(fit, m = mi, smoothed = smoothed, K = K,
+                             effect_style = effect_style,
+                             pos = NULL, lwd = lwd,
+                             show_grid_dots = show_grid_dots,
+                             show_affected_region = show_affected_region,
+                             show_lfsr_curve = show_lfsr_curve,
+                             lfsr_threshold = lfsr_threshold,
+                             add_legend = add_legend,
+                             mar_cs = c(2.5, 4, 1.5, 4))
+    if (!is.null(main_outer))
+      mtext(main_outer, side = 3, outer = TRUE, line = 0.2, cex = 0.95)
+  }
+
+  # Single-outcome focus: one effect region. May expand to K
+  # stacked sub-panels when the resolver picks stack.
   if (!is.null(m)) {
     if (m < 1L || m > M) stop(sprintf("`m` must be in 1..%d.", M))
-    op <- par(mar = c(4, 4, 2.5, 4))
-    on.exit(par(op), add = TRUE)
-    draw_one_effect(m)
+    facet_res <- resolve_facet_for(m)
+    if (facet_res == "stack" && K >= 2L) {
+      layout(matrix(seq_len(K), ncol = 1L), heights = rep(1, K))
+      on.exit(layout(1L), add = TRUE)
+      op <- par(mar = c(2.5, 4, 1.5, 4),
+                oma = c(2.5, 0, 1.5, 0))
+      on.exit(par(op), add = TRUE)
+      draw_stack_cells(m, main_outer = .outcome_main(fit, m))
+    } else {
+      op <- par(mar = c(4, 4, 2.5, 4))
+      on.exit(par(op), add = TRUE)
+      draw_overlay_cell(m)
+    }
     return(invisible(NULL))
   }
 
-  # M = 1: PIP panel on top, effect panel(s) below. When the
-  # facet resolver picks "stack" with K credible sets, the
-  # effect region splits into K sub-panels. Use `layout()` with
-  # explicit heights instead of nested `par(mfrow)` so the
-  # PIP-vs-effects gap stays uniform regardless of K.
+  # M = 1: PIP on top, effect region below. Effect region is
+  # one overlay cell or K stacked cells per the facet resolver.
   if (M == 1L) {
-    K <- length(fit$sets$cs %||% list())
-    facet_resolved <- if (K >= 2L)
-      .resolve_facet(facet_cs, fit, 1L, smoothed)
-    else "overlay"
-    n_effect_panels <- if (facet_resolved == "stack") K else 1L
+    facet_res       <- resolve_facet_for(1L)
+    n_effect_panels <- if (facet_res == "stack" && K >= 2L) K else 1L
     layout(matrix(seq_len(1L + n_effect_panels), ncol = 1L),
            heights = c(1.0, rep(1.0, n_effect_panels)))
     on.exit(layout(1L), add = TRUE)
     op <- par(mar = c(4, 4, 2.5, 4))
     on.exit(par(op), add = TRUE)
     .draw_pip(fit, pos = pos, add_legend = add_legend)
-    if (facet_resolved == "stack" && K >= 2L) {
-      cs_l       <- fit$sets$cs_index %||% seq_along(fit$sets$cs)
-      pal        <- mf_cs_colors(K)
-      pos_panel  <- if (is.null(pos)) fit$dwt_meta$pos[[1L]] else pos
-      par(mar = c(2.5, 4, 1.5, 4))
-      for (i in seq_len(K)) {
-        .draw_effect_panel(fit, m = 1L, cs_subset = cs_l[i],
-                           effect_style = effect_style,
-                           pos = pos_panel, pal = pal[i], lwd = lwd,
-                           smoothed = smoothed,
-                           show_grid_dots = show_grid_dots,
-                           show_affected_region = show_affected_region,
-                           show_lfsr_curve = show_lfsr_curve,
-                           lfsr_threshold = lfsr_threshold,
-                           add_legend = (i == 1L) && add_legend,
-                           main = sprintf("CS%d", i),
-                           xaxt = if (i == K) "s" else "n",
-                           xlab = if (i == K) "outcome position" else "")
-      }
+    if (n_effect_panels == 1L) {
+      draw_overlay_cell(1L)
     } else {
-      draw_one_effect(1L)
+      draw_stack_cells(1L, main_outer = NULL)
     }
     return(invisible(NULL))
   }
 
-  # M > 1: dense grid; PIP top-left, then per-outcome effect panels.
-  # Stack mode is forced to overlay for M > 1.
+  # M > 1: tiled grid, PIP in the top-left slot, M overlay
+  # effect cells filling the rest. Stack is forced off here so
+  # the inner panels do not call `par(mfrow)` and clobber the
+  # outer layout.
   n_panels <- M + 1L
   cols     <- ceiling(sqrt(n_panels))
   rows     <- ceiling(n_panels / cols)
@@ -545,7 +565,7 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
   on.exit(par(op), add = TRUE)
 
   .draw_pip(fit, pos = pos, add_legend = add_legend)
-  for (mi in seq_len(M)) draw_one_effect(mi)
+  for (mi in seq_len(M)) draw_overlay_cell(mi)
   remaining <- rows * cols - n_panels
   if (remaining > 0L) {
     for (i in seq_len(remaining)) plot.new()
