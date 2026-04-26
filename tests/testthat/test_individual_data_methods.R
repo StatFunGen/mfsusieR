@@ -48,7 +48,7 @@ test_that("compute_residuals returns model with per-modality residuals XtR", {
   expect_identical(length(out$residuals), data$M)
   for (m in seq_len(data$M)) {
     expect_identical(dim(out$residuals[[m]]),
-                     c(data$J, data$T_padded[m]))
+                     c(data$p, data$T_padded[m]))
   }
 })
 
@@ -96,9 +96,9 @@ test_that("compute_ser_statistics returns per-modality betahat, shat2", {
   expect_identical(length(out$shat2), data$M)
   for (m in seq_len(data$M)) {
     expect_identical(dim(out$betahat[[m]]),
-                     c(data$J, data$T_padded[m]))
+                     c(data$p, data$T_padded[m]))
     expect_identical(dim(out$shat2[[m]]),
-                     c(data$J, data$T_padded[m]))
+                     c(data$p, data$T_padded[m]))
   }
 })
 
@@ -126,7 +126,7 @@ test_that("compute_ser_statistics shat2 broadcasts scalar sigma2 per modality", 
 
   for (m in seq_len(data$M)) {
     expected <- matrix(sigma2 / data$predictor_weights,
-                       nrow = data$J, ncol = data$T_padded[m])
+                       nrow = data$p, ncol = data$T_padded[m])
     expect_equal(out$shat2[[m]], expected, tolerance = 1e-12)
   }
 })
@@ -158,15 +158,15 @@ test_that("update_fitted_values reconstructs fitted = fitted_without_l + Xb_l", 
   model <- mfsusieR:::compute_residuals.mf_individual(data, NULL, model, 1)
 
   # Inject deterministic alpha and mu so we can verify the algebra.
-  model$alpha[1, ] <- 1 / data$J
+  model$alpha[1, ] <- 1 / data$p
   for (m in seq_len(data$M)) {
-    model$mu[[1]][[m]] <- matrix(0.5, nrow = data$J, ncol = data$T_padded[m])
+    model$mu[[1]][[m]] <- matrix(0.5, nrow = data$p, ncol = data$T_padded[m])
   }
 
   out <- mfsusieR:::update_fitted_values.mf_individual(data, NULL, model, 1)
 
   for (m in seq_len(data$M)) {
-    b_l_m <- (1 / data$J) * matrix(0.5, nrow = data$J, ncol = data$T_padded[m])
+    b_l_m <- (1 / data$p) * matrix(0.5, nrow = data$p, ncol = data$T_padded[m])
     Xb_l_m <- data$X %*% b_l_m
     expected <- out$fitted_without_l[[m]] + Xb_l_m
     expect_equal(out$fitted[[m]], expected, tolerance = 1e-12)
@@ -230,7 +230,7 @@ test_that("loglik.mf_individual updates alpha (sums to 1), lbf finite, lbf_varia
   expect_equal(sum(out$alpha[1, ]), 1, tolerance = 1e-12)
   expect_true(all(out$alpha[1, ] >= 0))
   expect_true(is.finite(out$lbf[1]))
-  expect_identical(length(out$lbf_variable[1, ]), data$J)
+  expect_identical(length(out$lbf_variable[1, ]), data$p)
   expect_true(all(is.finite(out$lbf_variable[1, ])))
 })
 
@@ -260,9 +260,9 @@ test_that("calculate_posterior_moments shapes mu, mu2 are J x T_padded[m] per mo
 
   for (m in seq_len(data$M)) {
     expect_identical(dim(out$mu[[1]][[m]]),
-                     c(data$J, data$T_padded[m]))
+                     c(data$p, data$T_padded[m]))
     expect_identical(dim(out$mu2[[1]][[m]]),
-                     c(data$J, data$T_padded[m]))
+                     c(data$p, data$T_padded[m]))
     # Second moment satisfies E[X^2] >= (E[X])^2 elementwise.
     expect_true(all(out$mu2[[1]][[m]] >= out$mu[[1]][[m]]^2 - 1e-12))
   }
@@ -280,16 +280,16 @@ test_that("calculate_posterior_moments with broadcast scalar sigma2 matches per-
   for (m in seq_len(data$M)) {
     Bhat_m <- model$residuals[[m]] / pw
     Shat_m <- sqrt(matrix(model$sigma2[[m]] / pw,
-                          nrow = data$J, ncol = ncol(model$residuals[[m]])))
+                          nrow = data$p, ncol = ncol(model$residuals[[m]])))
     indx_m <- data$scale_index[[m]]
     G_m <- model$G_prior[[m]]
-    mu_expected  <- matrix(0, nrow = data$J, ncol = data$T_padded[m])
-    mu2_expected <- matrix(0, nrow = data$J, ncol = data$T_padded[m])
+    mu_expected  <- matrix(0, nrow = data$p, ncol = data$T_padded[m])
+    mu2_expected <- matrix(0, nrow = data$p, ncol = data$T_padded[m])
     for (s in seq_along(indx_m)) {
       idx <- indx_m[[s]]
       g_s <- G_m[[s]]$fitted_g
       g_scaled <- ashr::normalmix(pi = g_s$pi, mean = g_s$mean, sd = g_s$sd)
-      for (j in seq_len(data$J)) {
+      for (j in seq_len(data$p)) {
         d <- ashr::set_data(Bhat_m[j, idx], Shat_m[j, idx])
         mu_expected[j, idx]  <- ashr::postmean(g_scaled, d)
         post_sd_ji <- ashr::postsd(g_scaled, d)
@@ -336,7 +336,7 @@ test_that("loglik / calculate_posterior_moments with K=1, no null reduce to susi
   for (m in seq_len(data$M)) {
     XtR <- model$residuals[[m]]
     Shat2 <- matrix(model$sigma2[[m]] / pw,
-                    nrow = data$J, ncol = ncol(XtR))
+                    nrow = data$p, ncol = ncol(XtR))
     Bhat <- XtR / pw
     # susieR scalar formula: post_var = (1/V + pw/sigma2)^(-1)
     #                      = V*Shat^2 / (V + Shat^2)

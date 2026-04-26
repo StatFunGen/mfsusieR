@@ -49,13 +49,13 @@ the combined signal across positions is strong.
 ```{r simulate}
 data(N3finemapping)
 X <- N3finemapping$X[, seq_len(150)]
-n <- nrow(X); J <- ncol(X); T_m <- 64
+n <- nrow(X); p <- ncol(X); T_m <- 64
 
 positions <- seq_len(T_m)
 shape_left  <- exp(-((positions - 16)^2) / (2 * 4^2))
 shape_right <- exp(-((positions - 48)^2) / (2 * 4^2))
 
-beta <- matrix(0, J, T_m)
+beta <- matrix(0, p, T_m)
 beta[42, ] <- 0.6 * shape_left
 beta[97, ] <- 0.6 * shape_right
 
@@ -74,7 +74,7 @@ pip_per_pos <- vapply(seq_len(T_m), function(t) {
                  estimate_residual_variance = TRUE,
                  verbose = FALSE)
   fit_t$pip
-}, numeric(J))
+}, numeric(p))
 pip_per_snp <- apply(pip_per_pos, 1, max)
 which(pip_per_snp > 0.9)
 ```

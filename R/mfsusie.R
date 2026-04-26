@@ -25,7 +25,7 @@
 #' per-(scale, modality) mixture-of-normals prior and residual
 #' variance.
 #'
-#' @param X numeric matrix `n x J` of covariates (e.g., genotype dosages).
+#' @param X numeric matrix `n x p` of covariates (e.g., genotype dosages).
 #' @param Y list of length `M`; each element a numeric matrix `n x T_m`
 #'   (or a length-n vector when `T_m = 1`).
 #' @param pos optional list of length `M`; each element a numeric vector
@@ -46,8 +46,8 @@
 #' @param cross_modality_prior optional cross-modality combiner
 #'   object. Defaults to the trivial independence combiner
 #'   (`cross_modality_prior_independent()`).
-#' @param prior_weights optional length-J numeric vector, the
-#'   variable-selection prior. Defaults to uniform `1/J`.
+#' @param prior_weights optional length-p numeric vector, the
+#'   variable-selection prior. Defaults to uniform `1/p`.
 #' @param residual_variance optional list of length `M`, initial
 #'   residual variance per modality. Defaults to the per-modality
 #'   sample variance.
@@ -90,8 +90,8 @@
 #'
 #' @return A list of class `c("mfsusie", "susie")` carrying:
 #' \describe{
-#'   \item{`alpha`}{`L x J` posterior inclusion probabilities.}
-#'   \item{`mu`, `mu2`}{`list[L]` of `list[M]` of `J x T_padded[m]`
+#'   \item{`alpha`}{`L x p` posterior inclusion probabilities.}
+#'   \item{`mu`, `mu2`}{`list[L]` of `list[M]` of `p x T_padded[m]`
 #'     matrices: per-effect, per-modality posterior mean and second
 #'     moment in the wavelet domain.}
 #'   \item{`pi_V`}{`list[M]` of `S_m x K` mixture-weight matrices.}
@@ -101,7 +101,7 @@
 #'     length-`S_m` per-(scale, modality) residual variances.}
 #'   \item{`elbo`}{numeric vector of ELBO values per iteration.}
 #'   \item{`niter`, `converged`}{IBSS termination metadata.}
-#'   \item{`pip`}{length-J posterior inclusion probabilities.}
+#'   \item{`pip`}{length-p posterior inclusion probabilities.}
 #'   \item{`sets`}{credible sets via `susie_get_cs`.}
 #'   \item{`fitted`}{`list[M]` of running per-modality fits in the
 #'     wavelet domain.}

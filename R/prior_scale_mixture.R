@@ -45,7 +45,7 @@ distribute_mixture_weights <- function(K, null_prior_weight) {
 #'
 #' @param Y_m numeric matrix `n x T_padded[m]` of wavelet
 #'   coefficients for modality m.
-#' @param X numeric matrix `n x J` of column-centred covariates.
+#' @param X numeric matrix `n x p` of column-centred covariates.
 #' @param prior_class one of `"mixture_normal"` or
 #'   `"mixture_normal_per_scale"`.
 #' @param scale_index list of integer vectors from

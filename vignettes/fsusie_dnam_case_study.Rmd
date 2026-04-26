@@ -40,14 +40,14 @@ methylation matrix in practice.
 ```{r simulate}
 data(N3finemapping)
 X <- N3finemapping$X[, seq_len(150)]
-n <- nrow(X); J <- ncol(X)
+n <- nrow(X); p <- ncol(X)
 
 # Five CpGs in the region, irregularly spaced.
 cpg_pos <- c(120, 320, 480, 540, 1200)
 T_m <- length(cpg_pos)
 
 # Two causal SNPs with localised effects on subsets of CpGs.
-beta <- matrix(0, nrow = J, ncol = T_m)
+beta <- matrix(0, nrow = p, ncol = T_m)
 beta[42, ] <-  c(0.20, 0.18, 0.05, 0.02, 0.00)   # 5'-side cluster
 beta[97, ] <-  c(0.00, 0.00, 0.03, 0.10, 0.12)   # 3'-side cluster
 

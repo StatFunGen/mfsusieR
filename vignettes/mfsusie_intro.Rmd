@@ -40,7 +40,7 @@ credible sets.
 ```{r simulate}
 data(N3finemapping)
 X <- N3finemapping$X[, seq_len(120)]
-n <- nrow(X); J <- ncol(X)
+n <- nrow(X); p <- ncol(X)
 
 T_func <- c(32L, 64L)
 n_scalar <- 3L
@@ -48,11 +48,11 @@ n_scalar <- 3L
 # Causal beta: same two SNPs, different per-modality strength.
 shape_low  <- exp(-((seq_len(T_func[1]) - T_func[1] / 2)^2) / (2 * 4^2))
 shape_high <- exp(-((seq_len(T_func[2]) - T_func[2] / 2)^2) / (2 * 6^2))
-beta_func1 <- matrix(0, J, T_func[1]); beta_func1[37, ] <- 1.0 * shape_low
+beta_func1 <- matrix(0, p, T_func[1]); beta_func1[37, ] <- 1.0 * shape_low
                                        beta_func1[88, ] <- -0.7 * shape_low
-beta_func2 <- matrix(0, J, T_func[2]); beta_func2[37, ] <- 0.8 * shape_high
+beta_func2 <- matrix(0, p, T_func[2]); beta_func2[37, ] <- 0.8 * shape_high
                                        beta_func2[88, ] <- -0.5 * shape_high
-beta_scalar <- matrix(0, J, n_scalar)
+beta_scalar <- matrix(0, p, n_scalar)
 beta_scalar[37, ] <- c(0.9, 0.8, 0.6)
 beta_scalar[88, ] <- c(-0.5, -0.6, -0.4)
 

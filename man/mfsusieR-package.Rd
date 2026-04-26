@@ -4,9 +4,9 @@
 \name{mfsusieR-package}
 \alias{mfsusieR}
 \alias{mfsusieR-package}
-\title{mfsusieR: Multi-Modality Multi-Functional Sum of Single Effects Regression}
+\title{mfsusieR: Multi-Modality Sum of Single Functions Regression}
 \description{
-A multi-modality, multi-functional generalisation of the 'Sum of Single Effects' (SuSiE) model for variable selection in regression with mixtures of functional and univariate responses. Built on the 'susieR' backbone, with wavelet-based functional priors and a per-(scale, modality) variance structure.
+A multi-modality generalisation of the 'Sum of Single Functions' (SuSiF) model for variable selection in regression with mixtures of functional and scalar responses. Built on the 'susieR' backbone, with wavelet-based functional priors and a per-(scale, modality) variance structure.
 }
 \seealso{
 Useful links:

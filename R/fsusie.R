@@ -15,7 +15,7 @@
 #'
 #' @param Y numeric matrix `n x T` of functional responses on a
 #'   regular position grid (or numeric vector for `T = 1`).
-#' @param X numeric matrix `n x J` of covariates.
+#' @param X numeric matrix `n x p` of covariates.
 #' @param pos optional numeric vector of length `T` recording
 #'   sampling positions. Defaults to `seq_len(ncol(Y))`.
 #' @param ... forwarded to `mfsusie()`. See `?mfsusie` for the full

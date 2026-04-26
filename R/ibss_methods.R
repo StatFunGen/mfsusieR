@@ -77,7 +77,7 @@ initialize_fitted.mf_individual <- function(data, mat_init, ...) {
 ibss_initialize.mf_individual <- function(data, params) {
   var_y <- get_var_y(data)
 
-  if (data$J < params$L) params$L <- data$J
+  if (data$p < params$L) params$L <- data$p
 
   if (is.null(params$residual_variance)) {
     params$residual_variance <- var_y

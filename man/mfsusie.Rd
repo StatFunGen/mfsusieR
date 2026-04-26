@@ -36,7 +36,7 @@ mfsusie(
 )
 }
 \arguments{
-\item{X}{numeric matrix \verb{n x J} of covariates (e.g., genotype dosages).}
+\item{X}{numeric matrix \verb{n x p} of covariates (e.g., genotype dosages).}
 
 \item{Y}{list of length \code{M}; each element a numeric matrix \verb{n x T_m}
 (or a length-n vector when \code{T_m = 1}).}
@@ -65,8 +65,8 @@ component. Default 2 per the manuscript and design.md D5.}
 object. Defaults to the trivial independence combiner
 (\code{cross_modality_prior_independent()}).}
 
-\item{prior_weights}{optional length-J numeric vector, the
-variable-selection prior. Defaults to uniform \code{1/J}.}
+\item{prior_weights}{optional length-p numeric vector, the
+variable-selection prior. Defaults to uniform \code{1/p}.}
 
 \item{residual_variance}{optional list of length \code{M}, initial
 residual variance per modality. Defaults to the per-modality
@@ -129,8 +129,8 @@ Default 0.7.}
 \value{
 A list of class \code{c("mfsusie", "susie")} carrying:
 \describe{
-\item{\code{alpha}}{\verb{L x J} posterior inclusion probabilities.}
-\item{\code{mu}, \code{mu2}}{\code{list[L]} of \code{list[M]} of \verb{J x T_padded[m]}
+\item{\code{alpha}}{\verb{L x p} posterior inclusion probabilities.}
+\item{\code{mu}, \code{mu2}}{\code{list[L]} of \code{list[M]} of \verb{p x T_padded[m]}
 matrices: per-effect, per-modality posterior mean and second
 moment in the wavelet domain.}
 \item{\code{pi_V}}{\code{list[M]} of \verb{S_m x K} mixture-weight matrices.}
@@ -140,7 +140,7 @@ records (mutated by the IBSS loop).}
 length-\code{S_m} per-(scale, modality) residual variances.}
 \item{\code{elbo}}{numeric vector of ELBO values per iteration.}
 \item{\code{niter}, \code{converged}}{IBSS termination metadata.}
-\item{\code{pip}}{length-J posterior inclusion probabilities.}
+\item{\code{pip}}{length-p posterior inclusion probabilities.}
 \item{\code{sets}}{credible sets via \code{susie_get_cs}.}
 \item{\code{fitted}}{\code{list[M]} of running per-modality fits in the
 wavelet domain.}

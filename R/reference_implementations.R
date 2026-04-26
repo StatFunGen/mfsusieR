@@ -24,12 +24,12 @@
 #' Used in tests as the `<= 1e-12` oracle for the cpp11 implementation
 #' `mixture_log_bf_per_scale`.
 #'
-#' @param bhat_slice J x |idx_s| matrix.
-#' @param shat_slice J x |idx_s| matrix.
+#' @param bhat_slice p x |idx_s| matrix.
+#' @param shat_slice p x |idx_s| matrix.
 #' @param sd_grid length-K vector of mixture-component standard deviations.
 #' @param pi_grid length-K vector of mixture-component weights.
 #' @param V_scale numeric, per-effect prior-variance multiplier.
-#' @return numeric vector of length J.
+#' @return numeric vector of length p.
 #' @keywords internal
 #' @noRd
 mixture_log_bf_per_scale_R <- function(bhat_slice,
@@ -80,7 +80,7 @@ mixture_log_bf_per_scale_R <- function(bhat_slice,
 #' `mixture_posterior_per_scale`.
 #'
 #' @inheritParams mixture_log_bf_per_scale_R
-#' @return list with `pmean` and `pmean2`, both J x |idx_s| matrices.
+#' @return list with `pmean` and `pmean2`, both p x |idx_s| matrices.
 #' @keywords internal
 #' @noRd
 mixture_posterior_per_scale_R <- function(bhat_slice,
@@ -89,7 +89,7 @@ mixture_posterior_per_scale_R <- function(bhat_slice,
                                           pi_grid,
                                           V_scale = 1) {
   K <- length(sd_grid)
-  J <- nrow(bhat_slice)
+  p <- nrow(bhat_slice)
   T_idx <- ncol(bhat_slice)
   log_pi <- log(pi_grid)
   Shat2 <- shat_slice^2
@@ -101,9 +101,9 @@ mixture_posterior_per_scale_R <- function(bhat_slice,
   for (k in seq_len(K)) {
     sd_k_var <- sd_grid[k]^2 * V_scale
     if (sd_k_var == 0) {
-      per_k_log_w[[k]] <- matrix(log_pi[k], nrow = J, ncol = T_idx)
-      per_k_pmean[[k]] <- matrix(0, nrow = J, ncol = T_idx)
-      per_k_pvar[[k]]  <- matrix(0, nrow = J, ncol = T_idx)
+      per_k_log_w[[k]] <- matrix(log_pi[k], nrow = p, ncol = T_idx)
+      per_k_pmean[[k]] <- matrix(0, nrow = p, ncol = T_idx)
+      per_k_pvar[[k]]  <- matrix(0, nrow = p, ncol = T_idx)
     } else {
       var_alt <- sd_k_var + Shat2
       log_dens_alt <- -0.5 * log(2 * pi * var_alt) - 0.5 * bhat_slice^2 / var_alt
@@ -119,8 +119,8 @@ mixture_posterior_per_scale_R <- function(bhat_slice,
   e_sum <- exp(per_k_log_w[[1]] - m_max)
   if (K > 1) for (k in 2:K) e_sum <- e_sum + exp(per_k_log_w[[k]] - m_max)
 
-  pmean  <- matrix(0, nrow = J, ncol = T_idx)
-  pmean2 <- matrix(0, nrow = J, ncol = T_idx)
+  pmean  <- matrix(0, nrow = p, ncol = T_idx)
+  pmean2 <- matrix(0, nrow = p, ncol = T_idx)
   for (k in seq_len(K)) {
     w_k <- exp(per_k_log_w[[k]] - m_max) / e_sum
     pmean  <- pmean  + w_k * per_k_pmean[[k]]

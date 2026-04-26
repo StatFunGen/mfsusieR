@@ -19,15 +19,15 @@
 #' R reference oracle `mixture_log_bf_per_scale_R` in
 #' `R/reference_implementations.R` matches this at `<= 1e-12`.
 #'
-#' @param bhat_slice J x |idx_s| matrix of marginal effect estimates
+#' @param bhat_slice p x |idx_s| matrix of marginal effect estimates
 #'   for one modality, one scale.
-#' @param shat_slice J x |idx_s| matrix of standard errors.
+#' @param shat_slice p x |idx_s| matrix of standard errors.
 #' @param sd_grid length-K vector of mixture-component standard
 #'   deviations (`sd_k = 0` for the null component).
 #' @param pi_grid length-K vector of mixture-component weights.
 #' @param V_scale numeric scalar, per-effect prior-variance multiplier
 #'   (so component variance is `V_scale * sd_k^2`).
-#' @return numeric vector of length J.
+#' @return numeric vector of length p.
 #' @keywords internal
 #' @noRd
 mixture_log_bf_per_scale <- function(bhat_slice,
@@ -47,11 +47,11 @@ mixture_log_bf_per_scale <- function(bhat_slice,
 #' Per-(SNP, position) posterior moments under a mixture-of-normals prior
 #'
 #' Forwards to the cpp11 kernel
-#' `mixture_posterior_per_scale_cpp`. Returns the J x |idx_s|
+#' `mixture_posterior_per_scale_cpp`. Returns the p x |idx_s|
 #' posterior mean and second moment per (SNP, position).
 #'
 #' @inheritParams mixture_log_bf_per_scale
-#' @return list with elements `pmean` and `pmean2`, each a J x |idx_s|
+#' @return list with elements `pmean` and `pmean2`, each a p x |idx_s|
 #'   matrix.
 #' @keywords internal
 #' @noRd

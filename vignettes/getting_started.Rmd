@@ -45,10 +45,10 @@ Simulate one functional response on a length-`32` grid with two causal
 SNPs.
 
 ```{r fsusie-fit}
-n <- 200; J <- 50; T_m <- 32
-X <- matrix(rnorm(n * J), nrow = n)
-beta <- numeric(J); beta[c(5, 17)] <- c(1.2, -0.8)
-Y <- X %*% matrix(rep(beta, T_m), nrow = J) +
+n <- 200; p <- 50; T_m <- 32
+X <- matrix(rnorm(n * p), nrow = n)
+beta <- numeric(p); beta[c(5, 17)] <- c(1.2, -0.8)
+Y <- X %*% matrix(rep(beta, T_m), nrow = p) +
      matrix(rnorm(n * T_m, sd = 0.4), nrow = n)
 
 fit_f <- fsusie(Y, X, L = 5, verbose = FALSE)
@@ -67,7 +67,7 @@ resolutions plus one scalar modality.
 ```{r mfsusie-fit}
 T_per <- c(32L, 64L)
 Y_func <- lapply(T_per, function(T_m) {
-  X %*% matrix(rep(beta, T_m), nrow = J) +
+  X %*% matrix(rep(beta, T_m), nrow = p) +
     matrix(rnorm(n * T_m, sd = 0.4), nrow = n)
 })
 Y_scalar <- as.numeric(X %*% beta + rnorm(n, sd = 0.4))
@@ -80,7 +80,7 @@ fit_m$pip[c(5, 17)]
 length(fit_m$sets$cs)
 ```
 
-`mu[[l]][[m]]` is a `J x T_padded[m]` matrix of per-effect posterior
+`mu[[l]][[m]]` is a `p x T_padded[m]` matrix of per-effect posterior
 means on each modality; `predict()` and `coef()` invert the wavelet
 transform to position space transparently.
 
