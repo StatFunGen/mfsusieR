@@ -1,11 +1,11 @@
 ---
-title: "Practical patterns for long-running mfsusie() fits"
+title: "Practical patterns for long-running fits"
 author: "Gao Wang and contributors"
 output:
   rmarkdown::html_vignette:
     toc: true
 vignette: >
-  %\VignetteIndexEntry{Practical patterns for long-running mfsusie() fits}
+  %\VignetteIndexEntry{Practical patterns for long-running fits}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---

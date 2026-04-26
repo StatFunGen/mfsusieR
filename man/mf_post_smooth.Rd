@@ -4,13 +4,18 @@
 \alias{mf_post_smooth}
 \title{Post-smooth a fit's per-effect curves and add credible bands}
 \usage{
-mf_post_smooth(fit, method = c("tiwt"), level = 0.95, threshold_factor = 1)
+mf_post_smooth(
+  fit,
+  method = c("scalewise"),
+  level = 0.95,
+  threshold_factor = 1
+)
 }
 \arguments{
 \item{fit}{a fit returned by \code{mfsusie()} or \code{fsusie()}.}
 
-\item{method}{character, smoother. Currently only \code{"tiwt"}
-(translation-invariant wavelet thresholding) is supported.}
+\item{method}{character, smoother. Currently only
+\code{"scalewise"} is implemented.}
 
 \item{level}{numeric in (0, 1), credible-band coverage.
 Default 0.95 (-> +/- 1.96 * sd).}
@@ -28,4 +33,8 @@ needed).
 }
 \description{
 Post-smooth a fit's per-effect curves and add credible bands
+}
+\references{
+Manuscript: Denault et al. (2025) Methods, "Refining the effect
+estimates" (bioRxiv 10.1101/2025.08.17.670732).
 }

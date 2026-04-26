@@ -1,11 +1,11 @@
 ---
-title: "Single-outcome functional fine-mapping with fsusie()"
+title: "Single-outcome functional fine-mapping"
 author: "Gao Wang and contributors"
 output:
   rmarkdown::html_vignette:
     toc: true
 vignette: >
-  %\VignetteIndexEntry{Single-outcome functional fine-mapping with fsusie()}
+  %\VignetteIndexEntry{Single-outcome functional fine-mapping}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---

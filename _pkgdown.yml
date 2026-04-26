@@ -75,24 +75,27 @@ articles:
     contents:
       - getting_started
 
-  - title: "Univariate (single-context, `fsusie()`)"
+  - title: "Single-outcome fine-mapping"
     desc: >
-      Fine-mapping a single response: scalar SuSiE (T_m = 1),
-      single-modality functional fSuSiE (T_m > 1), or the drop-in
-      fsusie() wrapper. One context, one Y.
+      Fine-mapping a single response: scalar (T = 1) or functional
+      (T > 1). One Y, one workflow.
     contents:
       - fsusie_intro
       - fsusie_covariates_and_coloc
       - fsusie_dnam_case_study
       - fsusie_why_functional
 
-  - title: "Multivariate (multi-context, `mfsusie()`)"
+  - title: "Multi-outcome fine-mapping"
     desc: >
-      Joint fine-mapping across multiple functional and univariate
-      phenotypes via mfsusie(). Multiple contexts, list of Y.
+      Joint fine-mapping across multiple functional and scalar
+      responses. List of Y, shared variable selection.
     contents:
       - mfsusie_intro
       - mfsusie_long_running_fits
+
+  - title: "Plotting and post-processing"
+    contents:
+      - post_processing
 
 # Optional: Footer customization
 footer:
