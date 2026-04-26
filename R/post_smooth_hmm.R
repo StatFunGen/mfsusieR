@@ -1,0 +1,297 @@
+# HMM-based wavelet-free post-smoother for mfsusie / fsusie fits.
+#
+# `mf_fit_hmm()` is the forward-backward EM smoother on a discrete
+# grid of effect-size states, with hub-and-spoke transitions and
+# ashr refinement at each iteration. Faithful port of the
+# upstream `fit_hmm`, with three port improvements:
+#   * `compute_marginal_bhat_shat` (susieR) replaces a hand-rolled
+#     regression in the upstream caller.
+#   * `set_data` and `calc_loglik` are bare ashr exports
+#     (imported in `R/mfsusieR-package.R`); no `:::`.
+#   * `%!in%` is inlined as `!(x %in% y)` rather than a separate
+#     helper.
+
+#' Forward-backward EM smoother on a hub-and-spoke effect-size grid
+#'
+#' @param x numeric vector of position-wise effect estimates.
+#' @param sd numeric vector of position-wise standard errors,
+#'   same length as `x`.
+#' @param halfK integer, half of the grid size. The full grid is
+#'   `2 * halfK - 1` after symmetric mirroring around zero.
+#' @param mult numeric, exponent on the position-wise grid spacing
+#'   (default 3 in the upstream).
+#' @param thresh numeric, posterior-mass cutoff for keeping a
+#'   non-null state in the second EM iteration.
+#' @param prefilter logical; if `TRUE`, drop grid states with
+#'   negligible average posterior weight before EM.
+#' @param thresh_prefilter numeric, prefilter weight threshold.
+#' @param maxiter integer, EM iteration cap.
+#' @param max_zscore numeric, z-score floor on `abs(x/sd)` to
+#'   avoid emission underflow.
+#' @param thresh_sd numeric, lower clamp on `sd`.
+#' @param epsilon numeric, transition-matrix smoothing constant.
+#' @return a list with elements
+#'   `prob` (T x K posterior state probabilities),
+#'   `x_post` (length-T smoothed effect estimate),
+#'   `lfsr` (length-T local false sign rate),
+#'   `mu` (length-K state means), `ll_hmm`, `ll_null`, `log_BF`.
+#' @keywords internal
+#' @noRd
+mf_fit_hmm <- function(x, sd,
+                       halfK            = 100L,
+                       mult             = 3,
+                       thresh           = 1e-5,
+                       prefilter        = TRUE,
+                       thresh_prefilter = 1e-30,
+                       maxiter          = 3L,
+                       max_zscore       = 20,
+                       thresh_sd        = 1e-30,
+                       epsilon          = 1e-2) {
+  # Defensive sd / x cleanup.
+  too_small <- which(sd < thresh_sd)
+  if (length(too_small) > 0L) sd[too_small] <- thresh_sd
+  bad <- which(is.na(sd))
+  if (length(bad) > 0L) {
+    x [bad] <- 0
+    sd[bad] <- 1
+  }
+  bad <- which(!is.finite(sd))
+  if (length(bad) > 0L) {
+    x [bad] <- 0
+    sd[bad] <- 1
+  }
+  big_z <- which(abs(x / sd) > max_zscore)
+  if (length(big_z) > 0L) {
+    sd[big_z] <- abs(x[big_z]) / max_zscore
+  }
+
+  K <- 2L * halfK - 1L
+  X <- x
+  T_pos <- length(X)
+
+  # Effect-size grid: symmetric around zero with non-linear spacing.
+  pos <- seq(0, 1, length.out = halfK)
+  mu  <- (pos^(1 / mult)) * 1.5 * max(abs(X))
+  mu  <- c(mu, -mu[-1L])
+
+  # Prefilter rarely-occupied grid points.
+  if (prefilter) {
+    avg_post <- colMeans(do.call(rbind, lapply(seq_len(T_pos), function(i) {
+      e <- dnorm(X[i], mean = mu, sd = sd[i])
+      e / sum(e)
+    })), na.rm = TRUE)
+    keep <- which(avg_post > thresh_prefilter)
+    if (!(1L %in% keep)) keep <- c(1L, keep)
+    mu <- mu[keep]
+    K  <- length(mu)
+  }
+
+  # Hub-and-spoke transition matrix.
+  P <- matrix(0, K, K); diag(P) <- 0.5
+  if (K > 1L) {
+    P[1L, 2L:K] <- 0.5 / (K - 1L)
+    P[2L:K, 1L] <- 0.5
+  }
+  P <- P + matrix(epsilon, K, K)
+  if (K > 1L) {
+    for (i in 2L:K) for (j in 2L:K) if (i != j) P[i, j] <- 0
+  }
+  P <- P / rowSums(P)
+
+  pi_init <- rep(epsilon, K)
+  pi_init[1L] <- if (K > 1L) 1 - sum(pi_init[-1L]) else 1
+
+  # Pre-EM forward / backward / occupancy on the dnorm emission.
+  emit_dn <- function(t) dnorm(X[t], mean = mu, sd = sd[t])
+
+  alpha_hat   <- matrix(NA_real_, T_pos, K)
+  alpha_tilde <- matrix(NA_real_, T_pos, K)
+  G_t         <- rep(NA_real_, T_pos)
+  alpha_hat[1L, ]   <- pi_init * emit_dn(1L)
+  alpha_tilde[1L, ] <- alpha_hat[1L, ]
+  for (t in seq_len(T_pos - 1L)) {
+    m <- alpha_hat[t, ] %*% P
+    alpha_tilde[t + 1L, ] <- m * emit_dn(t + 1L)
+    G_t[t + 1L] <- sum(alpha_tilde[t + 1L, ])
+    alpha_hat[t + 1L, ] <- alpha_tilde[t + 1L, ] / G_t[t + 1L]
+  }
+
+  beta_hat   <- matrix(NA_real_, T_pos, K)
+  beta_tilde <- matrix(NA_real_, T_pos, K)
+  C_t        <- rep(NA_real_, T_pos)
+  beta_hat[T_pos, ]   <- 1
+  beta_tilde[T_pos, ] <- 1
+  for (t in (T_pos - 1L):1L) {
+    e <- emit_dn(t + 1L)
+    beta_tilde[t, ] <- rowSums(sweep(P, 2L, beta_hat[t + 1L, ] * e, "*"))
+    C_t[t] <- max(beta_tilde[t, ])
+    beta_hat[t, ] <- beta_tilde[t, ] / C_t[t]
+  }
+
+  ab   <- alpha_hat * beta_hat
+  prob <- ab / rowSums(ab)
+
+  # Pre-EM transition update + structural-zero enforcement.
+  xi <- matrix(0, K, K)
+  for (t in seq_len(T_pos - 1L)) {
+    xi_t <- outer(alpha_hat[t, ],
+                  beta_hat[t + 1L, ] * emit_dn(t + 1L)) * P
+    xi <- xi + xi_t / sum(xi_t)
+  }
+  if (K > 1L) {
+    for (i in 2L:K) for (j in 2L:K) if (i != j) xi[i, j] <- 0
+  }
+  rs <- rowSums(xi); rs[rs == 0] <- 1
+  P <- xi / rs
+  P[P < epsilon & P > 0] <- epsilon
+  P <- P / rowSums(P)
+
+  # Pick states whose average posterior occupancy clears `thresh`,
+  # always keeping the null state.
+  idx_comp <- which(colMeans(prob) > thresh)
+  if (!(1L %in% idx_comp)) idx_comp <- c(1L, idx_comp)
+
+  # First ash refinement seeds x_post.
+  ash_obj <- vector("list", length(idx_comp))
+  x_post  <- numeric(T_pos)
+  for (i in 2L:length(idx_comp)) {
+    mu_ash <- mu[idx_comp[i]]
+    weight <- prob[, idx_comp[i]]
+    ash_obj[[i]] <- ash(x, sd, weight = weight, mode = mu_ash,
+                        mixcompdist = "normal")
+    x_post <- x_post + weight * ash_obj[[i]]$result$PosteriorMean
+  }
+  prob <- prob[, idx_comp, drop = FALSE]
+  K    <- length(idx_comp)
+  P    <- P[idx_comp, idx_comp, drop = FALSE]
+  P    <- P / rowSums(P)
+  # NOTE: `mu` is intentionally NOT subset here. Upstream's EM
+  # loop uses `mu[k]` for k in 1..K (positional) rather than
+  # `mu[idx_comp[k]]`. Subsetting would change which effect-size
+  # value seeds each ash call. This appears to be an upstream
+  # quirk; we match it for bit-identity.
+
+  # Per-iteration emission: null state is dnorm at zero; non-null
+  # states use exp(calc_loglik(ash_obj[[k]], data_t)).
+  emit_iter <- function(t) {
+    data_t <- set_data(X[t], sd[t])
+    out <- numeric(K)
+    out[1L] <- dnorm(X[t], mean = 0, sd = sd[t])
+    if (K > 1L) for (k in 2L:K)
+      out[k] <- exp(calc_loglik(ash_obj[[k]], data_t))
+    out
+  }
+
+  iter <- 1L
+  while (iter < maxiter) {
+    alpha_hat   <- matrix(NA_real_, T_pos, K)
+    alpha_tilde <- matrix(NA_real_, T_pos, K)
+    G_t         <- rep(NA_real_, T_pos)
+
+    pi_iter <- prob[1L, ]
+    pi_iter[pi_iter < epsilon] <- epsilon
+    pi_iter <- pi_iter / sum(pi_iter)
+    alpha_tilde[1L, ] <- pi_iter * emit_iter(1L)
+    G_t[1L] <- sum(alpha_tilde[1L, ])
+    alpha_hat[1L, ] <- alpha_tilde[1L, ] / G_t[1L]
+
+    for (t in seq_len(T_pos - 1L)) {
+      m <- alpha_hat[t, ] %*% P
+      alpha_tilde[t + 1L, ] <- m * emit_iter(t + 1L)
+      G_t[t + 1L] <- sum(alpha_tilde[t + 1L, ])
+      alpha_hat[t + 1L, ] <- alpha_tilde[t + 1L, ] / G_t[t + 1L]
+    }
+
+    beta_hat   <- matrix(NA_real_, T_pos, K)
+    beta_tilde <- matrix(NA_real_, T_pos, K)
+    C_t        <- rep(NA_real_, T_pos)
+    beta_hat[T_pos, ]   <- 1
+    beta_tilde[T_pos, ] <- 1
+    for (t in (T_pos - 1L):1L) {
+      e <- emit_iter(t + 1L)
+      beta_tilde[t, ] <- rowSums(sweep(P, 2L, beta_hat[t + 1L, ] * e, "*"))
+      C_t[t] <- max(beta_tilde[t, ])
+      beta_hat[t, ] <- beta_tilde[t, ] / C_t[t]
+    }
+
+    ab   <- alpha_hat * beta_hat
+    prob <- ab / rowSums(ab)
+
+    ash_obj <- vector("list", K)
+    x_post  <- numeric(T_pos)
+    for (k in 2L:K) {
+      ash_obj[[k]] <- ash(x, sd, weight = prob[, k], mode = mu[k],
+                          mixcompdist = "normal")
+      x_post <- x_post + prob[, k] * ash_obj[[k]]$result$PosteriorMean
+    }
+
+    # Baum-Welch transition update.
+    ab   <- alpha_hat * beta_hat
+    prob <- ab / rowSums(ab)
+    xi   <- matrix(0, K, K)
+    for (t in seq_len(T_pos - 1L)) {
+      xi_t <- outer(alpha_hat[t, ],
+                    beta_hat[t + 1L, ] * emit_iter(t + 1L)) * P
+      xi <- xi + xi_t / sum(xi_t)
+    }
+    if (K > 1L) {
+      for (i in 2L:K) for (j in 2L:K) if (i != j) xi[i, j] <- 0
+    }
+    rs <- rowSums(xi); rs[rs == 0] <- 1
+    P  <- xi / rs
+    P[P < epsilon & P > 0] <- epsilon
+    P  <- P / rowSums(P)
+
+    iter <- iter + 1L
+  }
+
+  lfsr_est <- prob[, 1L]
+  if (K > 1L) for (k in 2L:K)
+    lfsr_est <- lfsr_est + prob[, k] * ash_obj[[k]]$result$lfsr
+
+  ll_hmm  <- sum(log(G_t))
+  ll_null <- sum(dnorm(X, mean = 0, sd = sd, log = TRUE))
+  log_BF  <- ll_hmm - ll_null
+
+  list(prob   = prob,
+       x_post = x_post,
+       lfsr   = lfsr_est,
+       mu     = mu,
+       ll_hmm = ll_hmm,
+       ll_null = ll_null,
+       log_BF = log_BF)
+}
+
+#' Univariate HMM regression of a position-space response on one
+#' covariate column
+#'
+#' Used by `mf_post_smooth(method = "HMM")`. Equivalent to the
+#' upstream `univariate_HMM_regression`, with `cal_Bhat_Shat`
+#' replaced by `compute_marginal_bhat_shat`.
+#' @keywords internal
+#' @noRd
+mf_univariate_hmm_regression <- function(Y, X, halfK = 20L) {
+  Y <- as.matrix(Y)
+  X <- as.matrix(X)
+  stopifnot(ncol(X) == 1L)
+
+  Y     <- col_scale(Y)
+  csd_Y <- attr(Y, "scaled:scale")
+  X     <- col_scale(X)
+  csd_X <- attr(X, "scaled:scale")
+
+  res <- compute_marginal_bhat_shat(matrix(X[, 1L], ncol = 1L), Y)
+  est <- as.numeric(res$Bhat[1L, ])
+  sds <- as.numeric(res$Shat[1L, ])
+
+  bad <- is.na(sds) | sds <= 0
+  if (any(bad)) {
+    est[bad] <- 0
+    sds[bad] <- median(sds[!bad], na.rm = TRUE)
+  }
+
+  s <- mf_fit_hmm(x = est, sd = sds, halfK = halfK)
+  list(effect_estimate = s$x_post * csd_Y / csd_X,
+       lfsr            = s$lfsr,
+       lBF             = s$log_BF)
+}
