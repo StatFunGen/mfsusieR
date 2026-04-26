@@ -288,7 +288,7 @@ mf_cs_colors <- function(n_cs) {
                                 show_grid_dots, show_affected_region,
                                 show_lfsr_curve, lfsr_threshold,
                                 add_legend, main,
-                                xlab = "position", xaxt = "s") {
+                                xlab = "outcome position", xaxt = "s") {
   if (effect_style == "errorbar") {
     .draw_effect_errorbar(fit, m, cs_subset, pos, pal, smoothed,
                           show_affected_region = show_affected_region,
@@ -371,7 +371,7 @@ mf_cs_colors <- function(n_cs) {
                          add_legend = (i == 1L),
                          main = sprintf("CS%d", i),
                          xaxt = if (i == K) "s" else "n",
-                         xlab = if (i == K) "position" else "")
+                         xlab = if (i == K) "outcome position" else "")
     }
     mtext(main, side = 3, outer = TRUE, line = 0.2, cex = 0.95)
   } else {
@@ -486,12 +486,45 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
     return(invisible(NULL))
   }
 
-  # M = 1: simple 2-panel column.
+  # M = 1: PIP panel on top, effect panel(s) below. When the
+  # facet resolver picks "stack" with K credible sets, the
+  # effect region splits into K sub-panels. Use `layout()` with
+  # explicit heights instead of nested `par(mfrow)` so the
+  # PIP-vs-effects gap stays uniform regardless of K.
   if (M == 1L) {
-    op <- par(mfrow = c(2L, 1L), mar = c(4, 4, 2.5, 4))
+    K <- length(fit$sets$cs %||% list())
+    facet_resolved <- if (K >= 2L)
+      .resolve_facet(facet_cs, fit, 1L, smoothed)
+    else "overlay"
+    n_effect_panels <- if (facet_resolved == "stack") K else 1L
+    layout(matrix(seq_len(1L + n_effect_panels), ncol = 1L),
+           heights = c(1.0, rep(1.0, n_effect_panels)))
+    on.exit(layout(1L), add = TRUE)
+    op <- par(mar = c(4, 4, 2.5, 4))
     on.exit(par(op), add = TRUE)
     .draw_pip(fit, pos = pos, add_legend = add_legend)
-    draw_one_effect(1L)
+    if (facet_resolved == "stack" && K >= 2L) {
+      cs_l       <- fit$sets$cs_index %||% seq_along(fit$sets$cs)
+      pal        <- mf_cs_colors(K)
+      pos_panel  <- if (is.null(pos)) fit$dwt_meta$pos[[1L]] else pos
+      par(mar = c(2.5, 4, 1.5, 4))
+      for (i in seq_len(K)) {
+        .draw_effect_panel(fit, m = 1L, cs_subset = cs_l[i],
+                           effect_style = effect_style,
+                           pos = pos_panel, pal = pal[i], lwd = lwd,
+                           smoothed = smoothed,
+                           show_grid_dots = show_grid_dots,
+                           show_affected_region = show_affected_region,
+                           show_lfsr_curve = show_lfsr_curve,
+                           lfsr_threshold = lfsr_threshold,
+                           add_legend = (i == 1L) && add_legend,
+                           main = sprintf("CS%d", i),
+                           xaxt = if (i == K) "s" else "n",
+                           xlab = if (i == K) "outcome position" else "")
+      }
+    } else {
+      draw_one_effect(1L)
+    }
     return(invisible(NULL))
   }
 
@@ -532,7 +565,8 @@ plot.mfsusie <- function(x, ...) {
 # Internal: draw a single bubble panel for one outcome.
 .draw_lfsr_bubble <- function(fit, m, lfsr_threshold, truth_mask,
                               cex_max, main = NULL,
-                              smoothed = NULL) {
+                              smoothed = NULL,
+                              add_legend = TRUE) {
   cs   <- fit$sets$cs %||% list()
   cs_l <- fit$sets$cs_index %||% seq_along(cs)
   K    <- length(cs_l)
@@ -564,7 +598,7 @@ plot.mfsusie <- function(x, ...) {
 
   plot(NA, xlim = range(pos),
        ylim = c(0.5, K + 0.5),
-       xlab = "position", ylab = "credible set",
+       xlab = "outcome position", ylab = "credible set",
        yaxt = "n", main = main, las = 1, cex.main = 0.95)
   axis(2, at = seq_len(K), labels = paste0("CS", seq_len(K)),
        las = 1)
@@ -599,6 +633,28 @@ plot.mfsusie <- function(x, ...) {
     raw <- pmax(raw, 0.2)
     points(pos, rep(i, T_m), pch = 1L,
            cex = raw, col = col_i, lwd = 1.2)
+  }
+
+  if (add_legend) {
+    # Two-axis legend: dot size scale and color rule. Place
+    # the size key at the top-right and the color key below.
+    size_breaks <- c(1.3, round(cex_max / 2, 1), cex_max)
+    legend("topright",
+           legend = sprintf("-log10(lfsr) = %g", size_breaks),
+           pch = 1L, pt.cex = size_breaks, lwd = 0,
+           col = "grey30", bty = "n", cex = 0.7,
+           inset = c(0, 0))
+    color_label <- if (!is.null(truth_mask) &&
+                       any(!vapply(truth_mask, is.null, logical(1L))))
+      c("truly affected", "not affected")
+    else
+      c(sprintf("lfsr <= %g", lfsr_threshold),
+        sprintf("lfsr > %g",  lfsr_threshold))
+    legend("bottomright",
+           legend = color_label,
+           pch = 1L, pt.cex = 1.5, lwd = 1.2,
+           col = c(pal[1L], "grey60"), bty = "n", cex = 0.7,
+           inset = c(0, 0))
   }
 }
 
@@ -639,6 +695,7 @@ mfsusie_plot_lfsr <- function(fit,
                               lfsr_threshold = 0.01,
                               truth          = NULL,
                               cex_max        = 6,
+                              add_legend     = TRUE,
                               smooth_method  = NULL, ...) {
   if (!inherits(fit, "mfsusie")) {
     stop("`fit` must be an `mfsusie` (or `fsusie`) fit object.")
@@ -685,7 +742,8 @@ mfsusie_plot_lfsr <- function(fit,
                       lfsr_threshold = lfsr_threshold,
                       truth_mask = per_outcome_truth[[1L]],
                       cex_max = cex_max,
-                      smoothed = smoothed)
+                      smoothed = smoothed,
+                      add_legend = add_legend)
     return(invisible(NULL))
   }
 
@@ -698,7 +756,8 @@ mfsusie_plot_lfsr <- function(fit,
                       lfsr_threshold = lfsr_threshold,
                       truth_mask = per_outcome_truth[[mi]],
                       cex_max = cex_max,
-                      smoothed = smoothed)
+                      smoothed = smoothed,
+                      add_legend = add_legend && (mi == 1L))
   }
   remaining <- rows * cols - M
   if (remaining > 0L) {
