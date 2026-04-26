@@ -165,11 +165,19 @@ mf_fit_hmm <- function(x, sd,
   K    <- length(idx_comp)
   P    <- P[idx_comp, idx_comp, drop = FALSE]
   P    <- P / rowSums(P)
-  # NOTE: `mu` is intentionally NOT subset here. Upstream's EM
-  # loop uses `mu[k]` for k in 1..K (positional) rather than
-  # `mu[idx_comp[k]]`. Subsetting would change which effect-size
-  # value seeds each ash call. This appears to be an upstream
-  # quirk; we match it for bit-identity.
+  # Port-source bug fix: subset `mu` to match the reduced state
+  # space, so that state k (k = 1..K) consistently corresponds to
+  # original grid index `idx_comp[k]`. The upstream `fsusieR::fit_hmm`
+  # subsets `prob` and `P` but not `mu`, so when `idx_comp` is not a
+  # contiguous prefix (e.g. middle states are filtered out) the EM
+  # loop's `mu_ash <- mu[k]` reads from positional, not selective
+  # indices, breaking the state-emission alignment required by the
+  # forward-backward equations (Rabiner 1989 §III.B). The fsusieR
+  # author identified and fixed this in 9f89333 ("*** FIX: subset
+  # mu to match the reduced state space ***") then accidentally
+  # regressed it in fc806a5 during a Baum-Welch restructure. See
+  # `inst/notes/refactor-exceptions.md` (HMM-mu-subset).
+  mu   <- mu[idx_comp]
 
   # Per-iteration emission: null state is dnorm at zero; non-null
   # states use exp(calc_loglik(ash_obj[[k]], data_t)).
