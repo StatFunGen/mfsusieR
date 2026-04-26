@@ -306,3 +306,145 @@ dwt_matrix <- function(data,
   class(out) <- "DWT"
   out
 }
+
+# =====================================================================
+# Wavelet-variance helpers for translation-invariant smoothing.
+#
+# Three internal routines used by the TI post-smoother to obtain
+# pointwise credible bands. Specialised to station-type + periodic
+# + real filters (the only configuration TI uses).
+# =====================================================================
+
+#' Stationary wavelet decomposition with squared filter coefficients
+#'
+#' Returns an object with the same shape as `wd(...,
+#' type = "station")` but holding per-coefficient variances rather
+#' than means. Equivalent to running the standard decomposition
+#' with the filter's squared coefficients.
+#' @keywords internal
+#' @noRd
+wd_variance <- function(data, filter.number = 10, family = "DaubLeAsymm") {
+  data_length <- length(data)
+  nlevels <- nlevelsWT(data)
+  if (is.na(nlevels))
+    stop("Data length is not a power of two")
+
+  # Variance basis-decomposition: route through the complex path
+  # with both filter slots set to the squared smoothing
+  # coefficients. The C/D variance outputs read off the real part
+  # with zero imaginary input.
+  base_filter <- filter.select(filter.number, family)
+  H_sq <- base_filter$H^2
+  filt <- list(name = base_filter$name, family = family,
+               filter.number = filter.number,
+               H = H_sq, G = H_sq)
+
+  fl_dbase <- first.last(LengthH = length(filt$H),
+                                     DataLength = data_length,
+                                     type = "station", bc = "periodic")
+  C <- numeric(fl_dbase$ntotal); C[seq_len(data_length)] <- data
+  zero_C <- numeric(fl_dbase$ntotal)
+  zero_D <- numeric(fl_dbase$ntotal.d)
+
+  decomp <- .C("comwd",
+               CR = as.double(C), CI = as.double(zero_C),
+               LengthC = as.integer(fl_dbase$ntotal),
+               DR = as.double(zero_D), DI = as.double(zero_D),
+               LengthD = as.integer(fl_dbase$ntotal.d),
+               HR = as.double(filt$H),
+               HI = as.double(numeric(length(filt$H))),
+               GR = as.double(filt$G),
+               GI = as.double(numeric(length(filt$G))),
+               LengthH = as.integer(length(filt$H)),
+               nlevels = as.integer(nlevels),
+               firstC = as.integer(fl_dbase$first.last.c[, 1]),
+               lastC  = as.integer(fl_dbase$first.last.c[, 2]),
+               offsetC = as.integer(fl_dbase$first.last.c[, 3]),
+               firstD = as.integer(fl_dbase$first.last.d[, 1]),
+               lastD  = as.integer(fl_dbase$first.last.d[, 2]),
+               offsetD = as.integer(fl_dbase$first.last.d[, 3]),
+               ntype = 2L,    # station
+               nbc   = 1L,    # periodic
+               error = 0L,
+               PACKAGE = "wavethresh")
+  if (decomp$error != 0L)
+    stop("comwd returned error code ", decomp$error)
+
+  out <- list(
+    C = complex(real = decomp$CR, imaginary = decomp$CI),
+    D = complex(real = decomp$DR, imaginary = decomp$DI),
+    nlevels = nlevelsWT(decomp),
+    fl.dbase = fl_dbase, filter = filt,
+    type = "station", bc = "periodic", date = date()
+  )
+  class(out) <- "wd"
+  out
+}
+
+#' Convert a station-type variance `wd` to a `wst`
+#'
+#' Mirrors the rearrangement that `convert()` does on
+#' a station-type wd, but on a variance object.
+#' @keywords internal
+#' @noRd
+wst_variance <- function(wd) {
+  if (wd$type != "station")
+    stop("Object to convert must be of type 'station'")
+  n <- 2L^nlevelsWT(wd)
+  tmp <- wst(numeric(n),
+                         filter.number = wd$filter$filter.number,
+                         family = wd$filter$family)
+  tmp$filter <- wd$filter
+  tmp$date   <- wd$date
+  arrvec <- getarrvec(nlevelsWT(wd),
+                                  sort = FALSE)
+  for (lev in (nlevelsWT(wd) - 1L):1L) {
+    ds <- accessD.wd(wd, level = lev)
+    cs <- accessC.wd(wd, level = lev)
+    ord <- arrvec[, nlevelsWT(wd) - lev]
+    tmp <- putD(tmp, level = lev, v = ds[ord])
+    tmp <- putC(tmp, level = lev, v = cs[ord])
+  }
+  top_C <- accessC(wd, level = wd$nlevels)
+  tmp <- putC(tmp, level = nlevelsWT(wd), v = top_C)
+  tmp <- putD(tmp, level = nlevelsWT(wd), v = top_C)
+  tmp <- putC(tmp, level = 0L,
+                          v = accessC(wd, level = 0L))
+  inv_arrvec <- sort.list(levarr(seq_len(n),
+    levstodo = nlevelsWT(wd)))
+  tmp <- putD(tmp, level = 0L,
+    v = accessD(wd, level = 0L)[inv_arrvec])
+  tmp
+}
+
+#' Variance basis-average (squared-filter `AvBasis`) of a wst
+#'
+#' Specialised real-valued path; calls wavethresh's compiled
+#' `av_basisWRAP` with squared filter coefficients. Output is the
+#' pointwise variance of `AvBasis(wst)`.
+#' @keywords internal
+#' @noRd
+av_basis_variance <- function(wst) {
+  nlevels <- nlevelsWT(wst)
+  H <- wst$filter$H
+  G <- wst$filter$G
+  n <- 2L^nlevels
+  zero <- numeric(length(H))
+  out <- .C("comAB_WRAP",
+            wstR  = as.double(Re(wst$wp)),
+            wstI  = as.double(Im(wst$wp)),
+            wstCR = as.double(Re(wst$Carray)),
+            wstCI = as.double(Im(wst$Carray)),
+            LengthData = as.integer(n),
+            level  = as.integer(nlevels - 1L),
+            HR = as.double(H), HI = as.double(zero),
+            GR = as.double(G), GI = as.double(zero),
+            LengthH = as.integer(length(H)),
+            answerR = as.double(numeric(n)),
+            answerI = as.double(numeric(n)),
+            error   = 0L,
+            PACKAGE = "wavethresh")
+  if (out$error != 0L)
+    stop("comAB_WRAP returned error code ", out$error)
+  out$answerR
+}

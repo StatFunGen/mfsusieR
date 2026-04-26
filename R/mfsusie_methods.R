@@ -541,17 +541,14 @@ mf_post_smooth <- function(fit,
                                       ix1 = 0, ix2 = 1,
                                       filter = mywst$filter)
 
-  # Approximate pointwise SD: apply `av.basis` to the
-  # per-coefficient posterior SD. Variances are not linear under
-  # the average-of-bases operator, so this gives a slightly
-  # conservative band, sufficient for visual inspection.
-  dummy$D <- sqrt(wd_var)
-  dummy$C <- t_ash_c$result$PosteriorSD
-  mywst_sd <- wavethresh::convert(dummy)
-  fitted_sd <- abs(wavethresh::av.basis(mywst_sd,
-                                        level = dummy$nlevels - 1L,
-                                        ix1 = 0, ix2 = 1,
-                                        filter = mywst_sd$filter))
+  # Exact pointwise variance via the squared-filter wd /
+  # convert / AvBasis pipeline.
+  var_wd       <- wd_variance(rep(0, T_pos),
+                              filter.number = filter_number,
+                              family        = family)
+  var_wd$D     <- wd_var
+  fitted_var   <- av_basis_variance(wst_variance(var_wd))
+  fitted_sd    <- sqrt(pmax(fitted_var, 0))
 
   cred_band <- rbind(up  = fitted_func + z_crit * fitted_sd,
                      low = fitted_func - z_crit * fitted_sd)
