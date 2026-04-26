@@ -1,0 +1,126 @@
+---
+title: "Practical patterns for long-running mfsusie() fits"
+author: "Gao Wang and contributors"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+vignette: >
+  %\VignetteIndexEntry{Practical patterns for long-running mfsusie() fits}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r knitr-opts, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE, comment = "#>", fig.align = "center", dpi = 120
+)
+```
+
+Joint multi-modality fits over many ATAC-seq conditions, dense
+position grids, or large `J` can run beyond the wall time of a typical
+cluster job. This vignette covers practical patterns for handling
+those cases.
+
+```{r setup, message = FALSE}
+library(mfsusieR)
+library(susieR)
+set.seed(1)
+```
+
+## Diagnose convergence before increasing the budget
+
+The fit object records the per-iteration ELBO trajectory, the
+iteration count, and a converged flag. If the ELBO is still rising
+when `niter == max_iter`, the run terminated by budget.
+
+```{r run-short}
+data(N3finemapping)
+X <- N3finemapping$X[, seq_len(120)]
+n <- nrow(X); J <- ncol(X)
+T_func <- c(32L, 32L)
+beta1 <- numeric(J); beta1[c(37, 88)] <- c(1, -0.6)
+
+Y_list <- lapply(T_func, function(T_m) {
+  X %*% matrix(rep(beta1, T_m), nrow = J) +
+    matrix(rnorm(n * T_m, sd = 0.4), nrow = n)
+})
+
+fit_short <- mfsusie(X, Y_list, L = 5, max_iter = 5,
+                     prior_variance_scope = "per_modality",
+                     verbose = FALSE)
+fit_short$niter
+fit_short$converged
+tail(fit_short$elbo, 5)
+```
+
+If `converged` is `FALSE` and the ELBO is still climbing in the last
+few iterations, the fix is more iterations.
+
+```{r run-full}
+fit_full <- mfsusie(X, Y_list, L = 5, max_iter = 100,
+                    prior_variance_scope = "per_modality",
+                    verbose = FALSE)
+fit_full$niter
+fit_full$converged
+```
+
+## Save and restore an in-progress fit
+
+Save the fit object after each cluster job. Re-running with the
+identical seed and full iteration budget reproduces the same
+trajectory deterministically; mfsusie's IBSS dispatch is purely
+deterministic given the same `(X, Y, L, prior, seed)`.
+
+```{r save-restore, eval = FALSE}
+saveRDS(fit_short, "fit_progress.rds")
+# ...later, on a new job...
+fit_short <- readRDS("fit_progress.rds")
+```
+
+## Mid-run restart from a saved partial fit
+
+`mvf.susie.alpha::multfsusie()` supports a `multfsusie.obj = m_prev`
+argument that resumes from the saved IBSS state without restarting
+the loop. mfsusieR does not yet expose this seam at the public level
+(the per-iteration model state is stored on the susieR backbone via
+S3 dispatch; surfacing it as a public argument is a planned
+extension).
+
+Until that extension lands, the recommended pattern is:
+
+1. Set `max_iter` generously (`200` or higher).
+2. Submit the job with `verbose = TRUE` so iterations are logged.
+3. If the job hits wall time, inspect `fit$niter` and `tail(fit$elbo)`
+   to confirm the run made progress.
+4. Re-submit the same call with a larger `max_iter` and the same
+   seed; the run is deterministic and reaches the same final fit.
+
+For diagnostic monitoring inside a long run, consider:
+
+```{r monitor, eval = FALSE}
+fit <- mfsusie(X, Y_list, L = 5,
+               max_iter = 100, tol = 1e-3,
+               prior_variance_scope = "per_modality",
+               verbose = TRUE,                # logs per-iter ELBO
+               track_fit = TRUE)              # records full trajectory
+```
+
+`track_fit = TRUE` keeps the per-iteration model snapshots inside
+`fit$trace`, which is useful for debugging slow convergence at the
+cost of memory.
+
+## When the bottleneck is `T_padded` rather than iterations
+
+A fit on a single modality with `T_m = 4096` can be slow at the
+wavelet step regardless of iteration count. Two levers:
+
+- `max_padded_log2` caps the wavelet grid size. The default is `10`
+  (i.e., `T_padded <= 1024`). Drop it for a sanity check.
+- Drop `coverage` from `0.95` to a coarser `0.9` to reduce the size
+  of credible-set search.
+
+For very large `T_m`, the upstream `fsusieR` post-processing module
+is not yet ported (see the
+[task list](https://github.com/StatFunGen/mfsusieR) PR group 6b). The
+core IBSS fit returns the wavelet-space posterior; post-hoc smoothing
+will be added as a separate `mf_post_smooth()` API.

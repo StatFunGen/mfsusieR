@@ -1,0 +1,114 @@
+---
+title: "Why functional fine-mapping (versus scalar SuSiE on summaries)"
+author: "Gao Wang and contributors"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+vignette: >
+  %\VignetteIndexEntry{Why functional fine-mapping (versus scalar SuSiE on summaries)}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r knitr-opts, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE, comment = "#>",
+  fig.align = "center", dpi = 120
+)
+```
+
+Two common shortcuts for fine-mapping a functional response with
+scalar SuSiE both lose information. This vignette demonstrates the
+loss on a small simulation and shows that `fsusie()` recovers the
+causal SNP that the scalar shortcuts miss.
+
+```{r setup, message = FALSE}
+library(mfsusieR)
+library(susieR)
+set.seed(1)
+```
+
+## The two scalar shortcuts
+
+1. **Per-position SuSiE, then aggregate**: fit `susie(X, y_t)`
+   independently for each position `t = 1, ..., T`, then take the
+   per-SNP maximum or sum of PIPs. Loses the smoothness of the effect
+   profile and inflates false positives because each fit is
+   under-powered.
+2. **Top-PC SuSiE**: project `Y` onto its top principal component and
+   fit `susie(X, Y %*% v_1)`. Keeps the strongest mode of variation in
+   `Y` but discards the SNP-driven signal whenever the SNP effect
+   loads on a different direction.
+
+## Simulation
+
+Two causal SNPs whose effects are localised to non-overlapping
+position windows. The combined signal in any single position is weak;
+the combined signal across positions is strong.
+
+```{r simulate}
+data(N3finemapping)
+X <- N3finemapping$X[, seq_len(150)]
+n <- nrow(X); J <- ncol(X); T_m <- 64
+
+positions <- seq_len(T_m)
+shape_left  <- exp(-((positions - 16)^2) / (2 * 4^2))
+shape_right <- exp(-((positions - 48)^2) / (2 * 4^2))
+
+beta <- matrix(0, J, T_m)
+beta[42, ] <- 0.6 * shape_left
+beta[97, ] <- 0.6 * shape_right
+
+# Add nuisance variation in a direction orthogonal to the SNP effect
+# so the top PC is dominated by noise, not by the SNP signal.
+nuisance <- rnorm(n) %o% sin(2 * pi * positions / T_m)
+Y <- X %*% beta + 1.5 * nuisance + matrix(rnorm(n * T_m, sd = 0.4), n)
+```
+
+## Per-position SuSiE
+
+```{r per-position}
+pip_per_pos <- vapply(seq_len(T_m), function(t) {
+  fit_t <- susie(X, Y[, t], L = 5,
+                 estimate_prior_variance    = TRUE,
+                 estimate_residual_variance = TRUE,
+                 verbose = FALSE)
+  fit_t$pip
+}, numeric(J))
+pip_per_snp <- apply(pip_per_pos, 1, max)
+which(pip_per_snp > 0.9)
+```
+
+## Top-PC SuSiE
+
+```{r top-pc}
+v1 <- svd(scale(Y, center = TRUE, scale = FALSE))$v[, 1]
+y_pc <- as.numeric(scale(Y, center = TRUE, scale = FALSE) %*% v1)
+fit_pc <- susie(X, y_pc, L = 5,
+                estimate_prior_variance    = TRUE,
+                estimate_residual_variance = TRUE,
+                verbose = FALSE)
+which(fit_pc$pip > 0.9)
+```
+
+## Functional SuSiE (the right answer)
+
+```{r fsusie}
+fit_f <- fsusie(Y, X, pos = positions, L = 5, verbose = FALSE)
+which(fit_f$pip > 0.9)
+length(fit_f$sets$cs)
+```
+
+## Why fsusie wins
+
+`fsusie()` integrates over the position dimension under a wavelet-
+basis prior that adapts to the actual smoothness of the effect curve.
+Two causal SNPs that each affect a localised window get the full
+benefit of within-window pooling without bleeding into SNPs whose
+effects live in a different window. The scalar shortcuts above either
+average effects out (top-PC) or fragment them (per-position).
+
+The same argument scales up: if a SNP affects multiple correlated
+modalities (e.g., methylation at several nearby CpGs and expression
+of a single gene), the joint mfsusie fit pools across modalities for
+the same reason. See [the multi-modality intro](mfsusie_intro.html).
