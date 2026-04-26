@@ -1,12 +1,12 @@
-# Three behavioural guards on the public mfsusie() / fsusie() API.
+# Three behavioral guards on the public mfsusie() / fsusie() API.
 #
 #   1. T_m <= 3 advisory warning (PR group 4 task 4.3).
 #   2. susieR::susie_get_pip / susie_get_cs invariance with the
-#      finalised fit (PR group 7 task 7.6).
+#      finalized fit (PR group 7 task 7.6).
 #   3. Documented deviation from fsusieR::susiF: PIP is computed
 #      AFTER credible-set filtering, not before. This was a known
 #      bug in the original fsusieR; mfsusieR fixes it. Asserting
-#      the fixed behaviour explicitly here per the C2 contract
+#      the fixed behavior explicitly here per the C2 contract
 #      narrative in design.md D11b (PR group 7d task 7d.2).
 
 # ---- 4.3: T_m <= 3 warning -------------------------------------
@@ -84,7 +84,7 @@ test_that("mfsusie zeros (or attenuates) PIP for SNPs filtered out of every CS",
   # should drop to zero PIP rather than retain a residual.
   #
   # The C1 (susieR) and C2 (fsusieR) contracts both lock the
-  # corrected behaviour element-wise; here we record an explicit
+  # corrected behavior element-wise; here we record an explicit
   # property test so a regression that re-introduces leakage
   # fails on its own.
   set.seed(mfsusier_test_seed())

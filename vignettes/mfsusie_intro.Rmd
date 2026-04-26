@@ -130,7 +130,7 @@ Use `mfsusie()` when:
   functional, some at different sampling resolutions). mfsusie does
   not require a shared `T`.
 - You want a single credible set list combining all the evidence,
-  rather than ad-hoc colocalisation across separate fsusie fits.
+  rather than ad-hoc colocalization across separate fsusie fits.
 
 Use `fsusie()` when there is exactly one response (functional or
 scalar) and no reason to model joint effects across outcomes.

@@ -39,6 +39,15 @@ jobs:
       - name: Update pkgdown site
         run: pixi run -e r44 pkgdown_build
 
+      - name: Compute coverage and write shields.io endpoint JSON
+        run: |
+          pixi run -e r44 R -e '
+          cov <- covr::package_coverage(quiet = TRUE);
+          pct <- covr::percent_coverage(cov);
+          color <- if (pct >= 90) "brightgreen" else if (pct >= 80) "green" else if (pct >= 70) "yellowgreen" else if (pct >= 60) "yellow" else if (pct >= 50) "orange" else "red";
+          jsonlite::write_json(list(schemaVersion = 1L, label = "coverage", message = sprintf("%.1f%%", pct), color = color), path = "docs/coverage.json", auto_unbox = TRUE)
+          '
+
       - name: Setup Pages
         uses: actions/configure-pages@v6
 

@@ -27,8 +27,6 @@ effect curves for each credible set.
 ```{r setup, message = FALSE}
 library(mfsusieR)
 library(susieR)
-library(ggplot2)
-library(reshape2)
 set.seed(1)
 ```
 
@@ -89,18 +87,15 @@ interpolated to a regular dyadic grid before the DWT). Plot against
 ```{r effect-curves}
 B_hat <- coef(fit)[[1]]
 pos_remap <- fit$dwt_meta$pos[[1]]
-T_pad <- ncol(B_hat)
 
-eff_df <- as.data.frame(t(B_hat))
-eff_df$pos <- pos_remap
-eff_long <- melt(eff_df, id.vars = "pos",
-                 variable.name = "effect", value.name = "estimate")
-ggplot(eff_long,
-       aes(x = pos, y = estimate, colour = effect, group = effect)) +
-  geom_line() + geom_point() +
-  geom_hline(yintercept = 0, linetype = 2) +
-  labs(x = "position (post-remap grid)", y = "effect on methylation",
-       title = "Per-effect methylation curves")
+matplot(pos_remap, t(B_hat), type = "b", lty = 1, pch = 16,
+        xlab = "position (post-remap grid)",
+        ylab = "effect on methylation",
+        main = "Per-effect methylation curves")
+abline(h = 0, lty = 2, col = "grey60")
+legend("topright",
+       legend = paste("effect", seq_len(nrow(B_hat))),
+       col = seq_len(nrow(B_hat)), lty = 1, pch = 16, bty = "n")
 ```
 
 ## Predictions on new genotypes
@@ -119,7 +114,7 @@ matplot(pos_remap, t(fitted_curves), type = "b", lty = 1, pch = 16,
 - Per-CpG resolution: each credible set comes with the full
   methylation profile of its effect, not just a scalar.
 - Joint information: a variable that nudges multiple correlated CpGs is
-  prioritised over a variable that nudges one in isolation.
+  prioritized over a variable that nudges one in isolation.
 - A drop-in API: this is `susie()` with `Y` replaced by a CpG matrix
   and a `pos` vector of positions.
 
