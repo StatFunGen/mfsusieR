@@ -328,6 +328,9 @@ mf_post_smooth <- function(fit,
   if (!inherits(fit, "mfsusie")) {
     stop("`fit` must be an `mfsusie` (or `fsusie`) fit object.")
   }
+  if (is.null(fit$residuals)) {
+    stop("`fit$residuals` is missing; refit with `save_residuals = TRUE`.")
+  }
   method <- match.arg(method)
   if (level <= 0 || level >= 1) {
     stop("`level` must be in (0, 1).")
@@ -345,15 +348,26 @@ mf_post_smooth <- function(fit,
     T_m <- meta$T_basis[m]
     effect_curves[[m]]  <- vector("list", L)
     credible_bands[[m]] <- vector("list", L)
+    R_m <- fit$residuals[[m]]   # n x T_basis: D - sum_l fitted_l
 
     for (l in seq_len(L)) {
-      mu_lm  <- fit$mu[[l]][[m]]   # p x T_basis
-      mu2_lm <- fit$mu2[[l]][[m]]
-      a_l    <- fit$alpha[l, ]
-      mean_w <- as.numeric(crossprod(a_l, mu_lm))
-      var_w  <- as.numeric(crossprod(a_l, mu2_lm)) - mean_w^2
-      var_w[var_w < 0] <- 0
+      # Per-effect "isolated" wavelet response: residual after
+      # removing every effect except l, then projected onto the
+      # lead variable. Mirrors the lead-variable refinement in the
+      # fSuSiE Methods (Denault et al. 2025, "Refining the effect
+      # estimates"). Algebraically:
+      #   iso_l = R + alpha_l[lead] * mu_l[lead, ]
+      # because R already excludes per-effect contributions and we
+      # add l's lead-variable contribution back in.
+      mu_lm   <- fit$mu[[l]][[m]]    # p x T_basis
+      mu2_lm  <- fit$mu2[[l]][[m]]
+      lead_l  <- which.max(fit$alpha[l, ])
 
+      mean_w <- mu_lm[lead_l, ]
+      var_w  <- pmax(mu2_lm[lead_l, ] - mean_w^2, 0)
+
+      # Pointwise mean band: project the lead-variable wavelet mean
+      # back to position space.
       if (T_m == 1L) {
         effect_curves[[m]][[l]] <-
           .invert_packed_curve(matrix(mean_w, nrow = 1L), meta, m)
@@ -368,6 +382,8 @@ mf_post_smooth <- function(fit,
         next
       }
 
+      # Scalewise wavelet shrinkage of the lead-variable mean using
+      # the wavelet posterior SD as the per-scale noise estimate.
       shrunk_w <- .scalewise_soft_threshold(
         mean_w, sd = sqrt(var_w),
         scale_index = meta$scale_index[[m]],
