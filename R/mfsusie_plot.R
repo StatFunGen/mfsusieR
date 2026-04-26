@@ -137,13 +137,14 @@ mf_cs_colors <- function(n_cs) {
 # Internal: PIP panel.
 .draw_pip <- function(fit, pos = NULL, main = NULL,
                       xlab = "variable", ylab = "PIP",
-                      cex = 0.9, add_legend = TRUE) {
+                      cex = 1.2, add_legend = TRUE) {
   pip <- fit$pip
   if (is.null(pos)) pos <- seq_along(pip)
   if (is.null(main)) main <- .pip_title(fit)
   col <- .pip_colors(fit)
   pch <- ifelse(col == "grey60", 1L, 19L)
   plot(pos, pip, type = "p", pch = pch, col = col, cex = cex,
+       lwd = 1.6,
        xlab = xlab, ylab = ylab, ylim = c(0, 1), main = main,
        cex.main = 0.95, las = 1)
   abline(h = 0.95, lty = 3, col = "grey50")
@@ -183,20 +184,20 @@ mf_cs_colors <- function(n_cs) {
     lines(pos, curves[[i]], col = pal[i], lwd = lwd)
     if (show_grid_dots) {
       points(pos, curves[[i]], col = pal[i], pch = 21L,
-             bg = "white", cex = 0.6)
+             bg = "white", cex = 0.85, lwd = 1.4)
     }
   }
 
   if (show_affected_region) {
     bar_y    <- yrange[1L]
-    bar_step <- 0.025 * diff(yrange)
+    bar_step <- 0.03 * diff(yrange)
     for (i in seq_along(cs_subset)) {
       runs <- .affected_runs(bands[[i]])
       if (length(runs) == 0L) next
       y_i <- bar_y + (i - 1L) * bar_step
       for (rg in runs) {
         segments(pos[rg[1L]], y_i, pos[rg[2L]], y_i,
-                 col = pal[i], lwd = 3, lend = "butt")
+                 col = pal[i], lwd = 4.5, lend = "butt")
       }
     }
   }
@@ -214,7 +215,7 @@ mf_cs_colors <- function(n_cs) {
     abline(h = lfsr_threshold, lty = 3, col = "grey50")
     for (i in seq_along(cs_subset)) {
       if (is.null(lfsrs[[i]])) next
-      lines(pos, lfsrs[[i]], col = pal[i], lwd = 0.8, lty = 2)
+      lines(pos, lfsrs[[i]], col = pal[i], lwd = 1.4, lty = 2)
     }
   }
 
@@ -229,7 +230,7 @@ mf_cs_colors <- function(n_cs) {
     if (has_lfsr) {
       legend("topleft",
              legend = c("effect (left axis)", "lfsr (right axis)"),
-             lty = c(1, 2), lwd = c(lwd, 0.8),
+             lty = c(1, 2), lwd = c(lwd, 1.4),
              col = "grey30", bty = "n", cex = 0.7,
              seg.len = 2.0)
     }
@@ -260,10 +261,17 @@ mf_cs_colors <- function(n_cs) {
     band <- bands[[i]]
     curve_i <- curves[[i]]
     if (!is.null(band)) {
-      segments(pos, band[, 1L], pos, band[, 2L],
-               col = pal[i], lwd = 0.8)
+      # Capped errorbar: a tiny perpendicular dash at each
+      # band endpoint via `arrows()` with `angle = 90` and
+      # `code = 3` (caps on both ends). Length is small
+      # relative to the panel width so caps don't crowd.
+      cap_len <- min(0.04, 0.3 / max(length(pos), 1L))
+      suppressWarnings(
+        arrows(pos, band[, 1L], pos, band[, 2L],
+               col = pal[i], lwd = 1.4,
+               length = cap_len, angle = 90, code = 3L))
     }
-    points(pos, curve_i, col = pal[i], pch = 16L, cex = 0.7)
+    points(pos, curve_i, col = pal[i], pch = 16L, cex = 1.0)
   }
 
   if (show_affected_region) {
@@ -271,7 +279,7 @@ mf_cs_colors <- function(n_cs) {
       mask <- .affected_mask(bands[[i]])
       if (length(mask) == 0L || !any(mask)) next
       points(pos[mask], rep(0, sum(mask)),
-             col = "black", pch = 20L, cex = 0.9)
+             col = "black", pch = 20L, cex = 1.2)
     }
   }
 
@@ -311,7 +319,7 @@ mf_cs_colors <- function(n_cs) {
 .draw_effect <- function(fit, m, pos = NULL, main = NULL,
                          effect_style = "band",
                          facet_cs = "auto",
-                         show_grid_dots = FALSE, lwd = 1.5,
+                         show_grid_dots = FALSE, lwd = 2.0,
                          add_legend = TRUE,
                          show_lfsr_curve = TRUE,
                          show_affected_region = TRUE,
@@ -450,7 +458,7 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
                          show_lfsr_curve = TRUE,
                          show_affected_region = TRUE,
                          lfsr_threshold = 0.01,
-                         lwd = 1.5,
+                         lwd = 2.0,
                          add_legend = TRUE,
                          smooth_method = NULL, ...) {
   if (!inherits(fit, "mfsusie")) {
@@ -596,8 +604,14 @@ plot.mfsusie <- function(x, ...) {
     }
   }
 
+  # Leave a strip of empty y-space above the topmost CS row
+  # for the size legend, plus a strip below the bottom row for
+  # the color legend. Both strips are skipped when the legend
+  # is suppressed.
+  ylim_pad <- if (isTRUE(add_legend)) c(0.5 - 0.6, K + 0.5 + 0.6)
+              else c(0.5, K + 0.5)
   plot(NA, xlim = range(pos),
-       ylim = c(0.5, K + 0.5),
+       ylim = ylim_pad,
        xlab = "outcome position", ylab = "credible set",
        yaxt = "n", main = main, las = 1, cex.main = 0.95)
   axis(2, at = seq_len(K), labels = paste0("CS", seq_len(K)),
@@ -632,18 +646,21 @@ plot.mfsusie <- function(x, ...) {
     raw <- pmin(raw, cex_max)
     raw <- pmax(raw, 0.2)
     points(pos, rep(i, T_m), pch = 1L,
-           cex = raw, col = col_i, lwd = 1.2)
+           cex = raw, col = col_i, lwd = 2.0)
   }
 
   if (add_legend) {
     # Two-axis legend: dot size scale and color rule. Place
-    # the size key at the top-right and the color key below.
+    # the size key at the top-left and the color key at
+    # bottom-right; this keeps both clear of CS bubbles when
+    # the data fills the panel width.
     size_breaks <- c(1.3, round(cex_max / 2, 1), cex_max)
-    legend("topright",
+    legend("topleft",
            legend = sprintf("-log10(lfsr) = %g", size_breaks),
-           pch = 1L, pt.cex = size_breaks, lwd = 0,
-           col = "grey30", bty = "n", cex = 0.7,
-           inset = c(0, 0))
+           pch = 1L, pt.cex = size_breaks, pt.lwd = 2.0,
+           col = "grey30", bty = "n", cex = 0.75,
+           y.intersp = 1.4,
+           inset = c(0.02, 0.02))
     color_label <- if (!is.null(truth_mask) &&
                        any(!vapply(truth_mask, is.null, logical(1L))))
       c("truly affected", "not affected")
@@ -652,9 +669,9 @@ plot.mfsusie <- function(x, ...) {
         sprintf("lfsr > %g",  lfsr_threshold))
     legend("bottomright",
            legend = color_label,
-           pch = 1L, pt.cex = 1.5, lwd = 1.2,
-           col = c(pal[1L], "grey60"), bty = "n", cex = 0.7,
-           inset = c(0, 0))
+           pch = 1L, pt.cex = 1.8, pt.lwd = 2.0,
+           col = c(pal[1L], "grey60"), bty = "n", cex = 0.75,
+           inset = c(0.02, 0.02))
   }
 }
 

@@ -279,24 +279,11 @@ on the zero line mark CpGs where the band excludes zero (the
 estimated affected CpGs). These align with the ground-truth
 clusters from the simulation.
 
-## Prediction on new genotypes
+## Session info
 
-```{r predict, fig.height = 3.5}
-fitted_curves <- predict(fit_TI, newx = X[1:3, ])[[1]]
-pos_remap <- fit_TI$dwt_meta$pos[[1]]
-matplot(pos_remap, t(fitted_curves), type = "l", lty = 1,
-        col = c("#E69F00", "#56B4E9", "#009E73"), lwd = 1.5,
-        xlab = "CpG (post-remap grid)",
-        ylab = "predicted methylation")
-legend("topright", legend = paste("subject", 1:3),
-       col = c("#E69F00", "#56B4E9", "#009E73"),
-       lwd = 1.5, bty = "n")
+This is the version of R and the packages that were used to generate
+these results.
+
+```{r session-info}
+sessionInfo()
 ```
-
-## Multi-region or multi-omic extensions
-
-For a multi-region or multi-outcome version of the same
-workflow (e.g., methylation across multiple regions with
-expression at the same locus), see
-[the multi-outcome intro](mfsusie_intro.html), which fits all
-outcomes jointly under the mfsusie model.

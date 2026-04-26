@@ -14,7 +14,7 @@ mfsusie_plot(
   show_lfsr_curve = TRUE,
   show_affected_region = TRUE,
   lfsr_threshold = 0.01,
-  lwd = 1.5,
+  lwd = 2,
   add_legend = TRUE,
   smooth_method = NULL,
   ...
