@@ -58,6 +58,11 @@ length(fit_f$sets$cs)
 
 The `fsusie()` call is a thin canonicalizer: it forwards to
 `mfsusie(X, list(Y), list(pos), ...)` with no numerical change.
+`mfsusie_plot()` works on the result either way:
+
+```{r fsusie-plot, fig.width = 6, fig.height = 5}
+mfsusie_plot(fit_f)
+```
 
 ## A small `mfsusie()` example (multi-outcome)
 
@@ -82,7 +87,13 @@ length(fit_m$sets$cs)
 
 `mu[[l]][[m]]` is a `p x T_basis[m]` matrix of per-effect posterior
 means on each outcome; `predict()` and `coef()` invert the wavelet
-transform to position space transparently.
+transform to position space transparently. `mfsusie_plot()` tiles
+one effect-curve panel per outcome with the PIPs in the top-left
+slot:
+
+```{r mfsusie-plot-getting-started, fig.width = 8, fig.height = 6}
+mfsusie_plot(fit_m)
+```
 
 ## Numerical equivalence with `susieR::susie` (degenerate case)
 

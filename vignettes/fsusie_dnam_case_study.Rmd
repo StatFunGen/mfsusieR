@@ -69,33 +69,26 @@ fit$niter; fit$converged
 fit$sets$cs
 ```
 
-PIPs:
+## Inspecting the fit
 
-```{r pip}
-plot(fit$pip, pch = 16, col = ifelse(fit$pip > 0.9, "red", "grey60"),
-     xlab = "variable index", ylab = "PIP")
-abline(v = c(42, 97), lty = 2, col = "blue")
+`mfsusie_plot()` shows PIPs (top, CS-colored) and per-effect
+methylation curves on the post-remap grid. After `mf_post_smooth()`
+the curves are denoised and credible bands are drawn as ribbons.
+
+```{r plot-smoothed, fig.width = 6, fig.height = 5, fig.cap = "TI-smoothed methylation curves with 95% pointwise credible bands."}
+fit_s <- mf_post_smooth(fit, method = "TI",
+                        wavelet_filter = 1L,
+                        wavelet_family = "DaubExPhase")
+mfsusie_plot(fit_s)
 ```
-
-## Per-effect methylation curves
 
 `coef(fit)` returns a length-`M` list; element `m` is an `L x T_basis`
 matrix on the wavelet-remapped grid (the irregular CpG positions are
-interpolated to a regular dyadic grid before the DWT). Plot against
-`fit$dwt_meta$pos[[m]]` to land on the right x-axis.
+interpolated to a regular dyadic grid before the DWT).
 
 ```{r effect-curves}
 B_hat <- coef(fit)[[1]]
-pos_remap <- fit$dwt_meta$pos[[1]]
-
-matplot(pos_remap, t(B_hat), type = "b", lty = 1, pch = 16,
-        xlab = "position (post-remap grid)",
-        ylab = "effect on methylation",
-        main = "Per-effect methylation curves")
-abline(h = 0, lty = 2, col = "grey60")
-legend("topright",
-       legend = paste("effect", seq_len(nrow(B_hat))),
-       col = seq_len(nrow(B_hat)), lty = 1, pch = 16, bty = "n")
+sapply(coef(fit), dim)
 ```
 
 ## Predictions on new genotypes
@@ -103,10 +96,14 @@ legend("topright",
 ```{r predict}
 fitted_curves <- predict(fit, newx = X[1:3, ])[[1]]
 pos_remap <- fit$dwt_meta$pos[[1]]
-matplot(pos_remap, t(fitted_curves), type = "b", lty = 1, pch = 16,
+matplot(pos_remap, t(fitted_curves), type = "l", lty = 1,
+        col = c("#E69F00", "#56B4E9", "#009E73"), lwd = 1.5,
         xlab = "position (post-remap grid)",
         ylab = "predicted methylation",
         main = "Predicted profiles for three individuals")
+legend("topright", legend = paste("subject", 1:3),
+       col = c("#E69F00", "#56B4E9", "#009E73"),
+       lwd = 1.5, bty = "n")
 ```
 
 ## What this gets you

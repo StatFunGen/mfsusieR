@@ -69,15 +69,16 @@ fit$niter; fit$converged
 length(fit$sets$cs)
 ```
 
-Top PIP variables:
+## Inspecting the fit
 
-```{r pip-plot}
-plot(fit$pip, pch = 16, col = ifelse(fit$pip > 0.9, "red", "grey50"),
-     xlab = "variable index", ylab = "PIP")
-abline(v = c(37, 112), lty = 2, col = "blue")
-legend("topright", legend = c("True causal", "PIP > 0.9"),
-       lty = c(2, NA), pch = c(NA, 16),
-       col = c("blue", "red"), bty = "n", cex = 0.8)
+`mfsusie_plot()` is the unified plot function for `fsusie()` and
+`mfsusie()` fits. On a single-outcome fit it produces a 2-panel
+column: PIPs on top (CS-colored points) and per-effect curves on
+the bottom. Use `susie_plot(fit, y = "PIP")` (re-exported from
+susieR) when only the PIP panel is wanted.
+
+```{r mfsusie-plot, fig.cap = "PIP and per-effect curves. Top: PIPs colored by CS membership. Bottom: posterior effect curves on the position grid."}
+mfsusie_plot(fit)
 ```
 
 Credible sets:
@@ -87,21 +88,27 @@ fit$sets$cs
 fit$sets$purity
 ```
 
-## Inspecting effect curves
+## Smoothed effect curves and credible bands
+
+The default plot above shows the raw inverse-DWT curves from
+`coef(fit)`. After `mf_post_smooth()`, the same plot call shows
+the smoothed curve and a pointwise credible band:
+
+```{r post-smooth, fig.cap = "After mf_post_smooth(method = 'TI'): cycle-spinning translation-invariant denoising with 95% pointwise credible bands. Affected regions (band excludes zero) are marked with thick bars at the bottom."}
+fit_s <- mf_post_smooth(fit, method = "TI",
+                        wavelet_filter = 1L,
+                        wavelet_family = "DaubExPhase")
+mfsusie_plot(fit_s)
+```
+
+See `vignette("post_processing")` for the full set of methods
+(`"scalewise"`, `"TI"`, `"HMM"`) and the lfsr overlay produced by
+the HMM smoother.
+
+## Working with the fit
 
 `coef(fit)` returns a list of `M` outcome matrices, each `L x T_m`,
 one row per single effect in position space.
-
-```{r effects}
-B_hat <- coef(fit)[[1]]
-matplot(t(B_hat), type = "l", lty = 1,
-        xlab = "position", ylab = "effect",
-        main = "Estimated single-effect curves")
-matlines(t(beta[c(37, 112), ]), col = "black", lty = 2)
-legend("topright", legend = c("Estimated", "True"),
-       lty = c(1, 2), col = c(1, 1), bty = "n", cex = 0.8)
-```
-
 `predict(fit, newx = X)` reconstructs the fitted curves on new
 genotypes; `fitted(fit)` returns the in-sample fits.
 

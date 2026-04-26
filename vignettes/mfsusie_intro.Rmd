@@ -82,30 +82,31 @@ fit$niter; fit$converged
 length(fit$sets$cs)
 ```
 
-The two causal variables should dominate the PIPs:
+## Inspecting the fit
 
-```{r pip}
-plot(fit$pip, pch = 16, col = ifelse(fit$pip > 0.9, "red", "grey60"),
-     xlab = "variable index", ylab = "PIP",
-     main = "PIPs from joint mfsusie fit")
-abline(v = c(37, 88), lty = 2, col = "blue")
+`mfsusie_plot()` shows everything in one call: PIPs in the
+top-left tile (CS-colored), then one effect-curve panel per
+outcome. Functional outcomes show position-space effect curves
+and credible bands; scalar outcomes (`T_m = 1`) show a per-CS dot
+plot. The legend on each panel labels CSs by index.
+
+```{r mfsusie-plot, fig.width = 8, fig.height = 7, fig.cap = "Joint fit across two functional outcomes (T = 32, T = 64) and three scalar outcomes. PIP panel (top-left) combines evidence from all five outcomes."}
+fit_s <- mf_post_smooth(fit, method = "TI",
+                        wavelet_filter = 1L,
+                        wavelet_family = "DaubExPhase")
+mfsusie_plot(fit_s)
+```
+
+```{r cs}
 fit$sets$cs
 ```
 
-## Per-outcome effect curves
-
 `coef(fit)` returns a list of length `M`. Element `m` is an `L x T_m`
-matrix.
+matrix containing the per-effect curve for outcome `m`.
 
 ```{r coef}
 B_hat <- coef(fit)
 sapply(B_hat, dim)
-
-# Plot the effect on functional outcome 2 for each detected effect.
-matplot(t(B_hat[[2]]), type = "l", lty = 1,
-        xlab = "position (outcome 2)", ylab = "effect",
-        main = "Effect curves on functional outcome 2")
-abline(h = 0, col = "grey80")
 ```
 
 ## Choosing `prior_variance_scope`
