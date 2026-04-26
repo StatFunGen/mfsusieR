@@ -285,7 +285,14 @@ mfsusie <- function(X, Y,
     fit$lead_X <- vector("list", L)
     for (l in seq_len(L)) {
       lead <- which.max(fit$alpha[l, ])
-      fit$lead_X[[l]] <- data$X[, lead]   # already centred + scaled
+      # Un-standardize so that lead_X carries the original X column
+      # SD. The post-smoother regresses iso_pos on lead_X and
+      # unscales by csd_Y / csd_X; if lead_X is already standardized
+      # to unit variance, csd_X collapses to 1 and the recovered
+      # effect comes back in per-unit-standardized-X units, off by
+      # a factor of sd(X_raw) from the per-unit-raw-X effect the
+      # vignettes compare against.
+      fit$lead_X[[l]] <- data$X[, lead] * data$csd[lead]
     }
   }
 

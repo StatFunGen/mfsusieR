@@ -15,10 +15,17 @@
 # coefficient matrix back to a p x T_m matrix on the original
 # position grid. `coef_wavelet` rows are variables (or some other
 # index); each row is inverted independently.
-mf_invert_per_outcome <- function(coef_wavelet, m, dwt_meta) {
+mf_invert_per_outcome <- function(coef_wavelet, m, dwt_meta,
+                                  intercept = TRUE) {
   T_pad <- dwt_meta$T_basis[m]
   pos_m <- dwt_meta$pos[[m]]
-  cm    <- dwt_meta$column_center[[m]]
+  # Match susieR's `coef.susie` convention where the intercept is a
+  # separable component: response reconstructions (`predict`,
+  # `fitted`) keep it; per-effect (slope) reconstructions (`coef`)
+  # set `intercept = FALSE` so the Y baseline `cm_Y` is not added
+  # to an effect curve. `csd_Y` is always applied because mu lives
+  # in Y-standardized units.
+  cm    <- if (intercept) dwt_meta$column_center[[m]] else rep(0, T_pad)
   csd   <- dwt_meta$column_scale[[m]]
 
   # Each row of `coef_wavelet` is a length-T_basis wavelet vector.
@@ -157,13 +164,24 @@ coef.mfsusie <- function(object, smooth_method = NULL, ...) {
   meta <- object$dwt_meta
   L    <- nrow(object$alpha)
   M    <- meta$M
+  X_scale <- meta$X_scale
   out  <- vector("list", M)
   for (m in seq_len(M)) {
     coef_l_wavelet <- matrix(0, nrow = L, ncol = meta$T_basis[m])
     for (l in seq_len(L)) {
-      coef_l_wavelet[l, ] <- colSums(object$alpha[l, ] * object$mu[[l]][[m]])
+      # Per-SNP unscale of mu: mu lives in (X-standardized,
+      # Y-standardized-then-DWT'd) units; dividing by `X_scale[j]`
+      # converts it to (X-raw, Y-standardized-then-DWT'd) units so
+      # the alpha-weighted sum is the per-effect coefficient on the
+      # raw X scale.
+      mu_raw_X <- sweep(object$mu[[l]][[m]], 1L, X_scale, "/")
+      coef_l_wavelet[l, ] <- colSums(object$alpha[l, ] * mu_raw_X)
     }
-    out[[m]] <- mf_invert_per_outcome(coef_l_wavelet, m, meta)
+    # Inverse DWT with `column_center = 0` so the Y intercept
+    # `cm_Y` is NOT added back to a per-effect estimate. The `csd_Y`
+    # scale is still applied (mu is in Y-standardized units).
+    out[[m]] <- mf_invert_per_outcome(coef_l_wavelet, m, meta,
+                                      intercept = FALSE)
   }
   out
 }
@@ -567,10 +585,18 @@ mf_post_smooth <- function(fit,
 }
 
 # Sum_{l != exclude} x_lead_l * inverse_DWT(mu_l[lead_l, ]).
+# Y_pos from `.iso_response_pos` lives in raw-Y units (csd_Y has
+# been undone by the inverse-DWT pipeline). To make the
+# `Y_pos - .other_effects_pos` subtraction meaningful, the
+# per-effect contribution must be on the same raw-Y scale: that
+# means multiplying the inverse-DWT of mu_w by the per-position
+# csd_Y. lead_X carries the raw-X column SD (set in mfsusie.R), so
+# `outer(lead_X, eff_pos_raw)` is directly in raw-(Y, X) units.
 .other_effects_pos <- function(fit, m, exclude) {
   meta <- fit$dwt_meta
   L    <- nrow(fit$alpha)
   T_pos <- length(meta$pos[[m]])
+  csd_m <- meta$column_scale[[m]]
   out  <- matrix(0, nrow = length(fit$lead_X[[1]]), ncol = T_pos)
   for (l in seq_len(L)) {
     if (l == exclude) next
@@ -578,7 +604,8 @@ mf_post_smooth <- function(fit,
     mu_w   <- fit$mu[[l]][[m]][lead_l, ]
     eff_pos <- .invert_packed_curve(matrix(mu_w, nrow = 1L), meta, m)
     if (length(eff_pos) > T_pos) eff_pos <- eff_pos[seq_len(T_pos)]
-    out <- out + outer(fit$lead_X[[l]], eff_pos)
+    eff_pos_raw <- eff_pos * csd_m[seq_along(eff_pos)]
+    out <- out + outer(fit$lead_X[[l]], eff_pos_raw)
   }
   out
 }
