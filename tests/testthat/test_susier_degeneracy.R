@@ -43,6 +43,7 @@ c1_fit_pair <- function(X, y, L = 5, V = 0.2) {
                          scaled_prior_variance      = V,    # var(y) = 1, so V on both sides
                          estimate_prior_variance    = FALSE,
                          estimate_residual_variance = TRUE,
+                         verbose                    = FALSE,
                          max_iter = 100, tol = 1e-8)
   fit_m <- mfsusieR::mfsusie(
     X, list(matrix(y, ncol = 1)),
