@@ -79,9 +79,10 @@ in your work, please cite:
 
 > Liu, A., Sun, H., De Jager, L.P., Bennett, D., The Alzheimer's
 > Disease Functional Genomics Consortium, Wang, G. & Denault, W.R.P.
-> (2025). mfSuSiE enables multi-cell-type fine-mapping and multi-omic
-> integration of chromatin accessibility QTLs in aging brain.
-> *bioRxiv*. *(in preparation; DOI will be added on submission)*
+> (2025). mfSuSiE enables multi-cell-type fine-mapping and
+> multi-omic integration of chromatin accessibility QTLs in aging
+> brain. *bioRxiv* [DOI:
+> 10.1101/2025.11.25.690439](https://doi.org/10.1101/2025.11.25.690439)
 
 For the underlying SuSiE backbone and engineering improvements that
 mfsusieR builds on, please also cite:
@@ -89,7 +90,8 @@ mfsusieR builds on, please also cite:
 > McCreight, A., Cho, Y., Li, R., Nachun, D., Gan, H-Y., Carbonetto,
 > P., Stephens, M., Denault, W.R.P. & Wang, G. (2025). SuSiE 2.0:
 > improved methods and implementations for genetic fine-mapping and
-> phenotype prediction. *Submitting to Genome Biology*.
+> phenotype prediction. *bioRxiv* [DOI:
+> 10.1101/2025.11.25.690514](https://doi.org/10.1101/2025.11.25.690514)
 
 ## License
 
