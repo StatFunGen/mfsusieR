@@ -97,9 +97,12 @@ markers <- fit_s$sets$cs[[cs]]
 lead    <- markers[which.max(fit_s$pip[markers])]
 x_lead  <- gtex_example$X[, lead]
 
-# Effect curve + 95% band on the gene-body grid.
-band  <- fit_s$credible_bands[[1L]][[cs]]
-effect <- fit_s$effect_curves[[1L]][[cs]]
+# Effect curve + 95% band on the gene-body grid. The default
+# smoother on this fit is TI; its result lives at
+# `fit_s$smoothed$TI`.
+smooth_payload <- fit_s$smoothed$TI
+band   <- smooth_payload$credible_bands[[1L]][[cs]]
+effect <- smooth_payload$effect_curves[[1L]][[cs]]
 
 # Allele-stratified mean log1p coverage at the lead variant.
 # The genotype matrix is mean-centered, so a 0/1 split on the

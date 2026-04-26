@@ -11,7 +11,8 @@ mf_post_smooth(
   threshold_factor = 1,
   wavelet_filter = 1L,
   wavelet_family = "DaubExPhase",
-  halfK = 20L
+  halfK = 20L,
+  overwrite_previous = FALSE
 )
 }
 \arguments{

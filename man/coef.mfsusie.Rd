@@ -4,17 +4,28 @@
 \alias{coef.mfsusie}
 \title{Per-effect coefficient curves on the original X scale}
 \usage{
-\method{coef}{mfsusie}(object, ...)
+\method{coef}{mfsusie}(object, smooth_method = NULL, ...)
 }
 \arguments{
 \item{object}{an \code{mfsusie} fit.}
+
+\item{smooth_method}{optional character. When supplied, returns
+the post-smoothed effect curves stored at
+\code{object$smoothed[[smooth_method]]} instead of the raw
+wavelet-inverse curves. The named smoother must have been
+applied via \code{mf_post_smooth(object, method = smooth_method)}
+beforehand. When \code{NULL} (default), \code{coef.mfsusie} returns
+the raw curves; smoothing is an explicit opt-in.}
 
 \item{...}{ignored.}
 }
 \value{
 list of length \code{M}; each element an \verb{L x T_m} matrix
 whose row \code{l} is effect \code{l}'s coefficient curve for outcome
-\code{m}.
+\code{m}. When \code{smooth_method} is supplied, the returned curves
+are on the same shape but smoothed by the named method;
+the returned object carries an attribute
+\code{attr(., "smooth_method")} recording the choice.
 }
 \description{
 Returns the per-effect, per-outcome coefficient curves on the

@@ -47,6 +47,8 @@ post-process with `mf_post_smooth()`: see
 [`vignette("post_processing")`](post_processing.html) for the
 three available methods (`scalewise`, `TI`, `HMM`).
 
+FIXME: this part has to be improved it now has another additional method. And also the default is changed
+
 ## A small `fsusie()` example (single outcome, functional)
 
 Simulate one functional response on a length-`32` grid with two causal
@@ -103,13 +105,14 @@ slot:
 mfsusie_plot(fit_m)
 ```
 
-## Numerical equivalence with `susieR::susie` (degenerate case)
+FIXME: did not show predict and coef here. We should show what predict and coef look like and include a small plot for predict (as coef plot is included already in effect curves)
+
+## Numerical equivalence with `susieR::susie`
 
 When `Y` is scalar, the prior collapses to a single Gaussian component,
 the null component is removed, and the per-(scale, outcome) variance
 structure collapses to a scalar, `mfsusie()` reduces **exactly** to
-`susieR::susie()`. This is the C1 contract in the unit test suite at
-tolerance `<= 1e-13` (see `tests/testthat/test_susier_degeneracy.R`).
+`susieR::susie()` when we set it a fixed effects size prior.
 
 ```{r c1-degeneracy}
 y_scalar <- as.numeric(X %*% beta + rnorm(n, sd = 0.4))
@@ -142,18 +145,15 @@ abs(tail(fit_d$elbo, 1) - tail(fit_s$elbo, 1))
 identical(fit_d$niter, fit_s$niter)
 ```
 
-The remaining differences are at the IEEE-754 double-precision floor
-(~`1e-16` for `alpha`, `sigma2`, `pip`; ~`1e-13` for `KL` because the
-KL contribution accumulates over `n` residuals in slightly different
-order). The credible-set memberships are identical:
+The credible-set memberships are also identical:
 
 ```{r c1-cs}
 identical(lapply(fit_d$sets$cs, sort),
           lapply(fit_s$sets$cs, sort))
 ```
 
-This degenerate-case identity is enforced by the test suite on every
-build. If a refactor introduces drift above `1e-10`, CI fails.
+This degenerate-case is introduced as a sanity check, as `mfsusieR` is implemented on the backbone of `susieR`
+and is expect to produce the same result mathematically under degenerated-case like this.
 
 ## Where to next
 

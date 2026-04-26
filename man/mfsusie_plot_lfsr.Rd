@@ -4,7 +4,14 @@
 \alias{mfsusie_plot_lfsr}
 \title{Per-CS local false sign rate bubble grid}
 \usage{
-mfsusie_plot_lfsr(fit, lfsr_threshold = 0.01, truth = NULL, cex_max = 6, ...)
+mfsusie_plot_lfsr(
+  fit,
+  lfsr_threshold = 0.01,
+  truth = NULL,
+  cex_max = 6,
+  smooth_method = NULL,
+  ...
+)
 }
 \arguments{
 \item{fit}{an \code{mfsusie} / \code{fsusie()} fit object that has

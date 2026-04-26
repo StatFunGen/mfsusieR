@@ -22,16 +22,17 @@ test_that("mf_post_smooth(method = 'scalewise') populates effect_curves and cred
 
   fit  <- fsusie(Y, X, L = 1, max_iter = 30, verbose = FALSE)
   fit_s <- mf_post_smooth(fit, method = "scalewise")
+  payload <- fit_s$smoothed$scalewise
 
-  expect_length(fit_s$effect_curves, 1L)        # M = 1
-  expect_length(fit_s$effect_curves[[1L]], 1L)  # L = 1
-  expect_length(fit_s$effect_curves[[1L]][[1L]], T_m)
-  expect_equal(dim(fit_s$credible_bands[[1L]][[1L]]), c(T_m, 2L))
-  expect_null(fit_s$lfsr_curves)
+  expect_length(payload$effect_curves, 1L)        # M = 1
+  expect_length(payload$effect_curves[[1L]], 1L)  # L = 1
+  expect_length(payload$effect_curves[[1L]][[1L]], T_m)
+  expect_equal(dim(payload$credible_bands[[1L]][[1L]]), c(T_m, 2L))
+  expect_null(payload$lfsr_curves)
 
   # Credible band envelopes the effect curve.
-  band <- fit_s$credible_bands[[1L]][[1L]]
-  curve <- fit_s$effect_curves[[1L]][[1L]]
+  band  <- payload$credible_bands[[1L]][[1L]]
+  curve <- payload$effect_curves[[1L]][[1L]]
   expect_true(all(band[, 1L] <= curve + 1e-10))
   expect_true(all(curve - 1e-10 <= band[, 2L]))
 
@@ -55,10 +56,11 @@ test_that("mf_post_smooth(method = 'scalewise') gracefully handles T_m = 1 (scal
 
   fit  <- fsusie(Y, X, L = 1, max_iter = 30, verbose = FALSE)
   fit_s <- mf_post_smooth(fit, method = "scalewise")
+  payload <- fit_s$smoothed$scalewise
 
-  expect_length(fit_s$effect_curves[[1L]][[1L]], T_m)
-  expect_equal(dim(fit_s$credible_bands[[1L]][[1L]]), c(T_m, 2L))
-  band <- fit_s$credible_bands[[1L]][[1L]]
+  expect_length(payload$effect_curves[[1L]][[1L]], T_m)
+  expect_equal(dim(payload$credible_bands[[1L]][[1L]]), c(T_m, 2L))
+  band <- payload$credible_bands[[1L]][[1L]]
   expect_true(band[1L, 1L] < band[1L, 2L])
 })
 
@@ -76,9 +78,9 @@ test_that("mf_post_smooth(method = 'scalewise') honors threshold_factor", {
             matrix(rnorm(n * T_m, sd = 0.4), n)
   fit  <- fsusie(Y, X, L = 1, max_iter = 20, verbose = FALSE)
   c_low  <- mf_post_smooth(fit, method = "scalewise",
-                           threshold_factor = 0.5)$effect_curves[[1L]][[1L]]
+                           threshold_factor = 0.5)$smoothed$scalewise$effect_curves[[1L]][[1L]]
   c_high <- mf_post_smooth(fit, method = "scalewise",
-                           threshold_factor = 2.0)$effect_curves[[1L]][[1L]]
+                           threshold_factor = 2.0)$smoothed$scalewise$effect_curves[[1L]][[1L]]
   # Higher threshold shrinks at least as much in L1.
   expect_lte(sum(abs(c_high)), sum(abs(c_low)) + 1e-10)
 })

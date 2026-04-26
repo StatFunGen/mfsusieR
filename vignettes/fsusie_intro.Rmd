@@ -226,6 +226,12 @@ The fit is a list of class `c("mfsusie", "susie")` with the
 standard SuSiE slots (`alpha`, `mu`, `mu2`, `lbf`,
 `lbf_variable`, `KL`, `pip`, `sets`) plus per-outcome wavelet
 metadata (`dwt_meta`) used by `predict.mfsusie`,
-`coef.mfsusie`, and `fitted.mfsusie`. After `mf_post_smooth()`,
-`effect_curves` and `credible_bands` are populated and
-`mfsusie_plot()` reads them.
+`coef.mfsusie`, and `fitted.mfsusie`. After
+`mf_post_smooth(fit, method = ...)`, the chosen smoother's
+output lives at `fit$smoothed[[method]]` (with `effect_curves`,
+`credible_bands`, and an optional `lfsr_curves` slot for HMM).
+The fit accumulates per-method results across calls, so
+multiple smoothers can coexist on the same fit; see
+`vignette("post_processing")` for the comparison workflow.
+`mfsusie_plot()` picks a smoother by priority `TI > smash >
+HMM > scalewise` when more than one is present.

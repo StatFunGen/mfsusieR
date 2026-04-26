@@ -45,14 +45,15 @@ test_that("mf_post_smooth(method = 'smash') populates effect_curves and credible
   fit <- fsusie(Y, X, L = 1, max_iter = 30, verbose = FALSE)
   fit_s <- mf_post_smooth(fit, method = "smash")
 
-  expect_length(fit_s$effect_curves, 1L)        # M = 1
-  expect_length(fit_s$effect_curves[[1L]], 1L)  # L = 1
-  expect_length(fit_s$effect_curves[[1L]][[1L]], T_m)
-  expect_equal(dim(fit_s$credible_bands[[1L]][[1L]]), c(T_m, 2L))
-  expect_null(fit_s$lfsr_curves)
+  payload <- fit_s$smoothed$smash
+  expect_length(payload$effect_curves, 1L)        # M = 1
+  expect_length(payload$effect_curves[[1L]], 1L)  # L = 1
+  expect_length(payload$effect_curves[[1L]][[1L]], T_m)
+  expect_equal(dim(payload$credible_bands[[1L]][[1L]]), c(T_m, 2L))
+  expect_null(payload$lfsr_curves)
 
-  band  <- fit_s$credible_bands[[1L]][[1L]]
-  curve <- fit_s$effect_curves[[1L]][[1L]]
+  band  <- payload$credible_bands[[1L]][[1L]]
+  curve <- payload$effect_curves[[1L]][[1L]]
   expect_true(all(band[, 1L] <= curve + 1e-10))
   expect_true(all(curve - 1e-10 <= band[, 2L]))
 })

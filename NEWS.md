@@ -20,17 +20,25 @@ What is in this release:
   `fitted.mfsusie()`, `summary.mfsusie()`, `print.mfsusie()`,
   and `plot.mfsusie()`.
 - `mf_post_smooth(fit, method = c("TI", "scalewise", "HMM",
-  "smash"))` for posterior-smoothing of effect curves with
-  credible bands. `"TI"` is the default (translation-
-  invariant wavelet denoising via cycle spinning); `"HMM"`
-  additionally returns per-position lfsr; `"smash"` delegates
-  to `smashr::smash.gaus` (Suggests). The `"scalewise"`
-  pointwise variance is computed via the squared inverse-DWT
-  matrix (`Var(pos[t]) = sum_k W^T_{tk}^2 * var_w[k]`), which
-  is the textbook variance propagation for an orthonormal
-  linear operator with diagonal input covariance; the prior
-  `(invert_dwt(sqrt(var_w)))^2` formula confused the linear
-  combination of standard deviations for the position SD.
+  "smash"), overwrite_previous = FALSE)` for posterior-
+  smoothing of effect curves with credible bands. `"TI"` is
+  the default (translation-invariant wavelet denoising via
+  cycle spinning); `"HMM"` additionally returns per-position
+  lfsr; `"smash"` delegates to `smashr::smash.gaus`
+  (Suggests). The `"scalewise"` pointwise variance is
+  computed via the squared inverse-DWT matrix
+  (`Var(pos[t]) = sum_k W^T_{tk}^2 * var_w[k]`).
+- Each `mf_post_smooth()` call adds an entry to
+  `fit$smoothed[[method]]` rather than overwriting top-level
+  slots, so multiple smoothers coexist on the same fit. With
+  `overwrite_previous = FALSE` (default), re-applying the
+  same smoother errors instead of clobbering. `coef(fit)`
+  returns the raw inverse-DWT curves; pass
+  `coef(fit, smooth_method = "<name>")` for a smoothed
+  version. `mfsusie_plot()` picks a smoother by priority
+  `TI > smash > HMM > scalewise` when several are present
+  and emits a hint listing the alternatives; pass
+  `smooth_method = "<name>"` to plot a specific one.
 - `mf_adjust_for_covariates(Y, Z, X = NULL,
    method = c("wavelet_eb", "ols"))` for pre-fit covariate
   adjustment of a functional response. `method = "wavelet_eb"`
