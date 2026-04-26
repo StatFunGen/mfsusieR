@@ -113,10 +113,12 @@ mf_cs_colors <- function(n_cs) {
   T_basis <- fit$dwt_meta$T_basis[m]
   if (is.null(pos)) pos <- fit$dwt_meta$pos[[m]]
   if (is.null(main)) {
+    nm <- fit$dwt_meta$outcome_names[m]
+    label <- if (!is.null(nm) && nzchar(nm)) nm else sprintf("Outcome %d", m)
     main <- if (length(fit$dwt_meta$T_basis) == 1L) {
       sprintf("Effect curves (T = %d)", T_basis)
     } else {
-      sprintf("Outcome %d (T = %d)", m, T_basis)
+      sprintf("%s (T = %d)", label, T_basis)
     }
   }
   cs   <- fit$sets$cs %||% list()

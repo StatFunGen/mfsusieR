@@ -612,12 +612,16 @@ mf_post_smooth <- function(fit,
       # build one from the diagonal of `var(x_post)` by reusing
       # the lfsr trick: lfsr -> tail probability -> SE.
       eff <- out$effect_estimate
-      lfsr <- pmax(pmin(out$lfsr, 1 - 1e-300), 1e-300)
-      # Approximate per-position SE: (|effect|) / qnorm(1 - lfsr).
-      sd_pos <- abs(eff) / pmax(stats::qnorm(1 - lfsr), 1e-300)
       effect_curves[[m]][[l]]  <- eff
-      credible_bands[[m]][[l]] <- cbind(eff - z_crit * sd_pos,
-                                        eff + z_crit * sd_pos)
+      # No pointwise credible band for HMM: the natural
+      # uncertainty quantification is the per-position lfsr
+      # curve, which is overlaid by `mfsusie_plot()` on a
+      # secondary axis. The Gaussian-band formula
+      # `|eff| / qnorm(1 - lfsr)` collapses when lfsr is large
+      # (null states), so we leave the band slot empty.
+      # `[l] <- list(NULL)` preserves the list slot, unlike
+      # `[[l]] <- NULL` which would shorten the list.
+      credible_bands[[m]][l]   <- list(NULL)
       lfsr_curves[[m]][[l]]    <- out$lfsr
     }
   }

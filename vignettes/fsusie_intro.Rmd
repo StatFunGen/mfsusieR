@@ -31,42 +31,37 @@ of one outcome. The argument order is `(Y, X, pos, ...)` so the
 response comes first, mirroring how single-response models are
 typically called.
 
-## Simulating a fixture
+## Bundled fixture
+
+The package ships `rnaseq_example`, a simulated cis-eQTL fixture:
+200 SNPs over a real LD scaffold (`susieR::N3finemapping$X`),
+128 evenly-spaced exon-body positions, one causal SNP with a
+peaked Gaussian effect over ~30 positions.
 
 ```{r setup, message = FALSE}
 library(mfsusieR)
-library(susieR)
 set.seed(1)
+data(rnaseq_example)
+str(rnaseq_example, max.level = 1)
 ```
 
-Use the `N3finemapping` variable genotype matrix from susieR for a
-realistic LD pattern; simulate a wavelet-smoothable functional effect
-on a length-128 grid.
+A few sample expression-coverage curves:
 
-```{r simulate}
-data(N3finemapping)
-X <- N3finemapping$X[, seq_len(200)]
-n <- nrow(X); p <- ncol(X)
-T_m <- 128
-
-# Two causal variables, smooth bell-shaped effect curve.
-positions <- seq_len(T_m)
-shape <- exp(-((positions - T_m / 2)^2) / (2 * (T_m / 8)^2))
-beta <- matrix(0, nrow = p, ncol = T_m)
-beta[37, ] <-  1.5 * shape
-beta[112, ] <- -1.0 * shape
-
-Y <- X %*% beta + matrix(rnorm(n * T_m, sd = 0.5), nrow = n)
-matplot(t(Y[1:5, ]), type = "l", lty = 1, col = 1:5,
-        xlab = "position", ylab = "y", main = "Five sample curves")
+```{r sample-curves, fig.cap = "Five randomly-chosen sample curves from `rnaseq_example$Y`."}
+matplot(rnaseq_example$pos,
+        t(rnaseq_example$Y[1:5, ]), type = "l", lty = 1,
+        col = c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2"),
+        xlab = "position", ylab = "y")
 ```
 
 ## Fitting
 
 ```{r fit}
-fit <- fsusie(Y, X, pos = positions, L = 5, verbose = FALSE)
+fit <- fsusie(rnaseq_example$Y, rnaseq_example$X,
+              pos = rnaseq_example$pos, L = 5, verbose = FALSE)
 fit$niter; fit$converged
 length(fit$sets$cs)
+fit$pip[rnaseq_example$causal_snps]
 ```
 
 ## Inspecting the fit

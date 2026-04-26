@@ -9,6 +9,9 @@ mfsusie_plot(
   m = NULL,
   pos = NULL,
   show_grid_dots = FALSE,
+  show_lfsr = TRUE,
+  show_affected_region = TRUE,
+  lfsr_threshold = 0.05,
   lwd = 1.5,
   add_legend = TRUE,
   ...
@@ -25,6 +28,16 @@ plot only that outcome's effect panel (no PIP). Default
 
 \item{show_grid_dots}{logical, draw circles at each post-remap
 grid point on top of the curves. Default \code{FALSE}.}
+
+\item{show_lfsr}{logical, overlay HMM lfsr curves on a secondary
+axis when \code{fit$lfsr_curves} is populated. Default \code{TRUE}.}
+
+\item{show_affected_region}{logical, mark contiguous segments
+where each CS's credible band excludes zero with thick bars
+at the bottom of the effect panel. Default \code{TRUE}.}
+
+\item{lfsr_threshold}{numeric, dashed reference line on the lfsr
+secondary axis. Default \code{0.05}.}
 
 \item{lwd}{numeric, curve line width. Default \code{1.5}.}
 
@@ -47,8 +60,12 @@ the PIP plot in the top-left slot.
 Effect curves come from \code{fit$effect_curves} when post-processed
 smoothing has been applied (see \code{mf_post_smooth()}); otherwise
 from the wavelet-domain inverse via \code{coef()}. Pointwise credible
-bands are drawn as transparent ribbons when
-\code{fit$credible_bands} is populated.
+bands are drawn as transparent ribbons when \code{fit$credible_bands}
+is populated. After \code{mf_post_smooth(method = "HMM")} the
+per-position lfsr curves are overlaid on a secondary axis with a
+threshold line at \code{lfsr_threshold}. Affected regions (where each
+CS's credible band excludes zero) are marked with thick bars at
+the bottom of each effect panel.
 
 For the PIP plot only, see also \code{susie_plot(fit, y = "PIP")}
 (re-exported from susieR), which is the standard SuSiE-family

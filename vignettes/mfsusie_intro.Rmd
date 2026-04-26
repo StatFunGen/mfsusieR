@@ -29,57 +29,33 @@ library(susieR)
 set.seed(1)
 ```
 
-## Three-outcome fixture
+## Bundled multi-omic fixture
 
-Two functional outcomes (e.g., ChIP-seq and ATAC-seq tracks at
-different resolutions) plus three scalar phenotypes (e.g., gene
-expression in three tissues). Two causal variables, both shared across all
-five outcomes; mfsusie should combine the evidence into tight
-credible sets.
+`multiomic_example` is a four-outcome cis-QTL fixture: DNA
+methylation (T = 64, irregular CpGs), RNA-seq (T = 32, exon
+body), and two scalar QTLs (eQTL, pQTL). Two causal SNPs are
+shared across all four outcomes with per-outcome shapes and
+signs. Genotypes use the `susieR::N3finemapping` LD scaffold for
+realistic correlation.
 
-```{r simulate}
-data(N3finemapping)
-X <- N3finemapping$X[, seq_len(120)]
-n <- nrow(X); p <- ncol(X)
-
-T_func <- c(32L, 64L)
-n_scalar <- 3L
-
-# Causal beta: same two variables, different per-outcome strength.
-shape_low  <- exp(-((seq_len(T_func[1]) - T_func[1] / 2)^2) / (2 * 4^2))
-shape_high <- exp(-((seq_len(T_func[2]) - T_func[2] / 2)^2) / (2 * 6^2))
-beta_func1 <- matrix(0, p, T_func[1]); beta_func1[37, ] <- 1.0 * shape_low
-                                       beta_func1[88, ] <- -0.7 * shape_low
-beta_func2 <- matrix(0, p, T_func[2]); beta_func2[37, ] <- 0.8 * shape_high
-                                       beta_func2[88, ] <- -0.5 * shape_high
-beta_scalar <- matrix(0, p, n_scalar)
-beta_scalar[37, ] <- c(0.9, 0.8, 0.6)
-beta_scalar[88, ] <- c(-0.5, -0.6, -0.4)
-
-Y_func1 <- X %*% beta_func1 + matrix(rnorm(n * T_func[1], sd = 0.3), n)
-Y_func2 <- X %*% beta_func2 + matrix(rnorm(n * T_func[2], sd = 0.3), n)
-Y_scalar <- X %*% beta_scalar + matrix(rnorm(n * n_scalar, sd = 0.3), n)
-
-# Pack scalar outcomes one at a time so each is a column matrix.
-Y_list <- list(
-  Y_func1,
-  Y_func2,
-  matrix(Y_scalar[, 1], ncol = 1),
-  matrix(Y_scalar[, 2], ncol = 1),
-  matrix(Y_scalar[, 3], ncol = 1)
-)
-length(Y_list)
-sapply(Y_list, ncol)
+```{r load-data}
+data(multiomic_example)
+str(multiomic_example, max.level = 1)
+sapply(multiomic_example$Y_list, ncol)   # T_m per outcome
+multiomic_example$causal_snps
 ```
 
 ## Fit
 
 ```{r fit}
-fit <- mfsusie(X, Y_list, L = 5,
+fit <- mfsusie(multiomic_example$X, multiomic_example$Y_list,
+               pos = multiomic_example$pos_list,
+               L = 5,
                prior_variance_scope = "per_outcome",
                verbose = FALSE)
 fit$niter; fit$converged
 length(fit$sets$cs)
+fit$pip[multiomic_example$causal_snps]
 ```
 
 ## Inspecting the fit
@@ -90,7 +66,7 @@ outcome. Functional outcomes show position-space effect curves
 and credible bands; scalar outcomes (`T_m = 1`) show a per-CS dot
 plot. The legend on each panel labels CSs by index.
 
-```{r mfsusie-plot, fig.width = 8, fig.height = 7, fig.cap = "Joint fit across two functional outcomes (T = 32, T = 64) and three scalar outcomes. PIP panel (top-left) combines evidence from all five outcomes."}
+```{r mfsusie-plot, fig.width = 8, fig.height = 7, fig.cap = "Joint fit across DNAm (T = 64), RNA-seq (T = 32), and two scalar QTLs. PIP panel (top-left) combines evidence from all four outcomes; functional panels show TI-smoothed effect curves with 95% credible bands; scalar panels show per-CS effect points."}
 fit_s <- mf_post_smooth(fit, method = "TI",
                         wavelet_filter = 1L,
                         wavelet_family = "DaubExPhase")
