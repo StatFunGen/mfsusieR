@@ -94,10 +94,6 @@ articles:
       - mfsusie_intro
       - mfsusie_long_running_fits
 
-  - title: "Migration from fsusieR / mvf.susie.alpha"
-    contents:
-      - migration
-
 # Optional: Footer customization
 footer:
   structure:

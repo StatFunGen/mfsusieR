@@ -26,9 +26,10 @@ seq tracks, or expression along a transcript. The wavelet basis lets
 the model share information across nearby positions while keeping the
 SuSiE per-effect prior structure intact.
 
-`fsusie()` is a thin wrapper around `mfsusie()` for the special case of
-one modality. Existing fsusieR scripts can switch by renaming
-`fsusieR::susiF` to `mfsusieR::fsusie` (the argument order matches).
+`fsusie()` is a thin wrapper around `mfsusie()` for the special case
+of one modality. The argument order is `(Y, X, pos, ...)` so the
+response comes first, mirroring how single-response models are
+typically called.
 
 ## Simulating a fixture
 
@@ -114,9 +115,3 @@ The list of class `c("mfsusie", "susie")` carries the standard SuSiE
 fields plus per-modality wavelet metadata used by `predict.mfsusie`,
 `coef.mfsusie`, and `fitted.mfsusie`.
 
-## Comparison with `fsusieR::susiF`
-
-When the same wavelet basis and prior structure are used, `fsusie()`
-matches `fsusieR::susiF()` on the structural level (same top SNP, same
-causal SNP isolated in a small CS, PIP within `0.05`). See
-[migration](migration.html) for the bit-identity carve-outs.

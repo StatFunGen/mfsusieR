@@ -1,7 +1,13 @@
 ^inst/openspec$
 ^inst/notes$
 ^\.claude$
+^\.github$
 ^\.Rbuildignore$
+^_pkgdown\.yml$
+^docs$
+^pixi\.toml$
+^pixi\.lock$
+^pkgdown$
 ^bootstrap-mfsusieR\.sh$
 ^README-SETUP\.md$
 ^tests/testthat/scripts$

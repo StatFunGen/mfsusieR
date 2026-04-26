@@ -29,6 +29,13 @@ jobs:
       - name: Setup pixi
         uses: prefix-dev/setup-pixi@v0.9.5
 
+      - name: Install susieR from GitHub master
+        # mfsusieR depends on internals (e.g. compute_marginal_bhat_shat,
+        # the S3 generic optimize_prior_variance, ibss_workhorse) that
+        # are exported on susieR master but not yet in the conda r-susier
+        # build. Override with the GitHub master tip.
+        run: pixi run -e r44 R -e 'remotes::install_github("stephenslab/susieR", upgrade = "never")'
+
       - name: Update pkgdown site
         run: pixi run -e r44 pkgdown_build
 

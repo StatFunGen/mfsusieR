@@ -81,18 +81,25 @@ abline(v = c(42, 97), lty = 2, col = "blue")
 
 ## Per-effect methylation curves
 
+`coef(fit)` returns a length-`M` list; element `m` is an `L x T_padded`
+matrix on the wavelet-remapped grid (the irregular CpG positions are
+interpolated to a regular dyadic grid before the DWT). Plot against
+`fit$mf_meta$pos[[m]]` to land on the right x-axis.
+
 ```{r effect-curves}
-B_hat <- coef(fit)[[1]]   # L x T_m
+B_hat <- coef(fit)[[1]]
+pos_remap <- fit$mf_meta$pos[[1]]
+T_pad <- ncol(B_hat)
 
 eff_df <- as.data.frame(t(B_hat))
-eff_df$cpg <- cpg_pos
-eff_long <- melt(eff_df, id.vars = "cpg",
+eff_df$pos <- pos_remap
+eff_long <- melt(eff_df, id.vars = "pos",
                  variable.name = "effect", value.name = "estimate")
 ggplot(eff_long,
-       aes(x = cpg, y = estimate, colour = effect, group = effect)) +
+       aes(x = pos, y = estimate, colour = effect, group = effect)) +
   geom_line() + geom_point() +
   geom_hline(yintercept = 0, linetype = 2) +
-  labs(x = "CpG position (bp)", y = "effect on methylation",
+  labs(x = "position (post-remap grid)", y = "effect on methylation",
        title = "Per-effect methylation curves")
 ```
 
@@ -100,8 +107,10 @@ ggplot(eff_long,
 
 ```{r predict}
 fitted_curves <- predict(fit, newx = X[1:3, ])[[1]]
-matplot(cpg_pos, t(fitted_curves), type = "b", lty = 1, pch = 16,
-        xlab = "CpG position", ylab = "predicted methylation",
+pos_remap <- fit$mf_meta$pos[[1]]
+matplot(pos_remap, t(fitted_curves), type = "b", lty = 1, pch = 16,
+        xlab = "position (post-remap grid)",
+        ylab = "predicted methylation",
         main = "Predicted profiles for three individuals")
 ```
 

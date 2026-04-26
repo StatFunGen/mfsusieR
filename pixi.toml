@@ -49,5 +49,6 @@ r45 = {features = ["r45"]}
 "r-covr" = "*"
 "r-rcmdcheck" = "*"
 "r-pkgdown" = "*"
+"r-remotes" = "*"       # for install_github("stephenslab/susieR") in CI
 "r-decor" = "*"         # required by cpp11::cpp_register() during devtools::document()
 "qpdf" = "*"

@@ -111,12 +111,11 @@ abline(h = 0, col = "grey80")
 ## Choosing `prior_variance_scope`
 
 - `"per_modality"` (used above): one mixture-of-normals prior shared
-  across all wavelet scales of a modality. Equivalent to
-  `mvf.susie.alpha::multfsusie(prior = "mixture_normal")`. Faster, more
-  appropriate when scales are exchangeable a priori.
+  across every wavelet scale of a modality. Faster; appropriate when
+  the scales are exchangeable a priori.
 - `"per_scale_modality"` (default): one mixture per (modality, scale),
-  letting different scales adapt independently. Equivalent to
-  `mvf.susie.alpha::multfsusie(prior = "mixture_normal_per_scale")`.
+  letting different scales adapt independently. More flexible at the
+  cost of a larger M-step.
 
 Switch between them by changing one argument; the rest of the API and
 the fit object structure are identical.

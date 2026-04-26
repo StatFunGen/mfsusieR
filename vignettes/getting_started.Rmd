@@ -20,12 +20,14 @@ knitr::opts_chunk$set(
 `mfsusieR` is the multi-modality, multi-functional generalisation of
 `susieR::susie()`. It exposes two public entry points:
 
-- `fsusie(Y, X, pos = NULL, ...)` for fine-mapping a **single** response.
-  `Y` may be scalar (`T = 1`, recovers `susieR::susie`) or functional
-  (`T > 1`, recovers `fsusieR::susiF`).
+- `fsusie(Y, X, pos = NULL, ...)` for fine-mapping a **single**
+  response. `Y` may be scalar (`T = 1`, recovers
+  `susieR::susie()`) or functional (`T > 1`, the single-modality
+  functional SuSiE model).
 - `mfsusie(X, Y, pos = NULL, ...)` for fine-mapping **multiple**
   responses jointly. `Y` is a list of length `M` modalities; each
-  element is a matrix `n x T_m` (with `T_m = 1` for scalar modalities).
+  element is a matrix `n x T_m` (with `T_m = 1` for scalar
+  modalities).
 
 Both functions return an object of class `c("mfsusie", "susie")` with
 the standard SuSiE fields (`alpha`, `mu`, `mu2`, `lbf`, `KL`, `sigma2`,
@@ -144,5 +146,3 @@ build. If a refactor introduces drift above `1e-10`, CI fails.
 - Multi-modality applications:
   [Multi-modality intro](mfsusie_intro.html),
   [long-running fits](mfsusie_long_running_fits.html).
-- Migration from `fsusieR` or `mvf.susie.alpha`:
-  [migration](migration.html).
