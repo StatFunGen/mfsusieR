@@ -224,25 +224,38 @@ gtex_example <- local({
   # on real GTEx genes (AHCYL1, SCD, HSP90AA1, etc.). Effects are
   # localized peaks at distinct positions along the gene body.
   shape <- function(c, w) exp(-((seq_len(T_m) - c)^2) / (2 * w^2))
+  peak_idx <- c(60L, 130L, 200L)
+  peak_w   <- c(12L,  10L,   8L)
   beta <- matrix(0, p, T_m)
-  beta[37,  ] <-  1.20 * shape(c =  60, w = 12)   # 5' peak
-  beta[112, ] <- -0.85 * shape(c = 130, w = 10)   # mid-body peak
-  beta[173, ] <-  0.95 * shape(c = 200, w =  8)   # 3' peak
+  beta[37,  ] <-  1.20 * shape(c = peak_idx[1L], w = peak_w[1L])
+  beta[112, ] <- -0.85 * shape(c = peak_idx[2L], w = peak_w[2L])
+  beta[173, ] <-  0.95 * shape(c = peak_idx[3L], w = peak_w[3L])
 
   # log1p-coverage observation model: a positive baseline count
   # plus the per-position effect, on the log1p scale.
   mean_cov <- 4 + X %*% beta
   Y <- mean_cov + matrix(rnorm(n * T_m, sd = 0.30), n)
 
-  # Simulated transcript / exon annotation for the gene-region
-  # track. Two isoforms ("AHCYL1-like.1" - canonical; ".2" -
-  # alternative-start variant skipping exon 1) over the locus,
-  # 7 exons of varying widths, plus side L1 element on the 5' end
-  # to mirror the published AHCYL1 figure layout.
-  exon_starts <- c(109990500L, 109995200L, 109999800L, 110005000L,
-                   110010000L, 110015500L, 110020500L)
-  exon_ends   <- exon_starts + c(800L, 1100L, 600L, 900L, 1200L,
-                                 700L, 1100L)
+  # Simulated transcript / exon annotation aligned with the
+  # effect peaks. Real RNA-seq coverage signal comes from
+  # transcribed (exonic) sequence, so each non-zero effect
+  # region must sit on top of an exon. Three exons are placed
+  # at the centers of the three peaks (sized to sit comfortably
+  # inside each peak's main support); two short UTR-style exons
+  # flank the gene at the 5' and 3' ends as decoration. Each
+  # peak roughly covers its exon (the peak's support extends
+  # well beyond the exon edges in both directions).
+  bp_at <- function(idx) as.integer(round(exon_pos[1L] +
+                                          (idx - 1L) * diff(range(exon_pos)) /
+                                          (T_m - 1L)))
+  peak_bp <- vapply(peak_idx, bp_at, integer(1L))
+  half_w  <- c(750L, 600L, 500L)              # half-widths in bp
+  exon_starts <- c(109990500L,
+                   peak_bp - half_w,
+                   110021000L)
+  exon_ends   <- c(109991300L,
+                   peak_bp + half_w,
+                   110021900L)
   gene_track_df <- rbind(
     data.frame(chromosome = chrom, start = exon_starts,
                end = exon_ends, strand = "+",
