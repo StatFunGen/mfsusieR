@@ -1,9 +1,9 @@
 # `mfsusie` model class.
 #
 # The model object returned by `mfsusie()` and threaded through
-# `susieR::susie_workhorse` via the per-iteration S3 dispatch. The
+# `susie_workhorse` via the per-iteration S3 dispatch. The
 # initialize method `initialize_susie_model.mf_individual` is the
-# constructor; `susieR::ibss_fit` calls it once at the start of the
+# constructor; `ibss_fit` calls it once at the start of the
 # IBSS loop with the data class (`mf_individual`) and the params
 # list.
 #
@@ -133,10 +133,8 @@ initialize_susie_model.mf_individual <- function(data, params, var_y, ...) {
 # =============================================================================
 # Per-effect getter / setter accessors on the `mfsusie` model
 #
-# Used by the IBSS loop and by user-facing inspection helpers. The
-# signatures mirror `mvsusieR/R/model_methods.R` one-to-one so the
-# susieR generic dispatch finds them once `zzz.R::.onLoad` registers
-# them on the susieR namespace.
+# Used by the IBSS loop and by user-facing inspection helpers.
+# Registered on the susieR namespace by `.onLoad`.
 # =============================================================================
 
 #' @keywords internal

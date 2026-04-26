@@ -50,7 +50,7 @@ modality. Defaults to \code{seq_len(T_m)} per modality.}
 \item{prior_variance_grid}{optional length-K vector of mixture
 variances for the scale-mixture-of-normals prior. When \code{NULL},
 the data-driven path
-(\code{susieR::compute_marginal_bhat_shat} + \code{ashr::ash}) selects the
+(\code{compute_marginal_bhat_shat} + \code{ash}) selects the
 grid per modality.}
 
 \item{prior_variance_scope}{\code{"per_scale_modality"} (default) or
@@ -116,9 +116,9 @@ the fit. Default \code{FALSE}.}
 length per modality. Default 10.}
 
 \item{wavelet_filter_number}{integer; see
-\code{wavethresh::filter.select}.}
+\code{filter.select}.}
 
-\item{wavelet_family}{character; see \code{wavethresh::wd}.}
+\item{wavelet_family}{character; see \code{wd}.}
 
 \item{control_mixsqp}{optional named list of \code{mixsqp} control
 arguments forwarded to the per-(modality, scale) M-step.}
@@ -141,7 +141,7 @@ length-\code{S_m} per-(scale, modality) residual variances.}
 \item{\code{elbo}}{numeric vector of ELBO values per iteration.}
 \item{\code{niter}, \code{converged}}{IBSS termination metadata.}
 \item{\code{pip}}{length-J posterior inclusion probabilities.}
-\item{\code{sets}}{credible sets via \code{susieR::susie_get_cs}.}
+\item{\code{sets}}{credible sets via \code{susie_get_cs}.}
 \item{\code{fitted}}{\code{list[M]} of running per-modality fits in the
 wavelet domain.}
 \item{\code{residuals}}{\code{list[M]} per-modality residuals, when

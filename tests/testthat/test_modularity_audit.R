@@ -7,8 +7,8 @@
 #    `susiF`, "original implementation", `@references_original`,
 #    or `@manuscript_ref`. Provenance lives in
 #    `inst/notes/refactor-exceptions.md` and test-file headers.
-#    Exception: `R/fsusie.R` is the documented migration wrapper
-#    and must mention `fsusieR::susiF` in its user-facing roxygen.
+#    No exemptions for `R/` source: the user-facing roxygen never
+#    mentions the legacy package names.
 #
 # 2. Forbidden private reimplementations: scan R/ for hand-rolled
 #    duplicates of work the upstream packages already do (mixsqp,
@@ -33,8 +33,7 @@ test_that("R/ source does not contain forbidden D12 strings (except R/fsusie.R)"
                  "original implementation",
                  "@references_original",
                  "@manuscript_ref")
-  exempt <- c("R/fsusie.R",   # migration wrapper mentions fsusieR::susiF intentionally
-              "R/cpp11.R")     # auto-generated bindings; not human-edited
+  exempt <- c("R/cpp11.R")   # auto-generated bindings; not human-edited
 
   bad <- list()
   for (path in R_FILES) {

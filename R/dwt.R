@@ -36,9 +36,9 @@
 #' @param pos_m numeric vector of length `T_m`, sampling positions.
 #' @param max_padded_log2 integer, log2 cap on the post-remap grid
 #'   length. Forwarded to `remap_data` and to `dwt_matrix`.
-#' @param filter_number integer, see `wavethresh::filter.select`.
+#' @param filter_number integer, see `filter.select`.
 #' @param family character, wavelet family name. See
-#'   `wavethresh::wd`.
+#'   `wd`.
 #' @param verbose logical, forwarded to `remap_data`.
 #' @return list with elements `D` (packed wavelet matrix `n x
 #'   T_padded`), `scale_index` (integer vector from
@@ -63,11 +63,11 @@ mf_dwt <- function(Y_m,
   # length-1 signal is the signal itself; we only need the
   # per-column center + sd scale (matching the functional path's
   # convention so the two paths are interchangeable at T_m = 1).
-  # The branch exists because `wavethresh::wd` does not accept
+  # The branch exists because `wd` does not accept
   # length-1 inputs.
   if (T_m == 1) {
     cm  <- mean(Y_m, na.rm = TRUE)
-    csd <- stats::sd(as.numeric(Y_m), na.rm = TRUE)
+    csd <- sd(as.numeric(Y_m), na.rm = TRUE)
     if (!is.finite(csd) || csd == 0) csd <- 1
     Y_scaled <- (Y_m - cm) / csd
     return(list(
@@ -126,7 +126,7 @@ mf_dwt <- function(Y_m,
 #' `column_center` / `column_scale` recorded by `mf_dwt`, and
 #' returns the corresponding position-space curve(s). For
 #' univariate inputs the inverse is a single multiply-add. For
-#' functional inputs, the inverse threads through `wavethresh::wr`.
+#' functional inputs, the inverse threads through `wr`.
 #'
 #' @param D_packed numeric matrix `n x T_padded` or numeric vector
 #'   of length `T_padded`. The detail coefficients occupy the
@@ -163,7 +163,7 @@ mf_invert_dwt <- function(D_packed,
 
   # Build a `wd` skeleton at the right length (filled with zeros);
   # we inject the D and C coefficients per row and call wr().
-  template <- wavethresh::wd(rep(0, T_padded),
+  template <- wd(rep(0, T_padded),
                              filter.number = filter_number,
                              family        = family,
                              min.scale     = log2(T_padded))
@@ -175,7 +175,7 @@ mf_invert_dwt <- function(D_packed,
     # wavethresh stores the C coefficients as a vector spanning all
     # scales; the coarsest (level 0) C lives at the last position.
     w$C[length(w$C)] <- D_packed[i, T_padded]
-    Y_curves[i, ] <- wavethresh::wr(w)
+    Y_curves[i, ] <- wr(w)
   }
 
   # Reverse the per-position centering and scaling.

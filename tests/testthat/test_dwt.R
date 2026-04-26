@@ -173,7 +173,7 @@ test_that("mf_dwt forwards verbose to remap_data only when interpolation is need
 
   expect_message(
     mfsusieR:::mf_dwt(Y_m, pos, max_padded_log2 = 10, verbose = TRUE),
-    "interpolation procedure used"
+    "interpolated to a regular dyadic grid"
   )
 
   Y_p2 <- matrix(rnorm(20 * 64), nrow = 20)

@@ -52,7 +52,7 @@ mf_em_likelihood_per_scale <- function(bhat_slice, shat_slice, sd_grid) {
 #' Run mixsqp at one (modality, scale)
 #'
 #' Builds the weight vector
-#' `w = (nullweight * idx_size, zeta_repeated)`, calls `mixsqp::mixsqp`,
+#' `w = (nullweight * idx_size, zeta_repeated)`, calls `mixsqp`,
 #' and collapses to exact null when more than `1 - tol_null_prior` of
 #' the mass lands on the null component.
 #'
@@ -83,7 +83,7 @@ mf_em_m_step_per_scale <- function(L, zeta, idx_size,
     if (is.null(control_mixsqp$verbose)) control_mixsqp$verbose <- FALSE
     control_mixsqp
   }
-  out <- mixsqp::mixsqp(L, w,
+  out <- mixsqp(L, w,
                         x0      = c(init_pi0_w, rep(1e-6, K - 1)),
                         log     = FALSE,
                         control = ctrl)$x

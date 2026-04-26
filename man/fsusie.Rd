@@ -2,13 +2,13 @@
 % Please edit documentation in R/fsusie.R
 \name{fsusie}
 \alias{fsusie}
-\title{Single-modality functional SuSiE (drop-in for \code{fsusieR::susiF})}
+\title{Single-modality functional SuSiE}
 \usage{
 fsusie(Y, X, pos = NULL, ...)
 }
 \arguments{
 \item{Y}{numeric matrix \verb{n x T} of functional responses on a
-regular position grid.}
+regular position grid (or numeric vector for \code{T = 1}).}
 
 \item{X}{numeric matrix \verb{n x J} of covariates.}
 
@@ -26,10 +26,10 @@ for the documented field set.
 }
 \description{
 Convenience wrapper around \code{mfsusie()} for the single-modality
-functional case (\code{M = 1}, \code{T_1 > 1}). Argument order matches
-\code{fsusieR::susiF(Y, X, ...)} so existing code can switch with a
-rename of the function. Internally \code{fsusie(Y, X, pos, ...)} is
-equivalent to \code{mfsusie(X, list(Y), list(pos), ...)}.
+case (\code{M = 1}). The response \code{Y} may be scalar (\code{T = 1},
+susieR-degenerate path) or functional (\code{T > 1}, wavelet-basis
+path). Internally \code{fsusie(Y, X, pos, ...)} is equivalent to
+\code{mfsusie(X, list(Y), list(pos), ...)}.
 }
 \details{
 Multi-modality-only arguments (e.g. \code{cross_modality_prior}) are

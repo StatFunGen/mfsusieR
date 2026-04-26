@@ -38,7 +38,7 @@ get_var_y.mf_individual <- function(data, ...) {
   lapply(seq_len(data$M), function(m) {
     indx_m <- data$scale_index[[m]]
     vapply(indx_m, function(idx) {
-      as.numeric(stats::var(as.vector(data$D[[m]][, idx, drop = FALSE])))
+      as.numeric(var(as.vector(data$D[[m]][, idx, drop = FALSE])))
     }, numeric(1))
   })
 }
@@ -65,7 +65,7 @@ initialize_fitted.mf_individual <- function(data, mat_init, ...) {
 
 #' IBSS loop initializer for `mf_individual`
 #'
-#' Mirrors `susieR::ibss_initialize.default` but skips its
+#' Mirrors `ibss_initialize.default` but skips its
 #' scalar-only validation of `params$residual_variance` (mfsusieR
 #' uses a list-of-vectors per-(scale, modality) shape) and routes
 #' through the mfsusieR S3 methods for `initialize_susie_model`,
@@ -171,7 +171,7 @@ trim_null_effects.mf_individual <- function(data, params, model) {
 # `cleanup_model`) via dispatch, so mfsusieR overrides those rather
 # than trying to register an `ibss_finalize.mf_individual` method.
 # Per-modality residual attachment happens in the public `mfsusie()`
-# wrapper after `susieR::susie_workhorse` returns.
+# wrapper after `susie_workhorse` returns.
 
 # ---- cleanup_model --------------------------------------------
 
@@ -234,19 +234,19 @@ get_intercept.mf_individual <- function(data, params, model, ...) {
   lapply(data$T_padded, function(T_m) rep(0, T_m))
 }
 
-#' Per-modality fitted values (list[M] of n x T_padded[m] matrices)
+#' Per-modality fitted values (length-M list of n x T_padded matrices)
 #' @keywords internal
 #' @noRd
 get_fitted.mf_individual <- function(data, params, model, ...) {
   model$fitted
 }
 
-#' Credible sets via `susieR::susie_get_cs` (works on alpha + X)
+#' Credible sets via `susie_get_cs` (works on alpha + X)
 #' @keywords internal
 #' @noRd
 get_cs.mf_individual <- function(data, params, model, ...) {
   if (is.null(params$coverage) || is.null(params$min_abs_corr)) return(NULL)
-  susieR::susie_get_cs(model,
+  susie_get_cs(model,
                        X            = data$X,
                        coverage     = params$coverage,
                        min_abs_corr = params$min_abs_corr,
