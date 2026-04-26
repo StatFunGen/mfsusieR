@@ -323,6 +323,97 @@ entry SHALL be blocked.
     a uniform bit-identity assertion across both regimes.
 
 
+### Cross-package audit fix-now bundle (2026-04-26)
+
+Three ledger entries from the 2026-04-26 audit. Code edits and
+math derivations are colocated in
+`inst/notes/cross-package-audit-derivations.md` and
+`inst/notes/cross-package-audit-summary.md`.
+
+- mvf.susie.alpha/R/operation_on_multfsusie_obj.R credible-band
+  formula (position-space SD via `abs(invert_dwt(sqrt(var_w)))`)
+  Behavior: the upstream credible band derives a position-space
+    standard deviation by inverse-DWT-ing the per-coefficient
+    standard deviations (square roots of the wavelet-domain
+    variances) and taking the absolute value. This treats a
+    linear combination of standard deviations as if it were the
+    standard deviation of the corresponding linear combination
+    of independent variables, which is wrong: the correct
+    identity is `Var(pos[t]) = sum_k W^T_{t,k}^2 * Var(w[k])`,
+    not `SD(pos[t]) = |sum_k W^T_{t,k} * SD(w[k])|`.
+  Decision: replaced-by-`R/utils_wavelet.R::mf_invert_variance_curve`
+    plus the call site in `R/mfsusie_methods.R::.post_smooth_scalewise`.
+    `mf_invert_variance_curve(var_w, T_basis, ...)` builds the
+    column-by-column squared inverse-DWT matrix `W_sq` and returns
+    `W_sq %*% var_w`; the position-space SD is then
+    `sqrt(mf_invert_variance_curve(var_w, ...))`. Pattern A
+    port-source-bug fix per `inst/notes/refactor-discipline.md`
+    section 3.
+  Reason: the closed-form variational posterior on a wavelet
+    basis is Gaussian per coefficient; mapping the variance
+    through `W` requires squaring each row of W, not taking
+    `|W * sqrt(var)|`. The upstream formula systematically
+    miscalibrates credible bands at positions where multiple
+    basis functions have non-trivial support (i.e., everywhere
+    except the trivial T_basis = 1 case). Audit ID B-1.1.
+
+- mvf.susie.alpha/R/EM.R:58-65 (nullweight scaled by `K_f + K_u`)
+  Behavior: upstream multiplies the user-facing `nullweight`
+    argument by `K_f + K_u` (number of functional + scalar
+    outcomes) before passing it to the per-outcome mixsqp M
+    step. mfsusieR's per-(outcome, scale) M step lives in
+    `R/individual_data_methods.R::optimize_prior_variance.mf_individual`
+    and originally consumed `params$mixsqp_null_penalty %||% 0.7`
+    unscaled.
+  Decision: scale-mfsusieR-by-M in
+    `R/individual_data_methods.R::optimize_prior_variance.mf_individual`:
+    `mixsqp_null_penalty <- (params$mixsqp_null_penalty %||% 0.7) *
+                             max(1L, data$M)`.
+  Reason: derivation in
+    `inst/notes/cross-package-audit-derivations.md` section 1.
+    With M outcomes, the joint per-effect SNP posterior alpha_l
+    concentrates by an O(M) factor in the strong-signal regime
+    (variance of joint lbf scales linearly with M, and the
+    softmax over j amplifies the relative weight of top SNPs by
+    a factor whose log scales linearly with M). The mixsqp
+    first-order condition is `LHS = lambda / (1 - pi_1)` with
+    LHS dominated by `alpha_top * G(pi_1, BF_top)`. To keep
+    the equilibrium pi_1 invariant in M, lambda must scale
+    linearly in M. mfsusieR's per-outcome M step uses the
+    same alpha as mvf.susie.alpha's joint M step (the joint
+    posterior is invariant to whether the M step is per-outcome
+    or joint), so the same M-fold scaling applies. M = 1 fits
+    are unchanged (`max(1L, 1L) = 1`); M >= 2 fits now apply
+    M-fold stronger regularization on the mixture null. Audit
+    ID C-1.3.
+
+- mvf.susie.alpha/R/ELBO_mutlfsusie.R:269-282 (entropy term `o`
+  added to the upstream ELBO)
+  Behavior: upstream adds `o = sum_l sum_j alpha_lj * log(p /
+    pmax(alpha_lj, 1e-6))` to its ELBO formula. The upstream
+    per-effect KL is computed as
+    `KL_l^{mvf} = -loglik_SFR(l) - loglik_SFR_post(l)`
+    where `loglik_SFR_post(l) = E_q[log p(Y | b_l)]` is a
+    typically large negative number; this differs in sign from
+    the susieR convention by `-2 * E_q[log p(Y | b_l)]`. The
+    `+o` term is bounded by `L * log p` and does not offset the
+    sign error, so the upstream ELBO is mathematically incorrect.
+  Decision: omit-the-o-term-in-mfsusieR. mfsusieR's
+    `R/ibss_methods.R::get_objective.mf_individual` returns
+    `Eloglik - sum(KL)` per the susieR convention. No code change
+    is needed; this entry documents the deliberate omission.
+  Reason: derivation in
+    `inst/notes/cross-package-audit-derivations.md` section 2.
+    The susieR per-effect KL formula
+    `KL_l = -lbf_l - L_null + E_q[log p(Y | b_l)]`
+    is the standard variational decomposition of
+    `KL(q(b_l) || p(b_l))` into the categorical KL plus the
+    weighted Gaussian KL. `Eloglik - sum_l KL_l` is therefore
+    the complete ELBO. The watertight check is monotone non-
+    decreasing ELBO across IBSS iterations at machine precision
+    (`tests/testthat/test_variance_and_elbo.R`, "ELBO is non-
+    decreasing post-iter-1 at machine precision"). Audit ID C-4.4.
+
 ### PR group ?? (R/adjust_covariates.R + R/em_helpers.R, 2026-04-26)
 
 - fsusieR/R/EBmvFR.R, fsusieR/R/EBmvFR_workhorse.R,

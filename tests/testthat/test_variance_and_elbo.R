@@ -427,6 +427,43 @@ test_that("update_variance_components errors on unrecognized method", {
   )
 })
 
+# ---- ELBO monotonicity at machine precision (C-4.4 watertight) --
+#
+# Derivation: inst/notes/cross-package-audit-derivations.md section 2.
+# The susieR / mfsusieR ELBO `Eloglik - sum(KL)` is the standard
+# variational decomposition. Any correctly-implemented variational EM
+# must be monotone non-decreasing across iterations. We assert this
+# at machine precision (with a small floating-point summation slack)
+# on a multi-iteration fit. Post-iter-1 only: the initial sigma2
+# (var(Y) guess) is replaced by its first closed-form update, which
+# is a one-shot non-monotone step. The audit test floor is `1e-10`,
+# four orders of magnitude tighter than the smoke test's `1e-6`.
+
+test_that("mfsusie ELBO is non-decreasing post-iter-1 at machine precision (<= 1e-10)", {
+  set.seed(mfsusier_test_seed())
+  n <- 40; J <- 10; T_per_outcome <- c(64L, 32L)
+  X <- matrix(rnorm(n * J), nrow = n)
+  beta <- numeric(J); beta[1] <- 1; beta[3] <- -0.5
+  Y <- lapply(T_per_outcome, function(T_m) {
+    eta <- X %*% beta
+    matrix(rep(eta, T_m), nrow = n) + matrix(rnorm(n * T_m, sd = 0.3), nrow = n)
+  })
+
+  fit <- mfsusie(X, Y, L = 5, max_iter = 50, verbose = FALSE)
+
+  # Need at least three iterations to make the post-iter-1 check
+  # meaningful (drop the first diff, then test the remainder).
+  expect_true(length(fit$elbo) >= 3L)
+  diffs_post1 <- diff(fit$elbo)[-1]
+  # Machine-precision tolerance with a small slack for FP summation
+  # noise. A real ELBO bug would show up as a downward step orders
+  # of magnitude larger than 1e-10.
+  expect_true(all(diffs_post1 >= -1e-10),
+              info = paste("ELBO non-monotone past iter 1:",
+                           paste(format(diffs_post1, digits = 3),
+                                 collapse = " ")))
+})
+
 # ---- loglik.mf_individual zero-pw branch ------------------------
 
 test_that("init_scale_mixture_prior_default errors on NULL groups", {

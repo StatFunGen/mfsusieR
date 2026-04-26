@@ -95,17 +95,18 @@ univariate_smash_regression <- function(Y, X, alpha = 0.05) {
 
   coeff <- stats::qnorm(1 - alpha / 2)
 
-  # Column-scale Y and X via the in-package helper, which
-  # mean-centers and sd-rescales each column and stashes the
-  # per-column scale on the result.
-  Y <- mf_col_scale(Y)
+  # Column-scale Y and X via the package helper, which mean-
+  # centers and sd-rescales each column and stashes the per-
+  # column scale on the result.
+  Y <- col_scale(Y)
   csd_Y <- attr(Y, "scaled:scale")
-  X <- mf_col_scale(X)
+  X <- col_scale(X)
   csd_X <- attr(X, "scaled:scale")
 
-  # Per-position OLS estimate of Y on X, vectorised over
-  # positions.
-  res <- mf_per_position_bhat_shat(Y, X)
+  # Per-position OLS estimate of Y on X via the susieR helper.
+  # Bhat / Shat are J x T matrices; with J = 1 the SER kernel
+  # collapses to a single-regressor path.
+  res <- compute_marginal_bhat_shat(X, Y)
   est <- as.numeric(res$Bhat[1L, ])
   sds <- as.numeric(res$Shat[1L, ])
 
@@ -134,27 +135,3 @@ univariate_smash_regression <- function(Y, X, alpha = 0.05) {
   list(effect_estimate = fitted_func, cred_band = cred_band)
 }
 
-# Mean-center and sd-rescale each column. Returns the scaled
-# matrix with `attr(., "scaled:scale")` set to the per-column
-# sd.
-mf_col_scale <- function(X) {
-  X  <- as.matrix(X)
-  cm <- colMeans(X)
-  cs <- apply(X, 2L, stats::sd)
-  cs[cs == 0] <- 1   # avoid divide-by-zero on constant columns
-  out <- sweep(sweep(X, 2L, cm, "-"), 2L, cs, "/")
-  attr(out, "scaled:center") <- cm
-  attr(out, "scaled:scale")  <- cs
-  out
-}
-
-# Per-position OLS Bhat / Shat for a single regressor X (n x 1)
-# and a multi-position response Y (n x T). Vectorised over T.
-mf_per_position_bhat_shat <- function(Y, X) {
-  n   <- nrow(Y)
-  xtx <- sum(X * X)
-  Bhat <- matrix(crossprod(X, Y) / xtx, nrow = 1L)
-  resid_var <- colSums((Y - X %*% Bhat)^2) / (n - 1L)
-  Shat <- matrix(sqrt(resid_var / xtx), nrow = 1L)
-  list(Bhat = Bhat, Shat = Shat)
-}
