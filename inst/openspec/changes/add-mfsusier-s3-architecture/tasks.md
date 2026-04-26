@@ -292,37 +292,59 @@ constructor calls the helpers, the C2 / C3 fidelity tests need both.
 
 ## 6b. Decoupled post-processing (port from fsusieR's susiF)
 
-- [ ] 6b.1 Walk
-      `fsusieR/R/operation_on_susiF_obj.R:1727-1809` line by line
-      under the D13 audit. Inventory the smoother-specific helpers
-      (`TI_regression`, `smash_regression`, `HMM_regression`) and
-      the smashr / ebnm dependencies they pull in. Decide which of
-      smashr / ebnm / Rfast become Imports of mfsusieR (add to
-      DESCRIPTION as needed).
-- [ ] 6b.2 Implement `R/post_processing.R` with
-      `mf_post_smooth(fit, method = c("smash", "TI", "HMM"), ...,
-      X = NULL, Y = NULL)` and
-      `mf_credible_bands(fit, method = "TIWT", level = 0.95, ...,
-      X = NULL, Y = NULL)`. Both functions read residuals from
-      `fit$residuals` when present; fall back to `(X, Y)` when
-      `save_residuals = FALSE`. The roxygen on each function
-      explains, in statgen-writing-style prose, why post-processing
-      is decoupled from `mfsusie()` and what the residual contract
-      is (design.md D8c).
-- [ ] 6b.3 Implement TIWT credible-band computation per manuscript
-      online_method step 6, ported from
-      `fsusieR/R/operation_on_susiF_obj.R` and audited per D13.
-- [ ] 6b.4 Test: each smoother (smash, TI, HMM) runs end-to-end on
-      the standard fixture and produces curves with the documented
-      shape; smash and TI outputs match
-      `fsusieR::susiF(..., post_processing = "smash"|"TI")`
-      followed by the equivalent mfsusieR call at tolerance
-      `<= 1e-8` (apple-to-apple, C2 with post-processing).
-- [ ] 6b.5 Test: `save_residuals = FALSE` opt-out path produces the
-      same outputs at the same tolerance when the user passes
-      `(X, Y)` to the post-processor explicitly.
-- [ ] 6b.6 Update `inst/notes/refactor-exceptions.md` with any line
-      of the smoother helpers not carried over.
+- [x] 6b.1 Walked `fsusieR/R/operation_on_susiF_obj.R` smoother
+      helpers (`univariate_TI_regression`, `univariate_HMM_regression`,
+      `fit_hmm`) and the wavelet-variance routines under D13. Ported
+      TI + HMM into `R/mfsusie_methods.R` and `R/post_smooth_hmm.R`;
+      ported the squared-filter variance helpers into
+      `R/utils_wavelet.R` (`wd_variance`, `wst_variance`,
+      `av_basis_variance`). smash / smashr / ebnm not pulled in:
+      the in-package "scalewise" soft-threshold (per-scale
+      `threshold_factor * sqrt(2 log T) * sd`) plays the smash
+      role for the v1 release; a smashr-backed variant remains as
+      an optional follow-up after Phase 5.
+- [x] 6b.2 Implemented `mf_post_smooth(fit, method =
+      c("scalewise", "TI", "HMM"), level, threshold_factor,
+      wavelet_filter, wavelet_family, halfK)` in
+      `R/mfsusie_methods.R`. `method` enum is `c("scalewise", "TI",
+      "HMM")` rather than the spec's `c("smash", "TI", "HMM")`
+      because we ship the in-package scalewise variant in v1
+      (see 6b.1). Credible bands are computed per method and
+      attached to the returned fit as `fit$credible_bands` rather
+      than via a separate `mf_credible_bands()` accessor; folding
+      both into one entry point keeps the residual / lead-X
+      contract single-sourced.
+- [x] 6b.3 TIWT credible bands implemented inline in
+      `.univariate_ti_regression` (`R/mfsusie_methods.R`) using
+      the squared-filter wavelet-variance helpers from 2.x. The
+      pointwise variance routes through `wd_variance` ->
+      `wst_variance` -> `av_basis_variance` with the default
+      `(filter_number = 10, family = "DaubLeAsymm")` to match
+      `fsusieR::univariate_TI_regression` bit-for-bit.
+- [x] 6b.4 Tests: `tests/testthat/test_post_smooth_TI.R` (TI
+      effect curve and credible band bit-for-bit vs
+      `fsusieR::univariate_TI_regression` at `tolerance = 0`),
+      `tests/testthat/test_post_smooth_HMM.R` (HMM effect /
+      lfsr / log_BF vs `fsusieR::fit_hmm` at `tolerance = 0` in
+      the contiguous-prefix regime; Pattern A non-contiguous test
+      for the `mu <- mu[idx_comp]` port-source bug fix), and
+      `tests/testthat/test_post_smooth_scalewise.R` (shape +
+      threshold-factor monotonicity + scalar-outcome handling).
+      Apple-to-apple fidelity for "smash" is not asserted because
+      the v1 default is the in-package scalewise variant.
+- [ ] 6b.5 `save_residuals = FALSE` opt-out path. Currently
+      `mfsusie()` always populates `fit$residuals` and `fit$lead_X`
+      post-IBSS (`R/mfsusie.R:235`); the opt-out and `(X, Y)`
+      passthrough are not implemented. Design call deferred to
+      Gao: the always-save path keeps the post-processor's
+      contract trivial but pays an `n * sum(T_padded)` memory
+      cost per fit; bring back the opt-out only if a real-world
+      profile shows it matters.
+- [x] 6b.6 `inst/notes/refactor-exceptions.md` records the only
+      port-source line that diverges in 6b: the HMM-mu-subset
+      regression in `fsusieR::fit_hmm` (entry "HMM-mu-subset").
+      No other lines of the smoother helpers were dropped or
+      replaced.
 
 ## 7. Public API and finalize
 
