@@ -319,20 +319,27 @@ dwt_matrix <- function(data,
 #'
 #' Returns an object with the same shape as `wd(...,
 #' type = "station")` but holding per-coefficient variances rather
-#' than means. Equivalent to running the standard decomposition
-#' with the filter's squared coefficients.
+#' than means. For a linear filter `W` and input `x` with diagonal
+#' covariance `diag(s^2)`, `Var((Wx)_j) = sum_i W_{ji}^2 s_i^2`,
+#' so applying the squared filter coefficients to the input
+#' yields the per-coefficient variance.
+#'
+#' @references
+#' Manuscript: methods/online_method.tex (TIWT section, Nason 2008
+#'   Chapter 2 reference for stationary wavelet variance).
 #' @keywords internal
 #' @noRd
 wd_variance <- function(data, filter.number = 10, family = "DaubLeAsymm") {
+  if (is.complex(data))
+    stop("`data` must be real; complex input is not supported.")
   data_length <- length(data)
   nlevels <- nlevelsWT(data)
   if (is.na(nlevels))
     stop("Data length is not a power of two")
 
-  # Variance basis-decomposition: route through the complex path
-  # with both filter slots set to the squared smoothing
-  # coefficients. The C/D variance outputs read off the real part
-  # with zero imaginary input.
+  # Route through the complex C path with both filter slots set
+  # to `H^2`. Imaginary input is zero so the C / D variance
+  # outputs read off the real part.
   base_filter <- filter.select(filter.number, family)
   H_sq <- base_filter$H^2
   filt <- list(name = base_filter$name, family = family,
@@ -390,12 +397,18 @@ wd_variance <- function(data, filter.number = 10, family = "DaubLeAsymm") {
 wst_variance <- function(wd) {
   if (wd$type != "station")
     stop("Object to convert must be of type 'station'")
-  n <- 2L^nlevelsWT(wd)
-  tmp <- wst(numeric(n),
-                         filter.number = wd$filter$filter.number,
-                         family = wd$filter$family)
-  tmp$filter <- wd$filter
-  tmp$date   <- wd$date
+  nlevels <- nlevelsWT(wd)
+  n <- 2L^nlevels
+  # Allocate the wst structure directly. `wst(numeric(n), ...)`
+  # would also work but runs a full SWT on zeros; the wp / Carray
+  # entries get overwritten by the loop below in either case.
+  tmp <- structure(list(
+    wp      = matrix(0, nrow = nlevels + 1L, ncol = n),
+    Carray  = matrix(0, nrow = nlevels + 1L, ncol = n),
+    nlevels = nlevels,
+    filter  = wd$filter,
+    date    = wd$date
+  ), class = "wst")
   arrvec <- getarrvec(nlevelsWT(wd),
                                   sort = FALSE)
   for (lev in (nlevelsWT(wd) - 1L):1L) {
