@@ -308,8 +308,9 @@ test_that("loglik / calculate_posterior_moments with K=1, no null reduce to susi
   data <- make_data()
   prior <- list(
     G_prior = lapply(seq_len(data$M), function(m) {
-      ash_record <- list(fitted_g = list(pi = 1, sd = 1, mean = 0))
-      g <- rep(list(ash_record), length(data$scale_index[[m]]))
+      g <- lapply(data$scale_index[[m]], function(idx) {
+        list(fitted_g = list(pi = 1, sd = 1, mean = 0), idx = idx)
+      })
       attr(g, "class") <- "mixture_normal_per_scale"
       g
     }),

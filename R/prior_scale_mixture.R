@@ -59,12 +59,12 @@ distribute_mixture_weights <- function(K, null_prior_weight) {
 init_scale_mixture_prior_default <- function(Y_m,
                                              X,
                                              prior_class     = "mixture_normal_per_scale",
-                                             scale_index     = NULL,
+                                             groups          = NULL,
                                              grid_multiplier = sqrt(2)) {
   prior_class <- match.arg(prior_class,
                            c("mixture_normal", "mixture_normal_per_scale"))
-  if (prior_class == "mixture_normal_per_scale" && is.null(scale_index)) {
-    stop("`scale_index` is required for prior_class = 'mixture_normal_per_scale'.")
+  if (is.null(groups)) {
+    stop("`groups` is required: a list of column-index vectors covered by each prior entry.")
   }
 
   bs <- susieR::compute_marginal_bhat_shat(X, Y_m)
@@ -86,11 +86,11 @@ init_scale_mixture_prior_default <- function(Y_m,
   K <- length(t_ash$fitted_g$pi)
   t_ash$fitted_g$pi <- c(0.8, rep(0.2 / (K - 1), K - 1))
 
-  G_prior <- if (prior_class == "mixture_normal_per_scale") {
-    rep(list(t_ash), length(scale_index))
-  } else {
-    list(t_ash)
-  }
+  G_prior <- lapply(groups, function(idx) {
+    rec <- t_ash
+    rec$idx <- idx
+    rec
+  })
   attr(G_prior, "class") <- prior_class
 
   list(G_prior = G_prior, tt = bs)
@@ -148,6 +148,20 @@ mf_prior_scale_mixture <- function(data,
   use_user_grid <- !is.null(prior_variance_grid)
 
   for (m in seq_len(M)) {
+    # Column-index groups covered by each G_prior entry. The IBSS
+    # SER kernels (loglik, calculate_posterior_moments,
+    # optimize_prior_variance) iterate `G_prior[[m]]` directly and
+    # read `G_prior[[m]][[s]]$idx` to slice (Bhat, Shat) -- so
+    # `per_modality` (1 entry covering every wavelet column) and
+    # `per_scale_modality` (S_m entries, one per wavelet scale)
+    # share a single uniform loop body. No mode-specific branching
+    # downstream.
+    groups_m <- if (prior_variance_scope == "per_scale_modality") {
+      data$scale_index[[m]]
+    } else {
+      list(unlist(data$scale_index[[m]], use.names = FALSE))
+    }
+
     if (use_user_grid) {
       # User-supplied path: same grid replicated per modality (and
       # per scale when scope = per_scale_modality). No ash fit; the
@@ -158,46 +172,33 @@ mf_prior_scale_mixture <- function(data,
       pi_kvec     <- distribute_mixture_weights(K, null_prior_weight)
 
       sd_grid <- c(0, sqrt(prior_variance_grid))    # null + non-null sds
-      ash_record <- list(
-        fitted_g = list(pi = pi_kvec, sd = sd_grid, mean = rep(0, K + 1))
-      )
-      G_prior_per_modality[[m]] <-
-        if (prior_class == "mixture_normal_per_scale") {
-          rep(list(ash_record), length(data$scale_index[[m]]))
-        } else {
-          list(ash_record)
-        }
+      G_prior_per_modality[[m]] <- lapply(groups_m, function(idx) {
+        list(
+          fitted_g = list(pi = pi_kvec, sd = sd_grid, mean = rep(0, K + 1)),
+          idx      = idx
+        )
+      })
       attr(G_prior_per_modality[[m]], "class") <- prior_class
-
-      if (prior_variance_scope == "per_scale_modality") {
-        S_m <- length(data$scale_index[[m]])
-        pi_weights[[m]] <- matrix(pi_kvec, nrow = S_m, ncol = K + 1,
-                                  byrow = TRUE)
-      } else {
-        pi_weights[[m]] <- matrix(pi_kvec, nrow = 1, ncol = K + 1)
-      }
+      pi_weights[[m]] <- matrix(pi_kvec, nrow = length(groups_m),
+                                ncol = K + 1, byrow = TRUE)
     } else {
-      # Data-driven path: susieR helper -> ashr::ash.
+      # Data-driven path: susieR helper -> ashr::ash. Helper
+      # returns one G_prior entry per group, with `$idx` attached.
       out <- init_scale_mixture_prior_default(
         Y_m             = data$D[[m]],
         X               = X,
         prior_class     = prior_class,
-        scale_index     = data$scale_index[[m]],
+        groups          = groups_m,
         grid_multiplier = grid_multiplier
       )
       G_prior_per_modality[[m]] <- out$G_prior
+
       sd_grid <- out$G_prior[[1]]$fitted_g$sd
       V_grid[[m]] <- sd_grid^2
       K_total <- length(sd_grid)
       pi_kvec <- out$G_prior[[1]]$fitted_g$pi
-
-      if (prior_variance_scope == "per_scale_modality") {
-        S_m <- length(data$scale_index[[m]])
-        pi_weights[[m]] <- matrix(pi_kvec, nrow = S_m, ncol = K_total,
-                                  byrow = TRUE)
-      } else {
-        pi_weights[[m]] <- matrix(pi_kvec, nrow = 1, ncol = K_total)
-      }
+      pi_weights[[m]] <- matrix(pi_kvec, nrow = length(groups_m),
+                                ncol = K_total, byrow = TRUE)
     }
   }
 
