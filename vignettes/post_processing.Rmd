@@ -37,9 +37,13 @@ resulting fit gains two slots:
 - `fit$credible_bands[[m]][[l]]` — `T_basis x 2` matrix
   `[lower, upper]`.
 
-`fsusie_plot()` and `mfsusie_plot()` automatically draw the smoothed
-curves + bands when those slots are populated; otherwise they fall
-back to the raw inverse-DWT curves.
+`mfsusie_plot()` automatically draws the smoothed curves and
+credible bands when those slots are populated; otherwise it falls
+back to the raw inverse-DWT curves. After `method = "HMM"`
+smoothing the per-position lfsr curves are also overlaid on a
+secondary axis with a threshold line at `lfsr_threshold = 0.05`.
+Affected regions (where each CS's credible band excludes zero)
+are marked with thick bars at the bottom of each effect panel.
 
 ## A small example
 
@@ -69,13 +73,13 @@ fit <- fsusie(Y, X, pos = positions, L = 3, verbose = FALSE)
 
 ## Before smoothing
 
-`fsusie_plot()` on the unsmoothed fit shows curves recovered by
-`coef()` (raw inverse DWT). They track the true bell-shape but the
-fine wavelet scales add visible jitter, and there are no credible
-bands.
+`mfsusie_plot()` on the unsmoothed fit shows curves recovered from
+`coef()` (raw inverse DWT). They track the true bell shape, but
+the fine wavelet scales add visible jitter, and the fit returns
+no credible bands by default.
 
 ```{r before, fig.cap = "Raw effect curves (no smoothing). Top: PIPs. Bottom: per-effect inverse-DWT curve."}
-fsusie_plot(fit)
+mfsusie_plot(fit)
 ```
 
 ## After smoothing
@@ -88,27 +92,39 @@ The same plot call now uses the smoothed curves and adds 95% pointwise
 credible bands as transparent ribbons:
 
 ```{r after, fig.cap = "After mf_post_smooth(): TIWT-smoothed curves with 95% pointwise credible bands."}
-fsusie_plot(fit_s)
+mfsusie_plot(fit_s)
 ```
 
 The shape is preserved, fine-scale jitter is suppressed, and the
 ribbon makes it obvious where the curve is significantly different
 from zero (band excludes 0).
 
-## Tuning the smoother
+## Choosing a smoother
 
-`mf_post_smooth()` exposes two knobs:
+`mf_post_smooth(method = ...)` supports three methods:
 
-- `level` — credible-band coverage. Default `0.95`. Drop to `0.90`
-  for narrower bands; raise to `0.99` for wider.
-- `threshold_factor` — multiplier on the universal SureShrink
-  threshold `sigma * sqrt(2 log T)`. `1` is standard. Smaller values
-  keep more fine-scale wavelet energy (less smoothing); larger
-  values smooth more aggressively.
+- `"scalewise"` (default) — per-scale soft-thresholding of the
+  wavelet posterior mean at `threshold_factor * sd_s * sqrt(2 log T)`,
+  followed by inverse DWT. Cheapest, no extra dependencies. Lowers
+  fine-scale jitter while preserving the overall shape.
+- `"TI"` — translation-invariant wavelet denoising via cycle
+  spinning. Bit-identical to `fsusieR::univariate_TI_regression`
+  on the orthonormal wavelet path. Best when the per-position
+  band is the visual focus.
+- `"HMM"` — hidden Markov model on per-position regression
+  estimates with `ashr` mixture refinement. Adds a per-position
+  local false sign rate (`lfsr_curves`); `mfsusie_plot()` overlays
+  it on a secondary axis with the threshold line.
 
-```{r tuning, fig.cap = "Same fit smoothed with threshold_factor = 0.5 (less smoothing)."}
-fit_light <- mf_post_smooth(fit, threshold_factor = 0.5)
-fsusie_plot(fit_light)
+```{r tuning-scalewise, fig.cap = "scalewise with threshold_factor = 0.5 (less aggressive shrinkage)."}
+fit_light <- mf_post_smooth(fit, method = "scalewise",
+                            threshold_factor = 0.5)
+mfsusie_plot(fit_light)
+```
+
+```{r tuning-hmm, fig.cap = "HMM smoother. Dashed lines on the secondary axis are the per-position lfsr; the dotted reference line is at lfsr = 0.05."}
+fit_hmm <- mf_post_smooth(fit, method = "HMM")
+mfsusie_plot(fit_hmm)
 ```
 
 ## Multi-outcome usage
@@ -120,46 +136,50 @@ populated for every functional outcome. Scalar outcomes
 band derived from the wavelet posterior SD.
 
 ```{r mfsusie}
+# Two functional outcomes at different sampling resolutions
+# (T = 64 and T = 32). Same two causal variables, different
+# per-outcome bell shapes.
 T_per <- c(64L, 32L)
-Y_list <- lapply(T_per, function(T_m) {
-  X %*% matrix(rep(beta[, 1] * 0 + 0.6 * shape[seq_len(T_m)], p),
-               nrow = p, byrow = TRUE) +
-    matrix(rnorm(n * T_m, sd = 0.4), n)
-})
-# Make beta non-trivial again per outcome.
-Y_list[[1]] <- X %*% beta + matrix(rnorm(n * T_m, sd = 0.5), n)
-beta2 <- matrix(0, p, 32L)
-beta2[42, ] <- 1.0 * exp(-((seq_len(32) - 16)^2) / (2 * 4^2))
-Y_list[[2]] <- X %*% beta2 + matrix(rnorm(n * 32L, sd = 0.4), n)
+shape64 <- exp(-((seq_len(64) - 32)^2) / (2 * 8^2))
+shape32 <- exp(-((seq_len(32) - 16)^2) / (2 * 4^2))
+beta1 <- matrix(0, p, 64L); beta1[42, ] <- 1.5 * shape64
+                            beta1[97, ] <- -1.0 * shape64
+beta2 <- matrix(0, p, 32L); beta2[42, ] <- 1.0 * shape32
+                            beta2[97, ] <- -0.6 * shape32
+Y_list <- list(
+  X %*% beta1 + matrix(rnorm(n * 64, sd = 0.5), n),
+  X %*% beta2 + matrix(rnorm(n * 32, sd = 0.4), n)
+)
 
-fit_m <- mfsusie(X, Y_list, L = 3, verbose = FALSE)
-fit_m_s <- mf_post_smooth(fit_m)
+fit_m   <- mfsusie(X, Y_list, L = 3, verbose = FALSE)
+fit_m_s <- mf_post_smooth(fit_m, method = "TI",
+                          wavelet_filter = 1L,
+                          wavelet_family = "DaubExPhase")
 ```
 
-```{r mfsusie-plot, fig.cap = "Multi-outcome fit, smoothed. Top-left: PIPs across all outcomes. Other panels: per-outcome smoothed effect curves with 95% credible bands."}
+```{r mfsusie-plot, fig.width = 8, fig.height = 6, fig.cap = "Multi-outcome fit, TI-smoothed. Top-left: PIPs across both outcomes. Other panels: per-outcome smoothed effect curves with 95% credible bands."}
 mfsusie_plot(fit_m_s)
 ```
 
 ## Method
 
-The current `method = "tiwt"` performs scalewise soft-thresholding
-of the wavelet posterior mean:
+Each method takes the per-effect wavelet-domain posterior
+`(mean_w, var_w) = (alpha[l, ] %*% mu[[l]][[m]],
+alpha[l, ] %*% mu2[[l]][[m]] - mean_w^2)` and produces a smoothed
+position-space curve plus a pointwise credible band:
 
-1. For each effect `l` and outcome `m`, compute the wavelet-domain
-   posterior mean `mean_w = alpha[l, ] %*% mu[[l]][[m]]` and the
-   posterior second moment via `mu2`. The pointwise variance is
-   `var_w = alpha[l, ] %*% mu2[[l]][[m]] - mean_w^2`.
-2. Per wavelet scale `s`, soft-threshold `mean_w[scale_index[[s]]]`
-   at `factor * sd_s * sqrt(2 log T)`, where `sd_s` is the mean
-   posterior SD on that scale.
-3. Invert the thresholded coefficients via `mf_invert_dwt()` to
-   obtain the smoothed position-space curve.
-4. Compute the pointwise SD by inverting `sqrt(var_w)` (Parseval
-   approximation on the orthonormal basis) and form the credible
-   band as `mean_pos +/- z(level) * sd_pos`.
-
-This is a v1 smoother. Cycle-spinning translation-invariant
-denoising (the full TI estimator from the fSuSiE paper) and
-empirical-Bayes wavelet shrinkage (`smashr`) are planned
-extensions; both will be exposed via the same
-`method = "..."` argument when added.
+- `"scalewise"` — soft-threshold `mean_w[scale_index[[s]]]` per
+  wavelet scale `s` at `threshold_factor * sd_s * sqrt(2 log T)`,
+  then invert via `mf_invert_dwt()`. The pointwise SD inverts
+  `sqrt(var_w)` (Parseval on the orthonormal basis) and the band
+  is `mean_pos +/- z(level) * sd_pos`.
+- `"TI"` — cycle spinning: at every shift, run a stationary DWT
+  with squared filter coefficients to compute pointwise variance,
+  apply ash to the wavelet coefficients per scale, and average
+  the inverse reconstructions across shifts. Credible bands come
+  from the average-of-basis variance kernel.
+- `"HMM"` — discrete-state hidden Markov model on per-position
+  regression estimates with hub-and-spoke transitions and ash
+  refinement at each EM iteration. The smoothed curve is the
+  posterior mean; the band uses `abs(eff) / qnorm(1 - lfsr)` as
+  a pointwise SD.

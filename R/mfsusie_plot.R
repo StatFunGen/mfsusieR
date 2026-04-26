@@ -60,6 +60,30 @@ mf_cs_colors <- function(n_cs) {
   fit$credible_bands[[m]][[l]]
 }
 
+# Optional lfsr curve: numeric vector of length T or NULL. Populated
+# by `mf_post_smooth(method = "HMM")`.
+.lfsr_curve <- function(fit, l, m) {
+  if (is.null(fit$lfsr_curves) ||
+      is.null(fit$lfsr_curves[[m]]) ||
+      is.null(fit$lfsr_curves[[m]][[l]])) {
+    return(NULL)
+  }
+  fit$lfsr_curves[[m]][[l]]
+}
+
+# Contiguous (start, end) runs where the credible band excludes
+# zero. Returns a list of integer index pairs into `pos`.
+.affected_runs <- function(band) {
+  if (is.null(band)) return(list())
+  flag <- band[, 1L] > 0 | band[, 2L] < 0
+  if (!any(flag)) return(list())
+  rle_f <- rle(flag)
+  ends   <- cumsum(rle_f$lengths)
+  starts <- ends - rle_f$lengths + 1L
+  on <- which(rle_f$values)
+  lapply(on, function(i) c(starts[i], ends[i]))
+}
+
 # Internal: PIP panel.
 .draw_pip <- function(fit, pos = NULL, main = "PIP",
                       xlab = "variable", ylab = "PIP",
@@ -82,7 +106,10 @@ mf_cs_colors <- function(n_cs) {
 # Internal: effect-curve panel for one outcome.
 .draw_effect <- function(fit, m, pos = NULL, main = NULL,
                          show_grid_dots = FALSE, lwd = 1.5,
-                         add_legend = TRUE) {
+                         add_legend = TRUE,
+                         show_lfsr = TRUE,
+                         show_affected_region = TRUE,
+                         lfsr_threshold = 0.05) {
   T_basis <- fit$dwt_meta$T_basis[m]
   if (is.null(pos)) pos <- fit$dwt_meta$pos[[m]]
   if (is.null(main)) {
@@ -115,6 +142,9 @@ mf_cs_colors <- function(n_cs) {
 
   curves <- lapply(cs_l, function(l) .effect_curve(fit, l, m))
   bands  <- lapply(cs_l, function(l) .credible_band(fit, l, m))
+  lfsrs  <- lapply(cs_l, function(l) .lfsr_curve(fit, l, m))
+  has_lfsr <- show_lfsr && any(!vapply(lfsrs, is.null, logical(1)))
+
   yrange <- range(unlist(curves), unlist(lapply(bands, c)), 0,
                   na.rm = TRUE)
   plot(NA, xlim = range(pos), ylim = yrange,
@@ -135,6 +165,44 @@ mf_cs_colors <- function(n_cs) {
              bg = "white", cex = 0.6)
     }
   }
+
+  # Affected regions: thick black bars at the bottom of the panel
+  # marking where each CS's credible band excludes zero.
+  if (show_affected_region) {
+    bar_y    <- yrange[1L]
+    bar_step <- 0.025 * diff(yrange)
+    for (i in seq_along(cs_l)) {
+      runs <- .affected_runs(bands[[i]])
+      if (length(runs) == 0L) next
+      y_i <- bar_y + (i - 1L) * bar_step
+      for (rg in runs) {
+        segments(pos[rg[1L]], y_i, pos[rg[2L]], y_i,
+                 col = pal[i], lwd = 3, lend = "butt")
+      }
+    }
+  }
+
+  # lfsr curves on a secondary axis. Drawn on a separate y-scale
+  # `[0, 1]` overlaid with `par(new = TRUE)`. Threshold line at
+  # `lfsr_threshold` flags positions where the local false sign
+  # rate clears the cutoff.
+  if (has_lfsr) {
+    op2 <- par(new = TRUE)
+    on.exit(par(op2), add = TRUE)
+    plot(NA, xlim = range(pos), ylim = c(0, 1),
+         axes = FALSE, xlab = "", ylab = "")
+    axis(4, at = c(0, lfsr_threshold, 0.5, 1),
+         labels = c("0", sprintf("%.2f", lfsr_threshold), "0.5", "1"),
+         las = 1, cex.axis = 0.7, col = "grey50",
+         col.axis = "grey30")
+    mtext("lfsr", side = 4, line = 2, cex = 0.7, col = "grey30")
+    abline(h = lfsr_threshold, lty = 3, col = "grey50")
+    for (i in seq_along(cs_l)) {
+      if (is.null(lfsrs[[i]])) next
+      lines(pos, lfsrs[[i]], col = pal[i], lwd = 0.8, lty = 2)
+    }
+  }
+
   if (add_legend) {
     legend("topright", legend = paste0("CS", seq_along(cs_l)),
            col = pal, lwd = lwd, bty = "n", cex = 0.75)
@@ -152,8 +220,12 @@ mf_cs_colors <- function(n_cs) {
 #' Effect curves come from `fit$effect_curves` when post-processed
 #' smoothing has been applied (see `mf_post_smooth()`); otherwise
 #' from the wavelet-domain inverse via `coef()`. Pointwise credible
-#' bands are drawn as transparent ribbons when
-#' `fit$credible_bands` is populated.
+#' bands are drawn as transparent ribbons when `fit$credible_bands`
+#' is populated. After `mf_post_smooth(method = "HMM")` the
+#' per-position lfsr curves are overlaid on a secondary axis with a
+#' threshold line at `lfsr_threshold`. Affected regions (where each
+#' CS's credible band excludes zero) are marked with thick bars at
+#' the bottom of each effect panel.
 #'
 #' For the PIP plot only, see also `susie_plot(fit, y = "PIP")`
 #' (re-exported from susieR), which is the standard SuSiE-family
@@ -166,6 +238,13 @@ mf_cs_colors <- function(n_cs) {
 #' @param pos optional length-p vector for the PIP x-axis.
 #' @param show_grid_dots logical, draw circles at each post-remap
 #'   grid point on top of the curves. Default `FALSE`.
+#' @param show_lfsr logical, overlay HMM lfsr curves on a secondary
+#'   axis when `fit$lfsr_curves` is populated. Default `TRUE`.
+#' @param show_affected_region logical, mark contiguous segments
+#'   where each CS's credible band excludes zero with thick bars
+#'   at the bottom of the effect panel. Default `TRUE`.
+#' @param lfsr_threshold numeric, dashed reference line on the lfsr
+#'   secondary axis. Default `0.05`.
 #' @param lwd numeric, curve line width. Default `1.5`.
 #' @param add_legend logical, show CS legend on each panel.
 #'   Default `TRUE`.
@@ -173,30 +252,42 @@ mf_cs_colors <- function(n_cs) {
 #' @return Called for side effect; returns `invisible(NULL)`.
 #' @export
 mfsusie_plot <- function(fit, m = NULL, pos = NULL,
-                         show_grid_dots = FALSE, lwd = 1.5,
-                         add_legend = TRUE, ...) {
+                         show_grid_dots       = FALSE,
+                         show_lfsr            = TRUE,
+                         show_affected_region = TRUE,
+                         lfsr_threshold       = 0.05,
+                         lwd                  = 1.5,
+                         add_legend           = TRUE, ...) {
   if (!inherits(fit, "mfsusie")) {
     stop("`fit` must be an `mfsusie` (or `fsusie`) fit object.")
   }
   M <- length(fit$dwt_meta$T_basis)
 
+  draw_one_effect <- function(mi) {
+    .draw_effect(fit, m = mi,
+                 show_grid_dots       = show_grid_dots,
+                 lwd                  = lwd,
+                 add_legend           = add_legend,
+                 show_lfsr            = show_lfsr,
+                 show_affected_region = show_affected_region,
+                 lfsr_threshold       = lfsr_threshold)
+  }
+
   # Single-outcome focus: just one effect panel.
   if (!is.null(m)) {
     if (m < 1L || m > M) stop(sprintf("`m` must be in 1..%d.", M))
-    op <- par(mar = c(4, 4, 2.5, 1))
+    op <- par(mar = c(4, 4, 2.5, 4))
     on.exit(par(op), add = TRUE)
-    .draw_effect(fit, m = m, show_grid_dots = show_grid_dots,
-                 lwd = lwd, add_legend = add_legend)
+    draw_one_effect(m)
     return(invisible(NULL))
   }
 
   # M = 1: simple 2-panel column.
   if (M == 1L) {
-    op <- par(mfrow = c(2L, 1L), mar = c(4, 4, 2.5, 1))
+    op <- par(mfrow = c(2L, 1L), mar = c(4, 4, 2.5, 4))
     on.exit(par(op), add = TRUE)
     .draw_pip(fit, pos = pos, add_legend = add_legend)
-    .draw_effect(fit, m = 1L, show_grid_dots = show_grid_dots,
-                 lwd = lwd, add_legend = add_legend)
+    draw_one_effect(1L)
     return(invisible(NULL))
   }
 
@@ -204,14 +295,11 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
   n_panels <- M + 1L
   cols     <- ceiling(sqrt(n_panels))
   rows     <- ceiling(n_panels / cols)
-  op <- par(mfrow = c(rows, cols), mar = c(4, 4, 2.5, 1))
+  op <- par(mfrow = c(rows, cols), mar = c(4, 4, 2.5, 4))
   on.exit(par(op), add = TRUE)
 
   .draw_pip(fit, pos = pos, add_legend = add_legend)
-  for (mi in seq_len(M)) {
-    .draw_effect(fit, m = mi, show_grid_dots = show_grid_dots,
-                 lwd = lwd, add_legend = add_legend)
-  }
+  for (mi in seq_len(M)) draw_one_effect(mi)
   remaining <- rows * cols - n_panels
   if (remaining > 0L) {
     for (i in seq_len(remaining)) plot.new()
