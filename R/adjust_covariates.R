@@ -215,7 +215,7 @@ mf_residualize_wavelet_eb <- function(Y, Z, X = NULL,
                         filter_number = wavelet_filter_number,
                         family        = wavelet_family,
                         max_scale     = log2(T_pos))
-  Y_wd    <- cbind(W$D, W$C)        # n x T_padded
+  Y_wd    <- cbind(W$D, W$C)        # n x T_basis
   T_pad   <- ncol(Y_wd)             # equals T_pos
   lev_res <- log2(T_pad)
   indx_lst <- gen_wavelet_indx(lev_res)

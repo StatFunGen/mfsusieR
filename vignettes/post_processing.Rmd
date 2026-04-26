@@ -101,30 +101,41 @@ the ribbon marks the positions where the band excludes zero.
 
 ## Choosing a smoother
 
-`mf_post_smooth(method = ...)` supports three methods:
+`mf_post_smooth(method = ...)` supports four methods:
 
-- `"scalewise"` (default) — per-scale soft-thresholding of the
-  wavelet posterior mean at `threshold_factor * sd_s * sqrt(2 log T)`,
-  followed by inverse DWT. Cheapest, no extra dependencies. Lowers
-  fine-scale jitter while preserving the overall shape.
-- `"TI"` — translation-invariant wavelet denoising via cycle
-  spinning. Bit-identical to `fsusieR::univariate_TI_regression`
-  on the orthonormal wavelet path. Best when the per-position
-  band is the visual focus.
+- `"TI"` (default) — translation-invariant wavelet denoising via
+  cycle spinning. Bit-identical to
+  `fsusieR::univariate_TI_regression` on the orthonormal wavelet
+  path. Best when the per-position band is the visual focus.
+- `"scalewise"` — per-scale soft-thresholding of the
+  wavelet posterior mean at
+  `threshold_factor * sd_s * sqrt(2 log T)`, followed by inverse
+  DWT. Cheapest, no extra dependencies. Lowers fine-scale
+  jitter while preserving the overall shape.
 - `"HMM"` — hidden Markov model on per-position regression
   estimates with `ashr` mixture refinement. Adds a per-position
-  local false sign rate (`lfsr_curves`); `mfsusie_plot()` overlays
-  it on a secondary axis with the threshold line.
+  local false sign rate (`lfsr_curves`); `mfsusie_plot()`
+  overlays it on a secondary axis with the threshold line.
+- `"smash"` — `smashr::smash.gaus` empirical-Bayes wavelet
+  shrinkage on the per-position regression estimate. Bit-
+  identical to `fsusieR::univariate_smash_regression` on the
+  same isolated response. Requires the `smashr` package
+  (Suggests).
 
 ```{r tuning-scalewise}
-fit_light <- mf_post_smooth(fit, method = "scalewise",
-                            threshold_factor = 0.5)
-mfsusie_plot(fit_light)
+fit_scalewise <- mf_post_smooth(fit, method = "scalewise",
+                                threshold_factor = 0.5)
+mfsusie_plot(fit_scalewise)
 ```
 
 ```{r tuning-hmm}
 fit_hmm <- mf_post_smooth(fit, method = "HMM")
 mfsusie_plot(fit_hmm)
+```
+
+```{r tuning-smash, eval = requireNamespace("smashr", quietly = TRUE)}
+fit_smash <- mf_post_smooth(fit, method = "smash")
+mfsusie_plot(fit_smash)
 ```
 
 ## Multi-outcome usage
@@ -168,18 +179,24 @@ Each method takes the per-effect wavelet-domain posterior
 alpha[l, ] %*% mu2[[l]][[m]] - mean_w^2)` and produces a smoothed
 position-space curve plus a pointwise credible band:
 
-- `"scalewise"` — soft-threshold `mean_w[scale_index[[s]]]` per
-  wavelet scale `s` at `threshold_factor * sd_s * sqrt(2 log T)`,
-  then invert via `mf_invert_dwt()`. The pointwise SD inverts
-  `sqrt(var_w)` (Parseval on the orthonormal basis) and the band
-  is `mean_pos +/- z(level) * sd_pos`.
 - `"TI"` — cycle spinning: at every shift, run a stationary DWT
   with squared filter coefficients to compute pointwise variance,
   apply ash to the wavelet coefficients per scale, and average
   the inverse reconstructions across shifts. Credible bands come
   from the average-of-basis variance kernel.
+- `"scalewise"` — soft-threshold `mean_w[scale_index[[s]]]` per
+  wavelet scale `s` at `threshold_factor * sd_s * sqrt(2 log T)`,
+  then invert via `mf_invert_dwt()`. The pointwise variance is
+  the position-space variance from the wavelet posterior:
+  `Var(pos[t]) = sum_k W^T_{tk}^2 * var_w[k]` where `W^T` is
+  the inverse-DWT matrix. The band is `mean_pos +/- z(level)
+  * sqrt(Var(pos))`.
 - `"HMM"` — discrete-state hidden Markov model on per-position
   regression estimates with hub-and-spoke transitions and ash
   refinement at each EM iteration. The smoothed curve is the
   posterior mean; the band uses `abs(eff) / qnorm(1 - lfsr)` as
   a pointwise SD.
+- `"smash"` — `smashr::smash.gaus` empirical-Bayes wavelet
+  shrinkage on the per-position regression estimate of the
+  effect against the lead variable. The credible band uses
+  `smash`'s `post.var = TRUE` posterior variance.

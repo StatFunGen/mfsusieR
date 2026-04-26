@@ -518,3 +518,57 @@ av_basis_variance <- function(wst) {
     stop("comAB_WRAP returned error code ", out$error)
   out$answerR
 }
+
+
+#' Position-space variance from coefficient-space variance
+#'
+#' For an orthonormal Daubechies wavelet inverse DWT, the
+#' position-space curve is `f = W^T %*% w` where `W^T` is the
+#' inverse-DWT linear operator. If `w` has diagonal covariance
+#' `diag(var_w)`, the per-position variance is
+#' `Var(f_t) = sum_k (W^T)_{t,k}^2 * var_w[k]`. The function
+#' returns this length-`T` vector by building the squared
+#' inverse-DWT matrix column-by-column via
+#' `mf_invert_dwt(e_k)` and applying it to `var_w`.
+#'
+#' Used by `.post_smooth_scalewise` to compute pointwise
+#' credible bands. The previous implementation,
+#' `(mf_invert_dwt(sqrt(var_w)))^2`, is the absolute value of
+#' the linear combination of per-scale standard deviations and
+#' is mathematically incorrect: the inverse DWT is linear, so
+#' applying it to `sqrt(var_w)` cannot recover the position-
+#' space variance unless every wavelet basis function is
+#' supported on a single position.
+#'
+#' @param var_w length-`T_basis` numeric vector of coefficient-
+#'   space variances (one per packed wavelet entry).
+#' @param T_basis power of two; length of the wavelet basis.
+#' @param filter_number wavelet filter number (Daubechies).
+#' @param family character, wavelet family.
+#' @return numeric vector of length `T_basis`, the position-
+#'   space variance.
+#' @keywords internal
+#' @noRd
+mf_invert_variance_curve <- function(var_w,
+                                     T_basis,
+                                     filter_number = 10L,
+                                     family        = "DaubLeAsymm") {
+  if (length(var_w) != T_basis) {
+    stop(sprintf("var_w has length %d but T_basis = %d.",
+                 length(var_w), T_basis))
+  }
+  if (T_basis == 1L) return(var_w)
+
+  # Build squared inverse-DWT matrix column-by-column.
+  W_sq <- matrix(0, nrow = T_basis, ncol = T_basis)
+  for (k in seq_len(T_basis)) {
+    e_k <- numeric(T_basis); e_k[k] <- 1
+    inv_k <- mf_invert_dwt(matrix(e_k, nrow = 1L),
+                           column_center = rep(0, T_basis),
+                           column_scale  = rep(1, T_basis),
+                           filter_number = filter_number,
+                           family        = family)
+    W_sq[, k] <- as.numeric(inv_k)^2
+  }
+  as.numeric(W_sq %*% var_w)
+}
