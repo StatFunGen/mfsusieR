@@ -152,3 +152,44 @@
 #' mfsusie_plot(fit_s)
 #' }
 "gtex_example"
+
+
+#' Fitted mfsusie objects for the practical_data_applications vignette
+#'
+#' Five fits on the same simulated dataset (`n = 40`, `p = 25`,
+#' `M = 2`, `T_m = 32`, signal SNP at index 7), one per
+#' configuration shown in
+#' `vignette("practical_data_applications")`. The simulated
+#' dataset is shaped after a chromatin-accessibility scQTL panel
+#' by Anjing Liu and William Denault (Wang group). The
+#' underlying ATAC-seq genotype and read-count data are not
+#' redistributable; this dataset ships fitted-model summaries
+#' only, no individual-level inputs.
+#'
+#' @format A list with components
+#' \describe{
+#'   \item{`n`, `p`, `M`, `T_m`, `signal_snp`}{simulation metadata.}
+#'   \item{`cell_types`}{character vector of length `M` naming the
+#'     two simulated cell types.}
+#'   \item{`default`}{`mfsusie` fit with all defaults (Wakefield
+#'     Normal marginal Bayes factor).}
+#'   \item{`johnson`}{`mfsusie` fit with
+#'     `small_sample_correction = TRUE` (Johnson-t marginal).}
+#'   \item{`lowcount`}{`mfsusie` fit with `low_count_filter = 0.02`.}
+#'   \item{`qn`}{`mfsusie` fit with `quantile_norm = TRUE`.}
+#'   \item{`combined`}{`mfsusie` fit with all three corrections
+#'     enabled.}
+#' }
+#'
+#' Each fit is stripped of `residuals`, `XtY`, `tracking`, and any
+#' raw `X`/`Y` matrices to keep the package size small and avoid
+#' shipping individual-level data.
+#'
+#' @source Simulated. See `data-raw/make_practical_dataset.R`.
+#' @keywords datasets
+#' @examples
+#' \donttest{
+#' data(practical_fits)
+#' practical_fits$default$pip[practical_fits$signal_snp]
+#' }
+"practical_fits"
