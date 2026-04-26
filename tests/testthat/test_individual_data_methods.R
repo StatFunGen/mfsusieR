@@ -166,9 +166,9 @@ test_that("update_fitted_values reconstructs fitted = fitted_without_l + Xb_l", 
   out <- mfsusieR:::update_fitted_values.mf_individual(data, NULL, model, 1)
 
   for (m in seq_len(data$M)) {
-    b_l_m <- (1 / data$p) * matrix(0.5, nrow = data$p, ncol = data$T_padded[m])
-    Xb_l_m <- data$X %*% b_l_m
-    expected <- out$fitted_without_l[[m]] + Xb_l_m
+    b_lm <- (1 / data$p) * matrix(0.5, nrow = data$p, ncol = data$T_padded[m])
+    Xb_lm <- data$X %*% b_lm
+    expected <- out$fitted_without_l[[m]] + Xb_lm
     expect_equal(out$fitted[[m]], expected, tolerance = 1e-12)
   }
 })

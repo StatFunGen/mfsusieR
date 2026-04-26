@@ -16,7 +16,7 @@
 #' Per-effect partial residual on `mf_individual`
 #'
 #' For each modality m, computes the contribution of effect `l`
-#' to the running fit `Xb_l_m = X %*% (alpha_l * mu_l[[m]])`,
+#' to the running fit `Xb_lm = X %*% (alpha_l * mu_l[[m]])`,
 #' removes it from `model$fitted[[m]]` to obtain the without-l
 #' fit, and subtracts that from the wavelet matrix `data$D[[m]]`
 #' to get the residual. Caches `XtR_m = X^T R_m` per modality on
@@ -36,15 +36,15 @@ compute_residuals.mf_individual <- function(data, params, model, l, ...) {
   alpha_l <- model$alpha[l, ]
   for (m in seq_len(M)) {
     # alpha_l . mu_l[[m]] is p x T_padded[m]; X is n x p. Xb is n x T_padded[m].
-    b_l_m  <- alpha_l * model$mu[[l]][[m]]
-    Xb_l_m <- X %*% b_l_m
+    b_lm  <- alpha_l * model$mu[[l]][[m]]
+    Xb_lm <- X %*% b_lm
 
-    Xr_without_l_m <- model$fitted[[m]] - Xb_l_m
-    R_m  <- data$D[[m]] - Xr_without_l_m
+    Xr_without_lm <- model$fitted[[m]] - Xb_lm
+    R_m  <- data$D[[m]] - Xr_without_lm
     XtR_m <- crossprod(X, R_m)
 
     model$residuals[[m]]        <- XtR_m
-    model$fitted_without_l[[m]] <- Xr_without_l_m
+    model$fitted_without_l[[m]] <- Xr_without_lm
     model$raw_residuals[[m]]    <- R_m
   }
   model
@@ -323,11 +323,11 @@ neg_loglik.mf_individual <- function(data, params, model, V_param, ser_stats, ..
 #' Per-modality expected squared residuals
 #'
 #' Returns the length-`T_padded[m]` vector of per-position
-#' `E_q[||Y_m[, t] - sum_l X * b_l_m[, t]||^2]` for the SER posterior:
+#' `E_q[||Y_m[, t] - sum_l X * b_lm[, t]||^2]` for the SER posterior:
 #'
-#' `ER2_m[t] = ||Y_m[, t] - sum_l X * (alpha_l * mu_l_m)[, t]||^2
+#' `ER2_m[t] = ||Y_m[, t] - sum_l X * (alpha_l * mu_lm)[, t]||^2
 #'           + sum_l ((alpha_l * pw)^T * mu2_l_m[, t]
-#'                    - ||X * (alpha_l * mu_l_m[, t])||^2)`
+#'                    - ||X * (alpha_l * mu_lm[, t])||^2)`
 #'
 #' The first term reuses `model$fitted[[m]]`, the running per-modality
 #' fit maintained by `update_fitted_values`. Used by
@@ -342,7 +342,7 @@ mf_get_ER2_per_position <- function(data, model, m) {
   pw    <- data$predictor_weights
   T_pad <- data$T_padded[m]
 
-  # Cached running fit: model$fitted[[m]] = X %*% sum_l (alpha_l * mu_l_m).
+  # Cached running fit: model$fitted[[m]] = X %*% sum_l (alpha_l * mu_lm).
   res_m <- data$D[[m]] - model$fitted[[m]]
   rss_t <- colSums(res_m * res_m)
 
@@ -350,11 +350,11 @@ mf_get_ER2_per_position <- function(data, model, m) {
   bias_t <- numeric(T_pad)
   for (l in seq_len(model$L)) {
     alpha_l <- model$alpha[l, ]
-    mu_l_m  <- model$mu[[l]][[m]]
+    mu_lm  <- model$mu[[l]][[m]]
     mu2_l_m <- model$mu2[[l]][[m]]
-    XEb_l_m <- X %*% (alpha_l * mu_l_m)
+    XEb_lm <- X %*% (alpha_l * mu_lm)
     bias_t  <- bias_t + colSums((alpha_l * pw) * mu2_l_m) -
-               colSums(XEb_l_m * XEb_l_m)
+               colSums(XEb_lm * XEb_lm)
   }
   rss_t + bias_t
 }
@@ -533,8 +533,8 @@ get_objective.mf_individual <- function(data, params, model, ...) {
 #' Fold the per-effect posterior into the running fit
 #'
 #' Per modality, sets
-#' `model$fitted[[m]] <- model$fitted_without_l[[m]] + X %*% (alpha_l * mu_l_m)`,
-#' where `mu_l_m` is the per-effect, per-modality posterior mean
+#' `model$fitted[[m]] <- model$fitted_without_l[[m]] + X %*% (alpha_l * mu_lm)`,
+#' where `mu_lm` is the per-effect, per-modality posterior mean
 #' (a `p x T_padded[m]` matrix). Called after
 #' `calculate_posterior_moments` updates alpha_l, mu_l. Mirrors
 #' the inline susie / mvsusie pattern of recomputing Xr from
@@ -547,9 +547,9 @@ update_fitted_values.mf_individual <- function(data, params, model, l, ...) {
   M <- data$M
   alpha_l <- model$alpha[l, ]
   for (m in seq_len(M)) {
-    b_l_m  <- alpha_l * model$mu[[l]][[m]]
-    Xb_l_m <- X %*% b_l_m
-    model$fitted[[m]] <- model$fitted_without_l[[m]] + Xb_l_m
+    b_lm  <- alpha_l * model$mu[[l]][[m]]
+    Xb_lm <- X %*% b_lm
+    model$fitted[[m]] <- model$fitted_without_l[[m]] + Xb_lm
   }
   model
 }
