@@ -602,10 +602,22 @@ mf_post_smooth <- function(fit,
     for (l in seq_len(L)) {
       iso_pos <- Y_pos - .other_effects_pos(fit, m, exclude = l)
       x_lead  <- fit$lead_X[[l]]
-      out     <- .univariate_hmm_regression(iso_pos, x_lead, halfK,
-                                            z_crit)
-      effect_curves[[m]][[l]]  <- out$effect_estimate
-      credible_bands[[m]][[l]] <- out$cred_band
+      out <- mf_univariate_hmm_regression(
+        Y     = iso_pos,
+        X     = matrix(x_lead, ncol = 1L),
+        halfK = halfK)
+      # Pointwise credible band via per-position posterior
+      # variance derived from the smoothed posterior. The
+      # upstream `univariate_HMM_regression` returns no band; we
+      # build one from the diagonal of `var(x_post)` by reusing
+      # the lfsr trick: lfsr -> tail probability -> SE.
+      eff <- out$effect_estimate
+      lfsr <- pmax(pmin(out$lfsr, 1 - 1e-300), 1e-300)
+      # Approximate per-position SE: (|effect|) / qnorm(1 - lfsr).
+      sd_pos <- abs(eff) / pmax(stats::qnorm(1 - lfsr), 1e-300)
+      effect_curves[[m]][[l]]  <- eff
+      credible_bands[[m]][[l]] <- cbind(eff - z_crit * sd_pos,
+                                        eff + z_crit * sd_pos)
       lfsr_curves[[m]][[l]]    <- out$lfsr
     }
   }
@@ -615,68 +627,8 @@ mf_post_smooth <- function(fit,
   fit
 }
 
-.univariate_hmm_regression <- function(Y_pos, x_lead, halfK, z_crit) {
-  ss_x  <- sum(x_lead^2)
-  bhat  <- as.numeric(crossprod(x_lead, Y_pos)) / ss_x
-  resid <- Y_pos - tcrossprod(x_lead, bhat)
-  shat  <- sqrt(colMeans(resid^2) / ss_x)
-
-  bad <- !is.finite(shat) | shat <= 0
-  if (any(bad)) {
-    bhat[bad] <- 0
-    shat[bad] <- median(shat[!bad], na.rm = TRUE)
-    if (!is.finite(median(shat[!bad], na.rm = TRUE))) shat[bad] <- 1
-  }
-
-  s <- .fit_hmm(bhat, shat, halfK = halfK)
-  cred_band <- cbind(s$x_post - z_crit * s$x_sd,
-                     s$x_post + z_crit * s$x_sd)
-  list(effect_estimate = s$x_post,
-       cred_band       = cred_band,
-       lfsr            = s$lfsr)
-}
-
-# Forward-backward over a discrete grid of effect-size values
-# (-halfK*max_sd, +halfK*max_sd) with Gaussian emission and a
-# uniform prior across grid points. Returns the smoothed
-# posterior mean, posterior SD, and per-position lfsr.
-.fit_hmm <- function(x, sd, halfK = 20L) {
-  T_pos <- length(x)
-  max_sd <- max(sd, na.rm = TRUE)
-  if (!is.finite(max_sd) || max_sd <= 0) max_sd <- 1
-  grid <- seq(-halfK, halfK, length.out = 2L * halfK + 1L) * max_sd
-
-  # Emission log-prob: T x K
-  emit <- vapply(seq_along(grid),
-                 function(k) stats::dnorm(x, mean = grid[k], sd = sd,
-                                          log = TRUE),
-                 numeric(T_pos))
-
-  # Forward-backward with uniform transition (i.e. iid posterior
-  # smoothed by the Gaussian mixture prior over the grid).
-  emit_max <- apply(emit, 1L, max)
-  w <- exp(emit - emit_max)
-  w <- w / rowSums(w)
-
-  x_post <- as.numeric(w %*% grid)
-  x2_post <- as.numeric(w %*% grid^2)
-  x_var <- pmax(x2_post - x_post^2, 0)
-  x_sd  <- sqrt(x_var)
-
-  # lfsr: P(sign != sign(x_post)) under the smoothed posterior.
-  pos_w <- w[, grid >  0, drop = FALSE]
-  neg_w <- w[, grid <  0, drop = FALSE]
-  zero_w <- w[, grid == 0, drop = FALSE]
-  p_pos  <- rowSums(pos_w)
-  p_neg  <- rowSums(neg_w)
-  p_zero <- rowSums(zero_w)
-  lfsr <- ifelse(x_post > 0,
-                 p_neg + p_zero,
-                 ifelse(x_post < 0,
-                        p_pos + p_zero,
-                        1))
-  list(x_post = x_post, x_sd = x_sd, lfsr = lfsr)
-}
+# HMM helpers live in R/post_smooth_hmm.R: mf_fit_hmm() and
+# mf_univariate_hmm_regression().
 
 # --- helpers --------------------------------------------------------
 
