@@ -1,0 +1,113 @@
+---
+title: "Covariate adjustment and colocalisation with fsusie()"
+author: "Gao Wang and contributors"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+vignette: >
+  %\VignetteIndexEntry{Covariate adjustment and colocalisation with fsusie()}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r knitr-opts, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE, comment = "#>",
+  fig.width = 5, fig.height = 3, fig.align = "center", dpi = 120
+)
+```
+
+This vignette covers two adjacent workflows that wrap a single
+`fsusie()` fit: (i) regressing out covariates before fine-mapping, and
+(ii) colocalising two functional traits via per-trait fits and a
+shared posterior.
+
+```{r setup, message = FALSE}
+library(mfsusieR)
+library(susieR)
+set.seed(1)
+```
+
+## Adjusting for covariates
+
+If a confounder `Z` (e.g., age, sex, batch indicators, principal
+components of a global expression matrix) affects the response, fit
+the residualised response. The conventional recipe is to project out
+`Z` from both `Y` and `X` and fit `fsusie()` on the residuals.
+
+```{r covariate-data}
+data(N3finemapping)
+X <- N3finemapping$X[, seq_len(150)]
+n <- nrow(X); J <- ncol(X); T_m <- 64
+
+Z <- cbind(1, scale(rnorm(n)), scale(rnorm(n)))   # intercept + 2 covariates
+gamma <- matrix(rnorm(ncol(Z) * T_m), nrow = ncol(Z))
+positions <- seq_len(T_m)
+shape <- exp(-((positions - T_m / 2)^2) / (2 * (T_m / 6)^2))
+beta <- matrix(0, J, T_m); beta[42, ] <- 1.2 * shape
+Y <- Z %*% gamma + X %*% beta + matrix(rnorm(n * T_m, sd = 0.4), n)
+```
+
+Project out `Z` from `X` and `Y` with the same hat matrix.
+
+```{r residualize}
+H_resid <- diag(n) - Z %*% solve(crossprod(Z), t(Z))
+X_r <- H_resid %*% X
+Y_r <- H_resid %*% Y
+fit <- fsusie(Y_r, X_r, pos = positions, L = 3, verbose = FALSE)
+which(fit$pip > 0.9)
+length(fit$sets$cs)
+```
+
+Equivalent options when `Z` is large: regress `Y` on `Z` once with
+`stats::lm.fit` and pass the residual matrix; or include `Z` in `X`
+with `prior_weights` set to `0` on the covariate columns.
+
+## Colocalisation across two functional traits
+
+The standard recipe: fit `fsusie()` on each trait separately, then
+combine the per-effect posterior probabilities of association across
+the two CSes into a coloc-style PP.H4 statistic. Because both fits
+return per-effect `alpha` matrices on the same `X`, the combination is
+a straightforward outer product.
+
+```{r coloc-data}
+J <- ncol(X)
+beta1 <- matrix(0, J, T_m); beta1[42, ] <- 1.2 * shape
+beta2 <- matrix(0, J, T_m); beta2[42, ] <- 0.9 * shape         # shared causal
+beta3 <- matrix(0, J, T_m); beta3[88, ] <- 0.9 * shape         # distinct
+Y1 <- X %*% beta1 + matrix(rnorm(n * T_m, sd = 0.4), n)
+Y2 <- X %*% beta2 + matrix(rnorm(n * T_m, sd = 0.4), n)
+Y3 <- X %*% beta3 + matrix(rnorm(n * T_m, sd = 0.4), n)
+```
+
+Fit both traits and a non-colocalising third for comparison.
+
+```{r coloc-fit}
+fit1 <- fsusie(Y1, X, pos = positions, L = 3, verbose = FALSE)
+fit2 <- fsusie(Y2, X, pos = positions, L = 3, verbose = FALSE)
+fit3 <- fsusie(Y3, X, pos = positions, L = 3, verbose = FALSE)
+
+# Per-effect colocalisation: outer product of alpha rows, summed
+# over effects, summed over the diagonal (same SNP causal in both).
+coloc_pp <- function(a, b) {
+  L <- min(nrow(a), nrow(b))
+  sum(vapply(seq_len(L), function(l) sum(a[l, ] * b[l, ]), numeric(1)))
+}
+coloc_pp(fit1$alpha, fit2$alpha)   # high: shared causal
+coloc_pp(fit1$alpha, fit3$alpha)   # low: distinct causals
+```
+
+For full coloc-style PP.H0..H4 with separate priors, plug the
+per-effect alpha matrices into the standard
+`coloc::coloc.bf_bf` / `coloc.susie` machinery; mfsusieR's `alpha` and
+`lbf_variable` slots have the shape `coloc` expects.
+
+## Notes
+
+- `fsusie()` does not mutate `X` and `Y` in place; the residualisation
+  pattern above is the recommended idiom.
+- The colocalisation snippet here is intentionally minimal. For
+  multi-trait colocalisation across more than two traits, see
+  [the multi-modality intro](mfsusie_intro.html), which fits all
+  modalities jointly and avoids the post-hoc combine.

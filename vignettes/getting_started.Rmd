@@ -1,0 +1,148 @@
+---
+title: "Getting started with mfsusieR"
+author: "Gao Wang and contributors"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+vignette: >
+  %\VignetteIndexEntry{Getting started with mfsusieR}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r knitr-opts, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE, comment = "#>",
+  fig.width = 5, fig.height = 3, fig.align = "center", dpi = 120
+)
+```
+
+`mfsusieR` is the multi-modality, multi-functional generalisation of
+`susieR::susie()`. It exposes two public entry points:
+
+- `fsusie(Y, X, pos = NULL, ...)` for fine-mapping a **single** response.
+  `Y` may be scalar (`T = 1`, recovers `susieR::susie`) or functional
+  (`T > 1`, recovers `fsusieR::susiF`).
+- `mfsusie(X, Y, pos = NULL, ...)` for fine-mapping **multiple**
+  responses jointly. `Y` is a list of length `M` modalities; each
+  element is a matrix `n x T_m` (with `T_m = 1` for scalar modalities).
+
+Both functions return an object of class `c("mfsusie", "susie")` with
+the standard SuSiE fields (`alpha`, `mu`, `mu2`, `lbf`, `KL`, `sigma2`,
+`elbo`, `pip`, `sets`, `niter`, `converged`).
+
+```{r setup, message = FALSE}
+library(mfsusieR)
+library(susieR)
+set.seed(1)
+```
+
+## A small `fsusie()` example (single modality, functional)
+
+Simulate one functional response on a length-`32` grid with two causal
+SNPs.
+
+```{r fsusie-fit}
+n <- 200; J <- 50; T_m <- 32
+X <- matrix(rnorm(n * J), nrow = n)
+beta <- numeric(J); beta[c(5, 17)] <- c(1.2, -0.8)
+Y <- X %*% matrix(rep(beta, T_m), nrow = J) +
+     matrix(rnorm(n * T_m, sd = 0.4), nrow = n)
+
+fit_f <- fsusie(Y, X, L = 5, verbose = FALSE)
+fit_f$pip[c(5, 17)]
+length(fit_f$sets$cs)
+```
+
+The `fsusie()` call is a thin canonicaliser: it forwards to
+`mfsusie(X, list(Y), list(pos), ...)` with no numerical change.
+
+## A small `mfsusie()` example (multi-modality)
+
+Same `X` and effect vector, two functional modalities at different
+resolutions plus one scalar modality.
+
+```{r mfsusie-fit}
+T_per <- c(32L, 64L)
+Y_func <- lapply(T_per, function(T_m) {
+  X %*% matrix(rep(beta, T_m), nrow = J) +
+    matrix(rnorm(n * T_m, sd = 0.4), nrow = n)
+})
+Y_scalar <- as.numeric(X %*% beta + rnorm(n, sd = 0.4))
+Y_list <- c(Y_func, list(matrix(Y_scalar, ncol = 1)))
+
+fit_m <- mfsusie(X, Y_list, L = 5,
+                 prior_variance_scope = "per_modality",
+                 verbose = FALSE)
+fit_m$pip[c(5, 17)]
+length(fit_m$sets$cs)
+```
+
+`mu[[l]][[m]]` is a `J x T_padded[m]` matrix of per-effect posterior
+means on each modality; `predict()` and `coef()` invert the wavelet
+transform to position space transparently.
+
+## Numerical equivalence with `susieR::susie` (degenerate case)
+
+When `Y` is scalar, the prior collapses to a single Gaussian component,
+the null component is removed, and the per-(scale, modality) variance
+structure collapses to a scalar, `mfsusie()` reduces **exactly** to
+`susieR::susie()`. This is the C1 contract in the unit test suite at
+tolerance `<= 1e-13` (see `tests/testthat/test_susier_degeneracy.R`).
+
+```{r c1-degeneracy}
+y_scalar <- as.numeric(X %*% beta + rnorm(n, sd = 0.4))
+y <- (y_scalar - mean(y_scalar)) / sd(y_scalar)
+
+fit_s <- susie(X, y, L = 5,
+               scaled_prior_variance      = 0.2,
+               estimate_prior_variance    = FALSE,
+               estimate_residual_variance = TRUE,
+               max_iter = 100, tol = 1e-8)
+
+fit_d <- mfsusie(X, list(matrix(y, ncol = 1)),
+                 L                        = 5,
+                 prior_variance_grid      = 0.2,
+                 prior_variance_scope     = "per_modality",
+                 null_prior_weight        = 0,
+                 residual_variance_method = "shared_per_modality",
+                 mixture_weight_method    = "none",
+                 L_greedy                 = NULL,
+                 max_iter = 100, tol = 1e-8,
+                 verbose = FALSE)
+
+# Element-wise agreement on every numeric field.
+max(abs(fit_d$alpha - fit_s$alpha))
+max(abs(fit_d$pip   - fit_s$pip))
+max(abs(fit_d$sigma2[[1]] - fit_s$sigma2))
+max(abs(fit_d$lbf   - fit_s$lbf))
+max(abs(fit_d$KL    - fit_s$KL))
+abs(tail(fit_d$elbo, 1) - tail(fit_s$elbo, 1))
+identical(fit_d$niter, fit_s$niter)
+```
+
+The remaining differences are at the IEEE-754 double-precision floor
+(~`1e-16` for `alpha`, `sigma2`, `pip`; ~`1e-13` for `KL` because the
+KL contribution accumulates over `n` residuals in slightly different
+order). The credible-set memberships are identical:
+
+```{r c1-cs}
+identical(lapply(fit_d$sets$cs, sort),
+          lapply(fit_s$sets$cs, sort))
+```
+
+This degenerate-case identity is enforced by the test suite on every
+build. If a refactor introduces drift above `1e-10`, CI fails.
+
+## Where to next
+
+- Single-modality applications:
+  [Single-modality intro](fsusie_intro.html),
+  [covariate adjustment + colocalization](fsusie_covariates_and_coloc.html),
+  [DNAm case study](fsusie_dnam_case_study.html),
+  [why functional](fsusie_why_functional.html).
+- Multi-modality applications:
+  [Multi-modality intro](mfsusie_intro.html),
+  [long-running fits](mfsusie_long_running_fits.html).
+- Migration from `fsusieR` or `mvf.susie.alpha`:
+  [migration](migration.html).

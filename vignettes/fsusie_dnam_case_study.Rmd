@@ -1,0 +1,119 @@
+---
+title: "DNA methylation QTL fine-mapping with fsusie()"
+author: "Gao Wang, William Denault, Peter Carbonetto"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+vignette: >
+  %\VignetteIndexEntry{DNA methylation QTL fine-mapping with fsusie()}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r knitr-opts, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE, comment = "#>", results = "hold",
+  fig.align = "center", dpi = 120
+)
+```
+
+This vignette walks through a DNA methylation QTL analysis using
+`fsusie()`. The methylation phenotype is a vector of CpG-level beta
+values along a region; `fsusie()` treats it as a single functional
+response sampled at the CpG positions, returns credible sets of SNPs
+that drive coordinated changes across CpGs, and provides the per-CpG
+effect curves for each credible set.
+
+```{r setup, message = FALSE}
+library(mfsusieR)
+library(susieR)
+library(ggplot2)
+library(reshape2)
+set.seed(1)
+```
+
+## Simulated DNAm region
+
+Replace this block with your own genotype matrix and CpG-level
+methylation matrix in practice.
+
+```{r simulate}
+data(N3finemapping)
+X <- N3finemapping$X[, seq_len(150)]
+n <- nrow(X); J <- ncol(X)
+
+# Five CpGs in the region, irregularly spaced.
+cpg_pos <- c(120, 320, 480, 540, 1200)
+T_m <- length(cpg_pos)
+
+# Two causal SNPs with localised effects on subsets of CpGs.
+beta <- matrix(0, nrow = J, ncol = T_m)
+beta[42, ] <-  c(0.20, 0.18, 0.05, 0.02, 0.00)   # 5'-side cluster
+beta[97, ] <-  c(0.00, 0.00, 0.03, 0.10, 0.12)   # 3'-side cluster
+
+methyl_logit <- X %*% beta + matrix(rnorm(n * T_m, sd = 0.05), n)
+# Beta values are bounded in [0, 1]; logit on a baseline of 0.5.
+Y <- 1 / (1 + exp(-(methyl_logit + qlogis(0.5))))
+Y_df <- as.data.frame(cbind(Y, X[, c(42, 97)]))
+colnames(Y_df) <- c(paste0("CpG_", seq_len(T_m)), "snp_42", "snp_97")
+head(Y_df, 3)
+```
+
+The CpG positions are irregular; `fsusie()` (via `mfsusie()`) remaps
+the response onto a power-of-two grid before the wavelet step (see
+`?mfsusieR:::remap_data`).
+
+## Fit
+
+```{r fit}
+fit <- fsusie(Y, X, pos = cpg_pos, L = 3, verbose = FALSE)
+fit$niter; fit$converged
+fit$sets$cs
+```
+
+PIPs:
+
+```{r pip}
+plot(fit$pip, pch = 16, col = ifelse(fit$pip > 0.9, "red", "grey60"),
+     xlab = "SNP index", ylab = "PIP")
+abline(v = c(42, 97), lty = 2, col = "blue")
+```
+
+## Per-effect methylation curves
+
+```{r effect-curves}
+B_hat <- coef(fit)[[1]]   # L x T_m
+
+eff_df <- as.data.frame(t(B_hat))
+eff_df$cpg <- cpg_pos
+eff_long <- melt(eff_df, id.vars = "cpg",
+                 variable.name = "effect", value.name = "estimate")
+ggplot(eff_long,
+       aes(x = cpg, y = estimate, colour = effect, group = effect)) +
+  geom_line() + geom_point() +
+  geom_hline(yintercept = 0, linetype = 2) +
+  labs(x = "CpG position (bp)", y = "effect on methylation",
+       title = "Per-effect methylation curves")
+```
+
+## Predictions on new genotypes
+
+```{r predict}
+fitted_curves <- predict(fit, newx = X[1:3, ])[[1]]
+matplot(cpg_pos, t(fitted_curves), type = "b", lty = 1, pch = 16,
+        xlab = "CpG position", ylab = "predicted methylation",
+        main = "Predicted profiles for three individuals")
+```
+
+## What this gets you
+
+- Per-CpG resolution: each credible set comes with the full
+  methylation profile of its effect, not just a scalar.
+- Joint information: a SNP that nudges multiple correlated CpGs is
+  prioritised over a SNP that nudges one in isolation.
+- A drop-in API: this is `susie()` with `Y` replaced by a CpG matrix
+  and a `pos` vector of positions.
+
+For a multi-region or multi-omics version of the same workflow (e.g.,
+methylation + RNA-seq jointly), see
+[the multi-modality intro](mfsusie_intro.html).

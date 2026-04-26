@@ -1,0 +1,134 @@
+---
+title: "Migration from fsusieR and mvf.susie.alpha"
+author: "Gao Wang and contributors"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+vignette: >
+  %\VignetteIndexEntry{Migration from fsusieR and mvf.susie.alpha}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r knitr-opts, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE, comment = "#>", fig.align = "center", dpi = 120
+)
+```
+
+`mfsusieR` consolidates `fsusieR` (single-modality functional SuSiE)
+and `mvf.susie.alpha` (multi-modality functional + univariate SuSiE)
+into one package with a `susieR`-aligned S3 paradigm. This vignette
+maps the public APIs of the two source packages to mfsusieR's
+`fsusie()` / `mfsusie()` surface.
+
+```{r setup, message = FALSE}
+library(mfsusieR)
+```
+
+## From `fsusieR::susiF`
+
+The mfsusieR drop-in is `fsusie()`, with the same argument order
+(`Y, X, pos = NULL, ...`):
+
+```{r fsusier-migration, eval = FALSE}
+# Before
+fit <- fsusieR::susiF(Y, X, pos = pos, L = 10, ...)
+
+# After
+fit <- mfsusieR::fsusie(Y, X, pos = pos, L = 10, ...)
+```
+
+### Argument-name mapping
+
+| `fsusieR::susiF`            | `mfsusieR::fsusie`              | Notes |
+|-----------------------------|---------------------------------|-------|
+| `Y, X, pos`                 | `Y, X, pos`                     | identical |
+| `L`                         | `L`                             | identical |
+| `prior`                     | `prior_variance_scope`          | `"mixture_normal"` -> `"per_modality"`; `"mixture_normal_per_scale"` -> `"per_scale_modality"` |
+| `nullweight`                | `nullweight`                    | identical (default `0.7`) |
+| `null_weight`               | `null_prior_weight`             | renamed for clarity (default `2`) |
+| `max_SNP_EM`                | `max_iter`                      | renamed |
+| `tol`                       | `tol`                           | identical |
+| `cov_lev`                   | `coverage`                      | renamed |
+| `min_purity`                | `min_abs_corr`                  | renamed to match `susieR` |
+| `cor_X`                     | (always recomputed from `X`)   | dropped |
+| `post_processing`           | (separate `mf_post_smooth()` API, planned) | decoupled per design.md D8c |
+
+### Behavioural deviations
+
+- `mfsusieR::fsusie()` computes PIPs **after** the credible-set
+  filter; `fsusieR::susiF()` computes them before. This was a known
+  bug in the original; the mfsusieR test suite locks the corrected
+  behaviour with an explicit assertion (see
+  `tests/testthat/test_fsusier_degeneracy.R`).
+- The post-processing API (`smash`, `TI`, `HMM` smoothers, TIWT
+  credible bands) is decoupled from the fit. Pass `save_residuals =
+  TRUE` (default) and call the post-processor explicitly. The
+  smoother module port is in progress.
+
+## From `mvf.susie.alpha::multfsusie`
+
+The mfsusieR replacement is `mfsusie()`. The data structure is
+unified: pass a single list of length `M`, where each element is a
+matrix `n x T_m`. `mvf.susie.alpha` accepted a `list(Y_f, Y_u)`
+with separate functional and univariate slots; mfsusieR treats both
+through one path.
+
+```{r mvf-migration, eval = FALSE}
+# Before
+fit <- mvf.susie.alpha::multfsusie(
+  Y = list(Y_f = list(Y_f1, Y_f2), Y_u = Y_u),
+  X = X, pos = pos, L = 10, prior = "mixture_normal", ...
+)
+
+# After
+fit <- mfsusieR::mfsusie(
+  X = X,
+  Y = c(list(Y_f1, Y_f2),
+        lapply(seq_len(ncol(Y_u)), function(j) matrix(Y_u[, j], ncol = 1))),
+  pos = pos, L = 10,
+  prior_variance_scope = "per_modality",
+  ...
+)
+```
+
+### Argument-name mapping
+
+| `mvf.susie.alpha::multfsusie` | `mfsusieR::mfsusie`             | Notes |
+|-------------------------------|---------------------------------|-------|
+| `Y = list(Y_f = ..., Y_u = ...)` | `Y = list(Y_m1, Y_m2, ...)` | unified list; scalar modalities are column matrices |
+| `X, pos`                      | `X, pos`                        | identical |
+| `L`                           | `L`                             | identical |
+| `prior`                       | `prior_variance_scope`          | `"mixture_normal"` -> `"per_modality"`; `"mixture_normal_per_scale"` -> `"per_scale_modality"` |
+| `maxit`                       | `max_iter`                      | renamed |
+| `tol`                         | `tol`                           | identical |
+| `greedy`                      | `L_greedy`                      | renamed; integer count, not boolean |
+| `backfit`                     | (always on; backfit is the IBSS loop) | dropped |
+| `cal_obj`                     | (always on; ELBO is in `fit$elbo`) | dropped |
+| `filter_cs`                   | (post-processing) | always applied; `coverage` controls the threshold |
+| `post_processing`             | (separate `mf_post_smooth()` API, planned) | decoupled |
+
+### Behavioural deviations
+
+- `mvf.susie.alpha::multfsusie` had a bug in the per-modality residual
+  variance update (the ER2 term used the wrong shape). mfsusieR
+  applies the corrected formula. The two fits do not match
+  bit-identically end to end; structural agreement (same top SNP,
+  same causal SNP isolated in a small CS, PIPs within `0.05`) is
+  enforced by the test suite (see
+  `tests/testthat/test_mvf_alpha_degeneracy.R`).
+- The PIP-after-CS-filter fix that applies to `fsusieR::susiF` also
+  applies here.
+- `mvf.susie.alpha`'s `multfsusie.obj = m_prev` mid-run restart is
+  not yet exposed at the public level. See
+  [long-running fits](mfsusie_long_running_fits.html) for the
+  current workaround.
+
+## Drop-in degeneracy with `susieR::susie`
+
+For a scalar response (`T_m = 1`) with a single non-null mixture
+component, `mfsusie()` collapses exactly to `susieR::susie()` at
+double-precision tolerance. See the
+[Getting Started vignette](getting_started.html) for the full
+side-by-side example.

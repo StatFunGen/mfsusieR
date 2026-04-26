@@ -1,0 +1,122 @@
+---
+title: "Single-modality functional fine-mapping with fsusie()"
+author: "Gao Wang and contributors"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+vignette: >
+  %\VignetteIndexEntry{Single-modality functional fine-mapping with fsusie()}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r knitr-opts, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE, comment = "#>",
+  fig.width = 5, fig.height = 3, fig.align = "center", dpi = 120
+)
+```
+
+## Overview
+
+`fsusie()` fits the Functional Sum of Single Effects (fSuSiE) model to
+a single functional response. It extends `susieR::susie` to traits
+sampled at multiple positions, such as DNA methylation profiles, ATAC-
+seq tracks, or expression along a transcript. The wavelet basis lets
+the model share information across nearby positions while keeping the
+SuSiE per-effect prior structure intact.
+
+`fsusie()` is a thin wrapper around `mfsusie()` for the special case of
+one modality. Existing fsusieR scripts can switch by renaming
+`fsusieR::susiF` to `mfsusieR::fsusie` (the argument order matches).
+
+## Simulating a fixture
+
+```{r setup, message = FALSE}
+library(mfsusieR)
+library(susieR)
+set.seed(1)
+```
+
+Use the `N3finemapping` SNP genotype matrix from susieR for a
+realistic LD pattern; simulate a wavelet-smoothable functional effect
+on a length-128 grid.
+
+```{r simulate}
+data(N3finemapping)
+X <- N3finemapping$X[, seq_len(200)]
+n <- nrow(X); J <- ncol(X)
+T_m <- 128
+
+# Two causal SNPs, smooth bell-shaped effect curve.
+positions <- seq_len(T_m)
+shape <- exp(-((positions - T_m / 2)^2) / (2 * (T_m / 8)^2))
+beta <- matrix(0, nrow = J, ncol = T_m)
+beta[37, ] <-  1.5 * shape
+beta[112, ] <- -1.0 * shape
+
+Y <- X %*% beta + matrix(rnorm(n * T_m, sd = 0.5), nrow = n)
+matplot(t(Y[1:5, ]), type = "l", lty = 1, col = 1:5,
+        xlab = "position", ylab = "y", main = "Five sample curves")
+```
+
+## Fitting
+
+```{r fit}
+fit <- fsusie(Y, X, pos = positions, L = 5, verbose = FALSE)
+fit$niter; fit$converged
+length(fit$sets$cs)
+```
+
+Top PIP SNPs:
+
+```{r pip-plot}
+plot(fit$pip, pch = 16, col = ifelse(fit$pip > 0.9, "red", "grey50"),
+     xlab = "SNP index", ylab = "PIP")
+abline(v = c(37, 112), lty = 2, col = "blue")
+legend("topright", legend = c("True causal", "PIP > 0.9"),
+       lty = c(2, NA), pch = c(NA, 16),
+       col = c("blue", "red"), bty = "n", cex = 0.8)
+```
+
+Credible sets:
+
+```{r cs}
+fit$sets$cs
+fit$sets$purity
+```
+
+## Inspecting effect curves
+
+`coef(fit)` returns a list of `M` modality matrices, each `L x T_m`,
+one row per single effect in position space.
+
+```{r effects}
+B_hat <- coef(fit)[[1]]
+matplot(t(B_hat), type = "l", lty = 1,
+        xlab = "position", ylab = "effect",
+        main = "Estimated single-effect curves")
+matlines(t(beta[c(37, 112), ]), col = "black", lty = 2)
+legend("topright", legend = c("Estimated", "True"),
+       lty = c(1, 2), col = c(1, 1), bty = "n", cex = 0.8)
+```
+
+`predict(fit, newx = X)` reconstructs the fitted curves on new
+genotypes; `fitted(fit)` returns the in-sample fits.
+
+## Reading the fit object
+
+```{r fields}
+str(fit, max.level = 1)
+```
+
+The list of class `c("mfsusie", "susie")` carries the standard SuSiE
+fields plus per-modality wavelet metadata used by `predict.mfsusie`,
+`coef.mfsusie`, and `fitted.mfsusie`.
+
+## Comparison with `fsusieR::susiF`
+
+When the same wavelet basis and prior structure are used, `fsusie()`
+matches `fsusieR::susiF()` on the structural level (same top SNP, same
+causal SNP isolated in a small CS, PIP within `0.05`). See
+[migration](migration.html) for the bit-identity carve-outs.
