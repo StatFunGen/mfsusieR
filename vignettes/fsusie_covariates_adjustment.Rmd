@@ -192,23 +192,24 @@ for (cfg in list(list(snp = pos1, truth = f1, col = "blue",
                       label = "f1 (SNP 25)"),
                  list(snp = pos2, truth = f2, col = "darkgreen",
                       label = "f2 (SNP 75)"))) {
-  plot(cfg$truth, type = "l", lwd = 2, col = "black",
-       xlab = "position", ylab = "effect",
-       main = paste("Estimated effect:", cfg$label))
-  abline(h = 0, lty = 3, col = "grey50")
   l_adj   <- match_cs(fit_adj,   cfg$snp)
   l_unadj <- match_cs(fit_unadj, cfg$snp)
   cf_adj   <- coef(fit_adj)[[1L]]
   cf_unadj <- coef(fit_unadj)[[1L]]
-  if (!is.na(l_adj))
-    lines(cf_adj[l_adj, ],   col = cfg$col, lwd = 1.5)
-  if (!is.na(l_unadj))
-    lines(cf_unadj[l_unadj, ], col = cfg$col, lwd = 1.5, lty = 2)
+  rec_adj   <- if (!is.na(l_adj))   cf_adj[l_adj, ]     else NULL
+  rec_unadj <- if (!is.na(l_unadj)) cf_unadj[l_unadj, ] else NULL
+  yrng <- range(c(cfg$truth, rec_adj, rec_unadj), na.rm = TRUE)
+  plot(cfg$truth, pch = 20L, col = "grey30", cex = 0.7,
+       xlab = "position", ylab = "effect", ylim = yrng,
+       main = paste("Estimated effect:", cfg$label))
+  abline(h = 0, lty = 3, col = "grey50")
+  if (!is.null(rec_adj))   lines(rec_adj,   col = cfg$col, lwd = 1.5)
+  if (!is.null(rec_unadj)) lines(rec_unadj, col = cfg$col, lwd = 1.5, lty = 2)
   legend("topright",
          legend = c("truth", "fSuSiE adjusted", "fSuSiE unadjusted"),
-         col    = c("black", cfg$col, cfg$col),
-         lty    = c(1, 1, 2), lwd = c(2, 1.5, 1.5),
-         bty    = "n", cex = 0.8)
+         col    = c("grey30", cfg$col, cfg$col),
+         lty    = c(NA, 1, 2), lwd = c(NA, 1.5, 1.5),
+         pch    = c(20, NA, NA), bty = "n", cex = 0.8)
 }
 par(mfrow = c(1L, 1L))
 ```

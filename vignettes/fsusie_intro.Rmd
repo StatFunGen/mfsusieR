@@ -132,9 +132,9 @@ mfsusie_plot(fit_s, effect_style = "errorbar", facet_cs = "stack")
 
 ## Recovering the true effect
 
-The smoothed posterior tracks the simulated per-position effects.
-Overlay the credible band against the truth to verify recovery
-on each causal SNP:
+Overlay the TI-smoothed effect against the truth to verify
+recovery on each causal SNP. The truth is a per-position
+discrete value, so render it as dots rather than a curve.
 
 ```{r truth-overlay, fig.height = 5, fig.width = 8}
 truth <- coverage_example$causal_betas
@@ -150,10 +150,11 @@ par(mfrow = c(1L, length(cs_lead)),
 for (i in seq_along(cs_lead)) {
   truth_idx <- match(cs_lead[i], coverage_example$causal_snps)
   pos_grid  <- coverage_example$pos
-  b_i  <- band[[1L]][[i]]
-  yrng <- range(b_i, truth, na.rm = TRUE)
-  plot(pos_grid, truth[truth_idx, ], type = "l",
-       col = "grey60", lwd = 1.5, lty = 2,
+  b_i       <- band[[1L]][[i]]
+  rec_i     <- fit_s$smoothed$TI$effect_curves[[1L]][[i]]
+  yrng      <- range(b_i, truth[truth_idx, ], rec_i, na.rm = TRUE)
+  plot(pos_grid, truth[truth_idx, ], pch = 20L, col = "grey30",
+       cex = 0.7,
        xlab = "position", ylab = "effect",
        ylim = yrng,
        main = sprintf("CS %d (SNP %d)", i, cs_lead[i]))
@@ -161,19 +162,19 @@ for (i in seq_along(cs_lead)) {
           c(b_i[, 1L], rev(b_i[, 2L])),
           col = adjustcolor("#1f78b4", alpha.f = 0.25),
           border = NA)
-  lines(pos_grid, fit_s$smoothed$TI$effect_curves[[1L]][[i]],
-        col = "#1f78b4", lwd = 2)
+  lines(pos_grid, rec_i, col = "#1f78b4", lwd = 2)
   abline(h = 0, lty = 3, col = "grey50")
   legend("topright", legend = c("truth", "TI smooth", "95% band"),
-         col = c("grey60", "#1f78b4", adjustcolor("#1f78b4", alpha.f = 0.5)),
-         lty = c(2, 1, NA), lwd = c(1.5, 2, NA),
-         pch = c(NA, NA, 15), bty = "n", cex = 0.75)
+         col    = c("grey30", "#1f78b4", adjustcolor("#1f78b4", alpha.f = 0.5)),
+         lty    = c(NA, 1, NA), lwd = c(NA, 2, NA),
+         pch    = c(20, NA, 15), bty = "n", cex = 0.75)
 }
 ```
 
-Both effect curves stay inside the band on the bulk of the
-support, with the truth crossing the band only at the small
-high-frequency wiggles the smoother trims.
+The TI-smoothed curve tracks the truth across the support; the
+95% band covers the per-position truth at most sites and only
+crosses the band on the small high-frequency wiggles the
+smoother trims.
 
 ## Uneven sampling positions
 
