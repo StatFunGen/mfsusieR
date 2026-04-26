@@ -89,12 +89,11 @@ mf_dwt <- function(Y_m,
   Y_remapped  <- remap$Y
   outing_grid <- remap$outing_grid
 
-  # Per-column center + sd scale (fsusieR / mvf.susie.alpha
-  # convention; the C2 / C3 fidelity tests pin bit-identical
-  # wavelet output against `fsusieR::colScale + DWT2` and
-  # `mvf.susie.alpha::DWT2`). For the C1 degeneracy contract
-  # against susieR, the test pre-scales y on both sides so the
-  # mfsusieR-internal sd-scaling is a no-op.
+  # Per-column center + sd scale. The C2 / C3 fidelity tests pin
+  # bit-identical wavelet output against the port-source pipeline.
+  # For the C1 degeneracy contract against susieR, the test
+  # pre-scales y on both sides so the mfsusieR-internal sd-scaling
+  # is a no-op.
   Y_scaled      <- col_scale(Y_remapped, center = TRUE, scale = TRUE)
   column_center <- attr(Y_scaled, "scaled:center")
   column_scale  <- attr(Y_scaled, "scaled:scale")
