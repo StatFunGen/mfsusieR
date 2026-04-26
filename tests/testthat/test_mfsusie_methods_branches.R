@@ -121,3 +121,80 @@ test_that("predict.mfsusie(newx) returns one matrix per outcome with the right s
   expect_length(pr, 1L)
   expect_equal(dim(pr[[1L]]), c(20L, 32L))
 })
+
+# --- Multi-method state ----------------------------------------
+
+test_that("mf_post_smooth refuses to overwrite an existing method without overwrite_previous", {
+  fit <- build_small_fit()
+  fit_s <- mf_post_smooth(fit, method = "TI")
+  expect_error(mf_post_smooth(fit_s, method = "TI"),
+               "already on this fit")
+  # With overwrite_previous = TRUE the call replaces it.
+  fit_s2 <- mf_post_smooth(fit_s, method = "TI",
+                           overwrite_previous = TRUE)
+  expect_named(fit_s2$smoothed, "TI")
+})
+
+test_that("mf_post_smooth accumulates entries for distinct methods", {
+  fit <- build_small_fit()
+  fit_s <- mf_post_smooth(fit, method = "TI")
+  fit_s <- mf_post_smooth(fit_s, method = "HMM")
+  fit_s <- mf_post_smooth(fit_s, method = "scalewise")
+  expect_setequal(names(fit_s$smoothed), c("TI", "HMM", "scalewise"))
+})
+
+test_that("coef.mfsusie(smooth_method) returns smoothed curves on the L x T_basis shape", {
+  fit <- build_small_fit()
+  fit_s <- mf_post_smooth(fit, method = "TI")
+  cf  <- coef(fit_s, smooth_method = "TI")
+  expect_equal(attr(cf, "smooth_method"), "TI")
+  # Same outer shape as the raw coef path: list[M] of L x T_basis matrices.
+  expect_length(cf, 1L)
+  expect_equal(dim(cf[[1L]]), c(2L, 32L))
+})
+
+test_that("coef.mfsusie(smooth_method) errors when the named method is not applied", {
+  fit <- build_small_fit()
+  expect_error(coef(fit, smooth_method = "TI"),
+               "No methods have been applied")
+  fit_s <- mf_post_smooth(fit, method = "TI")
+  expect_error(coef(fit_s, smooth_method = "HMM"),
+               "Applied methods")
+})
+
+test_that(".pick_smooth_method honors `requested` and errors on missing method", {
+  fit <- build_small_fit()
+  fit_s <- mf_post_smooth(fit, method = "TI")
+  expect_equal(mfsusieR:::.pick_smooth_method(fit_s, "TI"), "TI")
+  expect_error(mfsusieR:::.pick_smooth_method(fit_s, "smash"),
+               "is not on this fit")
+})
+
+test_that("mfsusie_plot emits a hint when multiple smoothings are stacked on the fit", {
+  null_dev <- if (capabilities("png")) {
+    f <- tempfile(fileext = ".png")
+    grDevices::png(f, width = 600, height = 400)
+    on.exit({ grDevices::dev.off(); unlink(f) }, add = TRUE)
+  } else {
+    grDevices::pdf(NULL); on.exit(grDevices::dev.off(), add = TRUE)
+  }
+  fit   <- build_small_fit()
+  fit_s <- mf_post_smooth(fit, method = "TI")
+  fit_s <- mf_post_smooth(fit_s, method = "HMM")
+  msg <- capture.output(mfsusie_plot(fit_s), type = "message")
+  expect_true(any(grepl("Other smoothings on this fit", msg)))
+})
+
+test_that("mfsusie_plot_lfsr errors with a clean message when no HMM smoothing is on the fit", {
+  null_dev <- if (capabilities("png")) {
+    f <- tempfile(fileext = ".png")
+    grDevices::png(f, width = 600, height = 400)
+    on.exit({ grDevices::dev.off(); unlink(f) }, add = TRUE)
+  } else {
+    grDevices::pdf(NULL); on.exit(grDevices::dev.off(), add = TRUE)
+  }
+  fit   <- build_small_fit()
+  fit_s <- mf_post_smooth(fit, method = "TI")
+  expect_error(mfsusie_plot_lfsr(fit_s),
+               "HMM-smoothed lfsr")
+})
