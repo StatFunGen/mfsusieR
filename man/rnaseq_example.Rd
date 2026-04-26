@@ -35,7 +35,7 @@ Gaussian effect.
 \donttest{
 data(rnaseq_example)
 fit <- fsusie(rnaseq_example$Y, rnaseq_example$X,
-              pos = rnaseq_example$pos, L = 3, verbose = FALSE)
+              pos = rnaseq_example$pos, L = 15, L_greedy = 5, verbose = TRUE)
 fit_s <- mf_post_smooth(fit, method = "HMM")
 mfsusie_plot(fit_s)
 }

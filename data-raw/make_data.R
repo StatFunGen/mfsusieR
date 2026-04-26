@@ -162,39 +162,87 @@ gtex_example <- local({
   X <- N3finemapping$X[, seq(601, 800)]
   n <- nrow(X); p <- ncol(X)
   T_m <- 256L
-  exon_pos <- seq_len(T_m)
 
-  # Three causal SNPs at different gene-body positions, mimicking
-  # the multi-CS structure seen in the AHCYL1 / SCD GTEx case
-  # studies (fsusie-experiments/scripts_plot/GeTX/). Effects are
-  # localized peaks at distinct positions.
-  shape <- function(c, w) exp(-((exon_pos - c)^2) / (2 * w^2))
+  # Place the simulated locus at a realistic gene-body window:
+  # chr1, 109,990,000 - 110,022,000 bp, mimicking the AHCYL1 cis
+  # window. SNP positions are drawn within the same window.
+  chrom    <- "chr1"
+  gene     <- "AHCYL1-like"
+  locus    <- c(109990000L, 110022000L)
+  exon_pos <- round(seq(locus[1L], locus[2L], length.out = T_m))
+  set.seed(1)
+  snp_pos  <- sort(sample(seq(locus[1L] - 1.5e5, locus[2L] + 1.5e5),
+                          p, replace = FALSE))
+  set.seed(20260426)
+
+  # Three causal SNPs at different gene-body positions, producing
+  # the multi-CS structure characteristic of cis-eQTL fSuSiE fits
+  # on real GTEx genes (AHCYL1, SCD, HSP90AA1, etc.). Effects are
+  # localized peaks at distinct positions along the gene body.
+  shape <- function(c, w) exp(-((seq_len(T_m) - c)^2) / (2 * w^2))
   beta <- matrix(0, p, T_m)
   beta[37,  ] <-  1.20 * shape(c =  60, w = 12)   # 5' peak
   beta[112, ] <- -0.85 * shape(c = 130, w = 10)   # mid-body peak
   beta[173, ] <-  0.95 * shape(c = 200, w =  8)   # 3' peak
 
-  # log1p-coverage observation model (positive counts inflated to
-  # mimic RNA-seq coverage; we keep the regression on the log1p
-  # scale, matching the upstream AHCYL1 case study).
+  # log1p-coverage observation model: a positive baseline count
+  # plus the per-position effect, on the log1p scale.
   mean_cov <- 4 + X %*% beta
   Y <- mean_cov + matrix(rnorm(n * T_m, sd = 0.30), n)
+
+  # Simulated transcript / exon annotation for the gene-region
+  # track. Two isoforms ("AHCYL1-like.1" - canonical; ".2" -
+  # alternative-start variant skipping exon 1) over the locus,
+  # 7 exons of varying widths, plus side L1 element on the 5' end
+  # to mirror the published AHCYL1 figure layout.
+  exon_starts <- c(109990500L, 109995200L, 109999800L, 110005000L,
+                   110010000L, 110015500L, 110020500L)
+  exon_ends   <- exon_starts + c(800L, 1100L, 600L, 900L, 1200L,
+                                 700L, 1100L)
+  gene_track_df <- rbind(
+    data.frame(chromosome = chrom, start = exon_starts,
+               end = exon_ends, strand = "+",
+               feature = "protein_coding",
+               gene = gene, exon = paste0("e", seq_along(exon_starts)),
+               transcript = paste0(gene, ".1"),
+               symbol = gene),
+    # alternative isoform skipping exon 1
+    data.frame(chromosome = chrom, start = exon_starts[-1L],
+               end = exon_ends[-1L], strand = "+",
+               feature = "protein_coding",
+               gene = gene,
+               exon = paste0("e", seq_along(exon_starts[-1L])),
+               transcript = paste0(gene, ".2"),
+               symbol = gene),
+    # 5' L1 element annotation
+    data.frame(chromosome = chrom, start = 109987000L,
+               end = 109988200L, strand = "+",
+               feature = "lincRNA",
+               gene = "L1", exon = "e1",
+               transcript = "L1.1", symbol = "L1")
+  )
 
   list(
     X            = X,
     Y            = Y,
     pos          = exon_pos,
+    snp_pos      = snp_pos,
+    chrom        = chrom,
+    gene         = gene,
+    locus        = locus,
+    gene_track   = gene_track_df,
     causal_snps  = c(37L, 112L, 173L),
     causal_betas = beta[c(37L, 112L, 173L), ],
     description  = paste0(
-      "Simulated GTEx-style cis-eQTL fixture inspired by the ",
-      "AHCYL1 / SCD case studies in fsusie-experiments. n = ", n,
-      ", p = ", p, " SNPs over the susieR::N3finemapping LD ",
-      "scaffold, T = ", T_m, " gene-body positions. Three causal ",
-      "SNPs with localized peak effects at distinct positions ",
-      "(5', mid-body, 3'). Designed to surface a multi-CS ",
-      "fsusie() fit and exercise mfsusie_plot() on a realistic ",
-      "RNA-seq-style coverage curve."
+      "Simulated GTEx-style cis-eQTL fixture mimicking the AHCYL1 / ",
+      "SCD / HSP90AA1 case studies. Designed for the GTEx ",
+      "case-study vignette: the underlying GTEx data are protected ",
+      "and cannot be redistributed, so we simulate a fixture that ",
+      "reproduces the multi-CS structure published in the figures. ",
+      "n = ", n, ", p = ", p, " SNPs over the susieR::N3finemapping ",
+      "LD scaffold, T = ", T_m, " gene-body positions over a ~32 kb ",
+      "window. Three causal SNPs with localized peak effects at 5', ",
+      "mid-body, and 3' positions of the gene."
     )
   )
 })

@@ -13,7 +13,8 @@ vignette: >
 ```{r knitr-opts, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE, comment = "#>",
-  fig.width = 5, fig.height = 3, fig.align = "center", dpi = 120
+  fig.width = 8, fig.height = 6, fig.align = "center", dpi = 110,
+  out.width = "100%"
 )
 ```
 
@@ -21,6 +22,10 @@ This vignette covers two adjacent workflows that wrap a single
 `fsusie()` fit: (i) regressing out covariates before fine-mapping, and
 (ii) colocalizing two functional outcomes via per-outcome fits and a
 shared posterior.
+
+FIXME: you say for illutration this is fine we do fsusie but the same idea apply to multi-outcome with mfsusie() one can also do colocazation and such
+
+FIXME: point out that this works for any pair of susie objets includeing susie()/fsusie()/mfsusie()/mvsusie()/susie_rss() the last one particularly useful for GWAS fine-mapping reuslts using summary stats
 
 ```{r setup, message = FALSE}
 library(mfsusieR)
@@ -97,6 +102,8 @@ coloc_pp <- function(a, b) {
 coloc_pp(fit1$alpha, fit2$alpha)   # high: shared causal
 coloc_pp(fit1$alpha, fit3$alpha)   # low: distinct causals
 ```
+
+FIXME: This is completely wrong! we need to make coloc a package installed to the vignette and we actually do coloc::coloc.susie approach!! make sure it works for the code if not we need to fix it up the codes but here we need real colozation not a cheap knockoff as yu did now! YOu much check the coloc documentation and do it.
 
 For full coloc-style PP.H0..H4 with separate priors, plug the
 per-effect alpha matrices into the standard

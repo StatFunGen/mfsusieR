@@ -44,6 +44,12 @@ r45 = {features = ["r45"]}
 "r-knitr" = "*"
 "r-rmarkdown" = "*"
 
+# Bioconductor packages used by the GTEx case-study vignette's
+# genome-browser overlay (Gviz multi-track figure).
+"bioconductor-gviz" = "*"
+"bioconductor-genomicranges" = "*"
+"bioconductor-iranges" = "*"
+
 # Development tools
 "r-devtools" = "*"
 "r-covr" = "*"

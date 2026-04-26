@@ -13,7 +13,8 @@ vignette: >
 ```{r knitr-opts, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE, comment = "#>",
-  fig.align = "center", dpi = 120
+  fig.width = 8, fig.height = 6, fig.align = "center", dpi = 110,
+  out.width = "100%"
 )
 ```
 
@@ -24,13 +25,16 @@ response and returns credible sets of variants that drive
 coordinated changes in expression at distinct positions of the
 gene.
 
-The case studies in `fsusie-experiments/scripts_plot/GeTX/`
-(AHCYL1, SCD, HSP90AA1, GALNT6, ABHD17A, STMN2) all share this
-shape: a multi-CS fit on log-transformed RNA-seq counts over a
-cis window. We reproduce the same workflow here on a bundled
-simulated fixture (`gtex_example`) shaped after those examples.
+The published case studies (AHCYL1, SCD, HSP90AA1, STMN2,
+ABHD17A) all share this shape: a multi-CS fit on log1p-transformed
+RNA-seq counts over a cis window. **The underlying GTEx
+individual-level data is protected and cannot be redistributed
+with this package**, so we simulate a fixture (`gtex_example`)
+that reproduces the multi-CS structure of those figures and walk
+through both the standard plot and a publication-grade
+genome-browser overlay on this simulated data.
 
-## Bundled GTEx fixture
+## Example dataset
 
 ```{r setup, message = FALSE}
 library(mfsusieR)
@@ -39,28 +43,11 @@ str(gtex_example, max.level = 1)
 ```
 
 200 SNPs over a real LD scaffold (`susieR::N3finemapping$X`),
-256 gene-body positions, three causal SNPs at distinct positions
-(5', mid-body, 3') with localized peak effects:
-
-```{r show-truth, fig.width = 7, fig.height = 3, fig.cap = "Three true per-position effects on the gene-body grid."}
-matplot(gtex_example$pos, t(gtex_example$causal_betas),
-        type = "l", lty = 1, lwd = 1.5,
-        col = c("#E69F00", "#56B4E9", "#009E73"),
-        xlab = "gene-body position", ylab = "true effect",
-        main = "Ground-truth effect curves")
-abline(h = 0, lty = 2, col = "grey60")
-legend("topright",
-       legend = paste0("SNP ", gtex_example$causal_snps),
-       col = c("#E69F00", "#56B4E9", "#009E73"),
-       lwd = 1.5, bty = "n")
-```
+256 gene-body positions in a 32 kb window on chr1
+(109.99 Mb - 110.02 Mb), three causal SNPs at distinct positions
+(5', mid-body, 3') with localized peak effects.
 
 ## Fit
-
-We use `L = 15` candidate single effects and `L_greedy = 5`. The
-`L_greedy` knob (added on the susieR side of the migration plan)
-runs a greedy filter pass on the full-`L` IBSS and is the
-recommended default for most cis-windows.
 
 ```{r fit}
 fit <- fsusie(gtex_example$Y, gtex_example$X,
@@ -69,36 +56,137 @@ fit <- fsusie(gtex_example$Y, gtex_example$X,
               verbose = TRUE)
 fit$niter; fit$converged
 length(fit$sets$cs)
-fit$sets$cs
 fit$pip[gtex_example$causal_snps]
 ```
 
 All three causal SNPs receive PIP = 1 and land in three separate
 credible sets.
 
-## Inspecting the fit
+## Standard fsusie figure
 
-The unsmoothed `mfsusie_plot()` shows PIPs (top panel, points
-colored by CS membership) and the per-CS effect curves recovered
-by inverse DWT (bottom panel):
+`mfsusie_plot()` shows PIPs colored by CS membership and the
+TI-smoothed per-CS effect curves with 95% credible bands plus
+affected-region bars at the bottom of the effect panel.
 
-```{r plot-raw, fig.width = 6, fig.height = 5, fig.cap = "Raw fSuSiE fit. Top: PIPs across SNPs colored by credible set. Bottom: posterior effect curves on the gene-body grid."}
-mfsusie_plot(fit)
-```
-
-Adding `mf_post_smooth(method = "TI")` denoises the wavelet
-posterior with cycle-spinning translation-invariant denoising
-and adds 95% pointwise credible bands. The three CS effect
-curves now show clean peaks at distinct positions, mirroring
-the multi-CS structure highlighted in the AHCYL1 / SCD figures
-of the fsusie-experiments paper:
-
-```{r plot-smoothed, fig.width = 6, fig.height = 5, fig.cap = "TI-smoothed fSuSiE fit on the simulated GTEx-style fixture. Each CS captures a distinct gene-body region; bands and bottom-bar affected regions surface where each effect is significantly different from zero."}
+```{r plot-smoothed}
 fit_s <- mf_post_smooth(fit, method = "TI",
                         wavelet_filter = 1L,
                         wavelet_family = "DaubExPhase")
 mfsusie_plot(fit_s)
 ```
+
+The three CS effect curves capture three separate gene-body
+regions, mirroring the multi-CS structure in published GTEx
+fSuSiE figures.
+
+## Genome-browser overlay (Gviz)
+
+For a publication-grade figure with chromosome ideogram, genome
+axis, fitted effect track, observed allele-stratified coverage,
+and read-count tracks, `mfsusieR` ships a worked example using
+`Gviz`. The Bioconductor packages it depends on (`Gviz`,
+`GenomicRanges`, `IRanges`) are listed as `Suggests` only.
+
+```{r gviz, eval = requireNamespace("Gviz", quietly = TRUE), fig.height = 7}
+suppressPackageStartupMessages({
+  library(Gviz); library(GenomicRanges); library(IRanges)
+})
+
+cs <- 1L                         # which credible set to feature
+markers <- fit_s$sets$cs[[cs]]
+lead    <- markers[which.max(fit_s$pip[markers])]
+x_lead  <- gtex_example$X[, lead]
+
+# Effect curve + 95% band on the gene-body grid.
+band  <- fit_s$credible_bands[[1L]][[cs]]
+effect <- fit_s$effect_curves[[1L]][[cs]]
+
+# Allele-stratified mean log1p coverage at the lead variant.
+# The genotype matrix is mean-centered, so a 0/1 split on the
+# sign of the dosage approximates a reference / carrier split.
+g0 <- which(x_lead < 0)   # reference (below-mean dosage)
+g1 <- which(x_lead >= 0)  # carrier (above-mean dosage)
+mu0 <- colMeans(gtex_example$Y[g0, , drop = FALSE])
+mu1 <- colMeans(gtex_example$Y[g1, , drop = FALSE])
+
+chrom <- gtex_example$chrom
+pos   <- gtex_example$pos
+
+gr     <- GRanges(chrom, IRanges(pos, pos + 1L))
+ylim_e <- range(c(effect, band)) * c(1.1, 1.1)
+
+# Effect track: solid mean line with two dashed credible-band
+# lines, layered via OverlayTrack so all three render on the
+# same panel.
+e_main <- DataTrack(range = gr, data = effect, type = "l", lwd = 2,
+                    col = "#1f78b4", name = sprintf("Effect CS %d", cs),
+                    ylim = ylim_e,
+                    background.title = "white", col.axis = "black",
+                    col.title = "black", fontface.title = 1)
+e_lo   <- DataTrack(range = gr, data = band[, 1L], type = "l",
+                    lty = 2, col = "#1f78b4", ylim = ylim_e)
+e_hi   <- DataTrack(range = gr, data = band[, 2L], type = "l",
+                    lty = 2, col = "#1f78b4", ylim = ylim_e)
+effect_track <- OverlayTrack(trackList = list(e_main, e_lo, e_hi),
+                             background.title = "white")
+
+obs_diff_track <- DataTrack(range = gr, data = mu1 - mu0,
+                            type = "p", pch = 16, cex = 0.5,
+                            col = "#1f78b4",
+                            name = "Observed difference",
+                            background.title = "white",
+                            col.axis = "black", col.title = "black",
+                            fontface.title = 1)
+
+ylim_c <- range(c(mu0, mu1))
+c_ref  <- DataTrack(range = gr, data = mu0, type = "p", pch = 16,
+                    cex = 0.5, col = "navy",
+                    name = "Avg. log1p count", ylim = ylim_c,
+                    background.title = "white", col.axis = "black",
+                    col.title = "black", fontface.title = 1)
+c_alt  <- DataTrack(range = gr, data = mu1, type = "p", pch = 16,
+                    cex = 0.5, col = "turquoise", ylim = ylim_c)
+count_track <- OverlayTrack(trackList = list(c_ref, c_alt),
+                            background.title = "white")
+
+axis_track <- GenomeAxisTrack(col = "black", fontcolor = "black",
+                              col.title = "black",
+                              background.title = "white")
+
+# Gene-region track (simulated exon / intron structure shipped
+# with `gtex_example`): two isoforms of the AHCYL1-like gene plus
+# a 5' L1 element, drawn as exon boxes connected by intron lines.
+gene_track <- GeneRegionTrack(gtex_example$gene_track,
+                              chromosome = chrom,
+                              name = "", showId = TRUE,
+                              geneSymbol = TRUE,
+                              col = "salmon", fill = "salmon",
+                              background.title = "white",
+                              col.axis = "black", col.title = "black")
+
+plotTracks(list(axis_track, effect_track, obs_diff_track,
+                count_track, gene_track),
+           from = gtex_example$locus[1L],
+           to   = gtex_example$locus[2L],
+           sizes = c(1, 3, 3, 3, 2),
+           main  = sprintf("%s cis-eQTL: CS %d (lead SNP rank %d, %d ref / %d carrier)",
+                           gtex_example$gene, cs, lead,
+                           length(g0), length(g1)),
+           cex.main = 1.0)
+```
+
+The Gviz figure layout matches the published case-study figures:
+top axis with positions in the gene-body window, the fSuSiE
+effect curve with dashed credible band, the observed
+allele-stratified coverage difference at each gene-body position,
+and the per-position log1p counts split by genotype class.
+Adding an `IdeogramTrack` from a real chromosome and a
+`GeneRegionTrack` from a `TxDb` package (e.g.
+`TxDb.Hsapiens.UCSC.hg38.knownGene`) extends this to a full
+ideogram + transcript layout; the worked-example scripts in
+`system.file("scripts/gtex_case_study", package = "mfsusieR")`
+show the wiring on a real `(chrom, gene)` pair when the
+underlying RNA-seq data is available locally.
 
 ## Why functional fine-mapping helps here
 
@@ -115,22 +203,5 @@ fit_scalar$sets$cs
 fit_scalar$pip[gtex_example$causal_snps]
 ```
 
-Per-position effects (the GTEx case studies' value add) are not
-recoverable from the scalar fit; they are the natural output of
-`fsusie()`.
-
-## Genome-browser overlay (optional)
-
-For a publication-grade genome-browser figure with ideogram,
-genome axis, fitted effect with credible band, allele-stratified
-observed coverage, and a gene-region track, `mfsusieR` ships
-worked-example scripts in
-`system.file("scripts/gtex_case_study", package = "mfsusieR")`
-(AHCYL1, SCD, HSP90AA1, STMN2, ABHD17A). They layer an
-`fsusie()` fit onto `Gviz` tracks. The Bioconductor packages
-they depend on (`Gviz`, `GenomicFeatures`, `AnnotationDbi`,
-`TxDb.Hsapiens.UCSC.hg38.knownGene`, `org.Hs.eg.db`, `smashr`)
-are listed as `Suggests`; install them with
-`BiocManager::install(...)` if you want the genome-browser
-overlay. The base-R `mfsusie_plot()` shown above is the lighter
-default and is what most users need.
+Per-position effects are not recoverable from the scalar fit;
+they are the natural output of `fsusie()`.

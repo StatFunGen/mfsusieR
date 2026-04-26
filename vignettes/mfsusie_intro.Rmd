@@ -13,7 +13,8 @@ vignette: >
 ```{r knitr-opts, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE, comment = "#>",
-  fig.width = 5, fig.height = 3, fig.align = "center", dpi = 120
+  fig.width = 8, fig.height = 6, fig.align = "center", dpi = 110,
+  out.width = "100%"
 )
 ```
 
@@ -70,7 +71,7 @@ top-left tile (CS-colored), then one effect-curve panel per
 outcome with TI-smoothed curves, 95% credible bands, and
 affected-region bars at the bottom of each panel.
 
-```{r mfsusie-plot, fig.width = 8, fig.height = 5, fig.cap = "Joint fit across DNAm (T = 64) and RNA-seq (T = 32). PIP panel combines evidence from both outcomes; effect panels show TI-smoothed curves with 95% credible bands."}
+```{r mfsusie-plot, fig.width = 8, fig.height = 5}
 fit_s <- mf_post_smooth(fit, method = "TI",
                         wavelet_filter = 1L,
                         wavelet_family = "DaubExPhase")

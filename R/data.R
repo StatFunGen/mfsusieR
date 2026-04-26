@@ -35,7 +35,7 @@
 #' \donttest{
 #' data(dnam_example)
 #' fit <- fsusie(dnam_example$Y, dnam_example$X,
-#'               pos = dnam_example$pos, L = 3, verbose = FALSE)
+#'               pos = dnam_example$pos, L = 15, L_greedy = 5, verbose = TRUE)
 #' fit_s <- mf_post_smooth(fit, method = "TI",
 #'                         wavelet_filter = 1L,
 #'                         wavelet_family = "DaubExPhase")
@@ -70,7 +70,7 @@
 #' \donttest{
 #' data(rnaseq_example)
 #' fit <- fsusie(rnaseq_example$Y, rnaseq_example$X,
-#'               pos = rnaseq_example$pos, L = 3, verbose = FALSE)
+#'               pos = rnaseq_example$pos, L = 15, L_greedy = 5, verbose = TRUE)
 #' fit_s <- mf_post_smooth(fit, method = "HMM")
 #' mfsusie_plot(fit_s)
 #' }
@@ -103,8 +103,8 @@
 #' \donttest{
 #' data(multiomic_example)
 #' fit <- mfsusie(multiomic_example$X, multiomic_example$Y_list,
-#'                pos = multiomic_example$pos_list, L = 3,
-#'                verbose = FALSE)
+#'                pos = multiomic_example$pos_list, L = 15, L_greedy = 5,
+#'                verbose = TRUE)
 #' fit_s <- mf_post_smooth(fit, method = "TI",
 #'                         wavelet_filter = 1L,
 #'                         wavelet_family = "DaubExPhase")
@@ -114,13 +114,13 @@
 
 #' Simulated GTEx-style cis-eQTL fixture (gene-body coverage)
 #'
-#' An `fsusie()`-shaped fixture inspired by the AHCYL1 / SCD case
-#' studies in `fsusie-experiments/scripts_plot/GeTX/`: a single
-#' functional response on 256 gene-body positions, three causal
-#' SNPs with localized peak effects at distinct positions
-#' (5', mid-body, 3'). Used by `vignette("fsusie_gtex_case_study")`
-#' to demonstrate a multi-CS fSuSiE fit on RNA-seq-style coverage
-#' data without redistributing real GTEx individual-level data.
+#' An `fsusie()`-shaped fixture inspired by published GTEx
+#' cis-eQTL case studies (AHCYL1, SCD, HSP90AA1, STMN2, ABHD17A):
+#' a single functional response on 256 gene-body positions,
+#' three causal SNPs with localized peak effects at distinct
+#' positions (5', mid-body, 3'). Used by
+#' `vignette("fsusie_gtex_case_study")` to demonstrate a multi-CS
+#' fSuSiE fit on RNA-seq-style coverage data.
 #'
 #' @format A list with components
 #' \describe{
