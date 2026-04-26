@@ -12,3 +12,4 @@
 ^README-SETUP\.md$
 ^tests/testthat/scripts$
 ^CLAUDE\.md$
+^data-raw$
