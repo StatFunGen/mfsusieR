@@ -3,21 +3,22 @@
 \docType{data}
 \name{dnam_example}
 \alias{dnam_example}
-\title{Simulated DNA methylation fine-mapping fixture}
+\title{Simulated methylation QTL example}
 \format{
 A list with components
 \describe{
-\item{\code{X}}{\verb{n x p} genotype matrix (\code{p = 200}) sliced from
-\code{susieR::N3finemapping$X} so the LD pattern is real.}
-\item{\code{Y}}{\verb{n x T} methylation matrix on irregular CpG
-positions (\code{T = 64}).}
-\item{\code{pos}}{length-\code{T} integer vector of CpG positions
-(base pairs).}
-\item{\code{causal_snps}}{integer vector of column indices in
-\code{X} flagged as truly causal.}
+\item{\code{X}}{\verb{n x p} genotype matrix (\code{p = 12}).}
+\item{\code{Y}}{\verb{n x T} methylation matrix (\code{T = 32}).}
+\item{\code{pos}}{length-\code{T} integer vector of CpG indices.}
+\item{\code{causal_snps}}{integer vector \code{c(1, 9, 3)} of column
+indices in \code{X} that carry true effects.}
 \item{\code{causal_betas}}{\verb{length(causal_snps) x T} matrix of
-the true per-position effects.}
-\item{\code{description}}{free-text description of the fixture.}
+true per-CpG effects.}
+\item{\code{truth_mask}}{length-3 list of length-\code{T} boolean
+vectors, one per CS, marking the CpGs each CS truly
+affects. Read by \code{mfsusie_plot_lfsr()} when the
+\code{truth} argument is supplied.}
+\item{\code{description}}{free-text description of the dataset.}
 }
 }
 \source{
@@ -27,11 +28,11 @@ Simulated. See \code{data-raw/make_data.R}.
 dnam_example
 }
 \description{
-An \code{fsusie()}-shaped fixture for a cis-mQTL fine-mapping
-problem: a single functional response on irregular CpG
-positions over a ~10-kb region, two causal variants with
-overlapping but oppositely-signed Gaussian methylation
-effects.
+Simulated cis-mQTL data with \code{n = 100} samples, \code{p = 12}
+SNPs, and \code{T = 32} CpGs. Three causal SNPs (1, 9, 3) act on
+two CpG clusters: SNPs 1 and 9 affect cluster A (CpGs 9 to
+16) with opposite signs, and SNP 3 affects cluster B (CpGs
+25 to 32). SNP 4 is a high-LD near-clone of SNP 3.
 }
 \examples{
 \donttest{

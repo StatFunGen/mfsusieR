@@ -27,11 +27,9 @@ dependencies = {"r-base" = "4.5.*"}
 r44 = {features = ["r44"]}
 r45 = {features = ["r45"]}
 
-[target.linux-64.dependencies]
-"gcc" = "*"
-
 [dependencies]
-# Core dependencies (from Imports / LinkingTo)
+# Core dependencies (from Imports / LinkingTo). These are
+# cross-platform; mfsusieR itself runs on linux-64 and osx-arm64.
 "r-cpp11" = "*"
 "r-susier" = "*"
 "r-wavethresh" = "*"
@@ -39,22 +37,12 @@ r45 = {features = ["r45"]}
 "r-ashr" = "*"
 "r-matrixstats" = "*"
 
-# Suggested dependencies (for testing and documentation)
+# Suggested dependencies (for testing and documentation).
 "r-testthat" = "*"
 "r-knitr" = "*"
 "r-rmarkdown" = "*"
 
-# Bioconductor packages used by the GTEx case-study vignette's
-# genome-browser overlay (Gviz multi-track figure).
-"bioconductor-gviz" = "*"
-"bioconductor-genomicranges" = "*"
-"bioconductor-iranges" = "*"
-
-# `coloc` is used by the colocalization vignette's coloc.susie
-# example. Listed under Suggests in DESCRIPTION.
-"r-coloc" = "*"
-
-# Development tools
+# Development tools.
 "r-devtools" = "*"
 "r-covr" = "*"
 "r-rcmdcheck" = "*"
@@ -63,3 +51,29 @@ r45 = {features = ["r45"]}
 "r-jsonlite" = "*"      # for coverage.json shields.io endpoint
 "r-decor" = "*"         # required by cpp11::cpp_register() during devtools::document()
 "qpdf" = "*"
+
+[target.linux-64.dependencies]
+"gcc" = "*"
+
+# Bioconductor packages used by the GTEx case-study vignette's
+# Gviz multi-track figure. Bioconda does not ship osx-arm64
+# builds for these; the vignette chunks gate with
+# `requireNamespace("Gviz", quietly = TRUE)` so packages still
+# build on osx-arm64 without these.
+"bioconductor-gviz" = "*"
+"bioconductor-genomicranges" = "*"
+"bioconductor-iranges" = "*"
+
+# `coloc` is used by the colocalization vignette's coloc.susie
+# example. Linux-64 only (depends on Bioconductor packages that
+# do not ship osx-arm64 builds).
+"r-coloc" = "*"
+
+# Vignette-only render dependencies for the methylation
+# case-study data panels. Linux-64 only because some of these
+# pull bioconda dependencies; vignette chunks gate with
+# `requireNamespace("ggplot2", quietly = TRUE)` so the package
+# still builds on osx-arm64 without them.
+"r-ggplot2" = "*"
+"r-cowplot" = "*"
+"r-reshape2" = "*"

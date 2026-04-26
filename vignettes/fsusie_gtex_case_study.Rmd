@@ -29,8 +29,8 @@ The published case studies (AHCYL1, SCD, HSP90AA1, STMN2,
 ABHD17A) all share this shape: a multi-CS fit on log1p-transformed
 RNA-seq counts over a cis window. **The underlying GTEx
 individual-level data is protected and cannot be redistributed
-with this package**, so we simulate a fixture (`gtex_example`)
-that reproduces the multi-CS structure of those figures and walk
+with this package**, so we simulate data (`gtex_example`) that
+reproduces the multi-CS structure of those figures and walk
 through both the standard plot and a publication-grade
 genome-browser overlay on this simulated data.
 
@@ -175,7 +175,7 @@ plotTracks(list(axis_track, effect_track, obs_diff_track,
            cex.main = 1.0)
 ```
 
-The Gviz figure layout matches the published case-study figures:
+The Gviz figure layout consists of
 top axis with positions in the gene-body window, the fSuSiE
 effect curve with dashed credible band, the observed
 allele-stratified coverage difference at each gene-body position,

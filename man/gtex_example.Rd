@@ -3,7 +3,7 @@
 \docType{data}
 \name{gtex_example}
 \alias{gtex_example}
-\title{Simulated GTEx-style cis-eQTL fixture (gene-body coverage)}
+\title{Simulated GTEx-style cis-eQTL example}
 \format{
 A list with components
 \describe{
@@ -12,7 +12,7 @@ A list with components
 \item{\code{Y}}{\verb{n x T} log1p-coverage matrix (\code{T = 256}).}
 \item{\code{pos}}{length-\code{T} integer vector of gene-body positions.}
 \item{\code{causal_snps}}{integer vector of column indices in
-\code{X} flagged as truly causal.}
+\code{X} that carry true effects.}
 \item{\code{causal_betas}}{\verb{length(causal_snps) x T} matrix of
 true per-position effects.}
 \item{\code{description}}{free-text description.}
@@ -25,13 +25,12 @@ Simulated. See \code{data-raw/make_data.R}.
 gtex_example
 }
 \description{
-An \code{fsusie()}-shaped fixture inspired by the AHCYL1 / SCD case
-studies in \verb{fsusie-experiments/scripts_plot/GeTX/}: a single
-functional response on 256 gene-body positions, three causal
-SNPs with localized peak effects at distinct positions
-(5', mid-body, 3'). Used by \code{vignette("fsusie_gtex_case_study")}
-to demonstrate a multi-CS fSuSiE fit on RNA-seq-style coverage
-data without redistributing real GTEx individual-level data.
+Simulated cis-eQTL data inspired by published GTEx case
+studies (AHCYL1, SCD, HSP90AA1, STMN2, ABHD17A): a
+functional response on 256 gene-body positions, three
+causal SNPs with localized peak effects at distinct 5',
+mid-body, and 3' positions. Used by
+\code{vignette("fsusie_gtex_case_study")}.
 }
 \examples{
 \donttest{

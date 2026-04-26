@@ -2,93 +2,134 @@
 
 ## 1. Plot API
 
-- [ ] 1.1 Re-export `susieR::susie_plot` from mfsusieR (add to
-      `R/mfsusieR-package.R` `@importFrom` + `@export susie_plot`).
-- [ ] 1.2 Implement `R/fsusie_plot.R` with `fsusie_plot(fit, ...)`.
-      Base R only. Args: `fit`, `effect = "all"`, `cred_band = TRUE`,
-      `show_affected_region = TRUE`, `lfsr_curve = TRUE`,
-      `show_grid_dots = FALSE`, `pos_label = NULL`, `legend = TRUE`.
-- [ ] 1.3 Implement `R/mfsusie_plot.R` with
+- [x] 1.1 Implement `R/mfsusie_plot.R` with
       `mfsusie_plot(fit, m = NULL, ...)`. Base R only. Tiles
       `par(mfrow = ...)` over outcomes when `m` is `NULL`.
-      Functional outcomes get curves; scalar outcomes get the
-      mvsusie-style point + CS-bar plot.
-- [ ] 1.4 Add S3 method `plot.mfsusie(x, ...)` in
-      `R/mfsusie_methods.R`. Dispatches: `M == 1` -> `fsusie_plot`,
-      else -> `mfsusie_plot`.
-- [ ] 1.5 Color palette helper `mf_cs_colors(L)` returning a
-      length-L vector matching `fsusieR`'s palette
-      (`c("black", "dodgerblue2", "green4", "#6A3D9A", "#FF7F00",
-        "darkorchid", "khaki2", "khaki4", "deeppink1")`).
-- [ ] 1.6 Tests: smoke tests in
-      `tests/testthat/test_plot.R`. Each public plot call wrapped
-      in `expect_silent()` against a tiny fit. Verify the function
-      returns invisibly (`invisible(NULL)` per base-R convention).
+- [x] 1.2 Add S3 method `plot.mfsusie(x, ...)` in
+      `R/mfsusie_methods.R` dispatching to `mfsusie_plot()`.
+- [x] 1.3 Color palette helper `mf_cs_colors(L)` (Okabe-Ito).
+- [x] 1.4 Smoke tests for `mfsusie_plot()`.
+- [ ] 1.5 Add `effect_style = c("band", "errorbar")` to
+      `mfsusie_plot()`. `"band"` keeps the current ribbon;
+      `"errorbar"` draws a per-position dot with vertical
+      bar to the credible band. Default `"band"`. Fails fast
+      when `fit$credible_bands` is unpopulated and
+      `effect_style = "errorbar"`.
+- [ ] 1.6 Add `facet_cs = c("auto", "stack", "overlay")` to
+      `mfsusie_plot()`. `"overlay"` keeps the current single
+      panel. `"stack"` draws one row per CS within the effect
+      panel using `layout()` rather than nested `par(mfrow)`.
+      `"auto"` defaults to `"stack"` when `length(cs) >= 3`
+      OR when affected-region masks (band excludes zero) are
+      pairwise disjoint; `"overlay"` otherwise.
+- [ ] 1.7 New `R/mfsusie_plot_lfsr.R` with
+      `mfsusie_plot_lfsr(fit, lfsr_threshold = 0.01,
+      truth = NULL, cex_max = 6, ...)`. No `m` argument.
+      Bubble grid: rows = CSes, columns = positions, dot
+      size = `-log10(lfsr)`, color = `lfsr <= threshold`
+      (or `truth` when supplied). Handles M = 1 (single
+      panel) and M > 1 (one panel per outcome, layout policy
+      mirrors `mfsusie_plot()`). Errors when
+      `fit$lfsr_curves` is unpopulated.
+- [ ] 1.8 Change `mfsusie_plot()` default `lfsr_threshold`
+      from `0.05` to `0.01` (and propagate to docs).
+- [ ] 1.9 Smoke tests in `tests/testthat/test_plot.R`:
+      `effect_style` x `facet_cs` x (post-smoothed / not),
+      `mfsusie_plot_lfsr()` for M = 1 and M > 1, with and
+      without `truth`. Each call wrapped in
+      `expect_silent()` against a tiny fit.
 
 ## 2. Post-processed effect storage
 
-- [ ] 2.1 Add (optional) `fit$effect_curves`, `fit$credible_bands`,
-      `fit$lfsr_curves` slots to the documented mfsusie fit
-      contract. Slots are populated by `mf_post_smooth()` (PR
-      group 6b) and read by the plot functions.
-- [ ] 2.2 Document the slots in the `mfsusie()` `@return` block.
-      When absent, plot functions fall back to the wavelet-domain
-      effect through `coef.mfsusie()`.
+- [x] 2.1 `fit$effect_curves`, `fit$credible_bands`,
+      `fit$lfsr_curves` slots populated by `mf_post_smooth()`.
+- [x] 2.2 Document the slots in `mfsusie()` `@return`.
 
-## 3. Packaged example data
+## 3. Packaged example data (enhance, no new datasets)
 
-- [ ] 3.1 Create `data-raw/make_fsusie_methyl_example.R`.
-      Builds a small DNAm fixture from
-      `fsusie-experiments/fig_1_data` (or fixed-seed simulation).
-      Saves to `data/fsusie_methyl_example.rda`.
-- [ ] 3.2 Create `data-raw/make_mfsusie_joint_example.R`. Builds a
-      multi-outcome fixture (M=5: 2 functional + 3 scalar) using
-      `mvf.susie.alpha::simu_effect_multfsusie` with fixed seed,
-      saved to `data/mfsusie_joint_example.rda`.
-- [ ] 3.3 Document data sets in `R/data.R` with `@docType data`
-      blocks; one per dataset.
-- [ ] 3.4 Add `data-raw/` to `.Rbuildignore`.
-- [ ] 3.5 Verify package size remains reasonable
-      (`tools::checkBuiltPackage()` size summary).
+- [ ] 3.1 Update `data-raw/make_data.R`: enhance
+      `dnam_example` to `n = 100`, `p = 12`, `T = 32` with
+      three causal SNPs producing two CpG clusters. Include
+      a length-T boolean `truth_mask` per CS so the
+      methylation vignette can pass `truth = ...` to
+      `mfsusie_plot_lfsr()`.
+- [ ] 3.2 Update `data-raw/make_data.R`: bump `rnaseq_example`
+      from one to two causal SNPs at positions 25 and 75
+      with smooth gene-body shapes via the same
+      `simu_IBSS_per_level()`-style construction the intro
+      vignette demonstrates.
+- [ ] 3.3 Regenerate `.rda` files; update roxygen blocks in
+      `R/data.R` with the new sizes / causal counts.
+- [ ] 3.4 Verify package size remains reasonable.
 
-## 4. Vignette refresh
+## 4. Vignette merges
 
-- [ ] 4.1 `getting_started.Rmd`: load `data(N3finemapping)` from
-      susieR, plus `data(fsusie_methyl_example)` for an
-      `fsusie_plot()` preview, plus `data(mfsusie_joint_example)`
-      for an `mfsusie_plot()` preview. Keep the `susieR` C1
-      numerical identity demo.
-- [ ] 4.2 `fsusie_intro.Rmd`: rewrite using
-      `data(fsusie_methyl_example)` + `fsusie_plot()`. Mirror the
-      structure of `fsusieR::fsusie_intro.Rmd`.
-- [ ] 4.3 `fsusie_covariates_and_coloc.Rmd`: rewrite using
-      packaged data + `fsusie_plot()`. Mirror
-      `fsusieR::Adjusting_covariate.Rmd` + `Coloc_fsusie.Rmd`.
-- [ ] 4.4 `fsusie_dnam_case_study.Rmd`: rewrite using
-      `data(fsusie_methyl_example)` + `fsusie_plot()`. Mirror
-      `fsusieR::methyl_demo.Rmd`.
-- [ ] 4.5 `fsusie_why_functional.Rmd`: keep the simulation-based
-      structure (it demonstrates a contrast); add `fsusie_plot()`
-      and `susie_plot()` for visual comparison.
-- [ ] 4.6 `mfsusie_intro.Rmd`: rewrite using
-      `data(mfsusie_joint_example)` + `mfsusie_plot()`. Mirror
-      `mvf.susie.alpha::joint_functional_and_univariate_fine_mapping.Rmd`.
-- [ ] 4.7 `mfsusie_long_running_fits.Rmd`: keep current; add an
-      `mfsusie_plot()` preview at the end.
+- [ ] 4.1 Merge `vignettes/fsusie_intro.Rmd`. Single author
+      William Denault. Sections: overview / math model;
+      example dataset (`data(rnaseq_example)`); fitting;
+      inspecting the fit (`mfsusie_plot()`); smoothed effect
+      curves (`mf_post_smooth(method = "TI")`); uneven
+      sampling positions (subsample inline); prior choices
+      (`prior_variance_scope = "per_scale"` vs
+      `"per_outcome"`, scatter of PIPs, runtime comparison).
+      No mention of any port-source package. No
+      `susie_plot()`.
+- [ ] 4.2 Merge `vignettes/fsusie_dnam_case_study.Rmd`.
+      Authors: William Denault and Gao Wang. Sections:
+      overview; example dataset (`data(dnam_example)`);
+      data inspection (ggplot2-gated); per-CpG association
+      tests + GWAS-by-SNP / GWAS-by-CpG plots
+      (ggplot2-gated); per-CpG `susie()` failure-mode demo
+      (ggplot2-gated); single fSuSiE fit; `mfsusie_plot()`;
+      `mfsusie_plot_lfsr(truth = ...)`;
+      `mf_post_smooth(method = "TI")` followed by
+      `mfsusie_plot(effect_style = "errorbar", facet_cs =
+      "stack")`; prediction (retain). No port-source
+      mention. No `susie_plot()`.
+- [ ] 4.3 Audit other vignettes
+      (`fsusie_covariates_and_coloc`, `fsusie_why_functional`,
+      `mfsusie_intro`, `mfsusie_long_running_fits`,
+      `post_processing`, `getting_started`, `fsusie_gtex_case_study`)
+      and remove any `susie_plot()` calls and any port-source
+      references. Pull the new plot-API options through where
+      they help.
 
-## 5. Spec + NAMESPACE
+## 5. Spec deltas
 
-- [ ] 5.1 Add `inst/openspec/specs/mf-plot/spec.md` documenting the
-      plot API contract.
-- [ ] 5.2 NAMESPACE: `export(fsusie_plot)`,
-      `export(mfsusie_plot)`, `S3method(plot, mfsusie)`,
-      `export(susie_plot)` (re-exported from susieR).
-- [ ] 5.3 R CMD check (CI) passes; vignettes knit cleanly.
+- [ ] 5.1 Add `inst/openspec/specs/mf-plot/spec.md` documenting
+      the plot API: `mfsusie_plot()` requirements (PIP panel,
+      effect panel, `effect_style`, `facet_cs`,
+      `show_lfsr_curve`, `lfsr_threshold` default 0.01) and
+      `mfsusie_plot_lfsr()` requirements (no `m`, M = 1 / M > 1
+      handling, `truth` semantics).
 
-## 6. Build + archive
+## 6. CI / pixi
 
-- [ ] 6.1 `devtools::test()` passes (smoke tests for plot
-      functions).
-- [ ] 6.2 `devtools::document()` regenerates man + NAMESPACE.
-- [ ] 6.3 Push, let CI run on the change branch.
-- [ ] 6.4 Archive the OpenSpec change once everything is green.
+- [ ] 6.1 Add `r-ggplot2`, `r-cowplot`, `r-reshape2` to
+      `pixi.toml` only (NOT to DESCRIPTION Suggests).
+      Vignette chunks gate with
+      `eval = requireNamespace("ggplot2", quietly = TRUE)`.
+
+## 7. Verification (developer-only, never in vignettes)
+
+- [ ] 7.1 Confirm `prior_variance_scope = "per_scale"` and
+      `"per_outcome"` compute identical priors to
+      `mixture_normal_per_scale` and `mixture_normal` in the
+      port source (`R/prior_scale_mixture.R::init_scale_mixture_prior_default`
+      already verified). Document the mapping in
+      `inst/notes/refactor-exceptions.md` if not already
+      there. No vignette text mentions either source.
+- [ ] 7.2 Add unit-test coverage for the smooth-shape
+      simulation used by `rnaseq_example` (apple-to-apple
+      PIP / alpha / mu / lbf at the documented contract
+      tolerance) if not already covered. Same for the
+      enhanced `dnam_example` (`n = 100`, `T = 32`, three
+      causal SNPs).
+
+## 8. Build + archive
+
+- [ ] 8.1 `devtools::test()` passes (smoke + apple-to-apple).
+- [ ] 8.2 `devtools::document()` regenerates man + NAMESPACE.
+- [ ] 8.3 Vignettes render cleanly under pixi env.
+- [ ] 8.4 Push, let CI run.
+- [ ] 8.5 Archive once everything is green.

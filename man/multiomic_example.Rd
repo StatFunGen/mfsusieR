@@ -3,7 +3,7 @@
 \docType{data}
 \name{multiomic_example}
 \alias{multiomic_example}
-\title{Simulated multi-omic fine-mapping fixture}
+\title{Simulated multi-outcome QTL example}
 \format{
 A list with components
 \describe{
@@ -25,11 +25,11 @@ Simulated. See \code{data-raw/make_data.R}.
 multiomic_example
 }
 \description{
-An \code{mfsusie()}-shaped fixture for joint fine-mapping across
-DNA methylation (functional, T = 64), RNA-seq (functional,
-T = 32), and two scalar QTLs (eQTL, pQTL). Two causal SNPs
-shared across all four outcomes with per-outcome shapes and
-signs.
+Simulated multi-outcome QTL data for \code{mfsusie()} covering
+DNA methylation (functional, \code{T = 64}), RNA-seq (functional,
+\code{T = 32}), and two scalar QTLs (eQTL, pQTL). Two causal SNPs
+shared across all four outcomes; per-outcome shapes and
+signs differ.
 }
 \examples{
 \donttest{

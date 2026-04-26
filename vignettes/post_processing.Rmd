@@ -75,9 +75,9 @@ fit <- fsusie(Y, X, pos = positions, L = 15, L_greedy = 5, verbose = TRUE)
 ## Before smoothing
 
 `mfsusie_plot()` on the unsmoothed fit shows curves recovered from
-`coef()` (raw inverse DWT). They track the true bell shape, but
-the fine wavelet scales add visible jitter, and the fit returns
-no credible bands by default.
+`coef()` (raw inverse DWT). The curves track the true bell shape,
+but fine wavelet scales contribute high-frequency noise, and the
+fit returns no credible bands by default.
 
 ```{r before}
 mfsusie_plot(fit)
@@ -96,9 +96,8 @@ credible bands as transparent ribbons:
 mfsusie_plot(fit_s)
 ```
 
-The shape is preserved, fine-scale jitter is suppressed, and the
-ribbon makes it obvious where the curve is significantly different
-from zero (band excludes 0).
+The shape is preserved, high-frequency noise is suppressed, and
+the ribbon marks the positions where the band excludes zero.
 
 ## Choosing a smoother
 

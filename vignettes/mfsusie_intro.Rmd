@@ -35,14 +35,14 @@ library(susieR)
 set.seed(1)
 ```
 
-## Bundled multi-omic fixture
+## Multi-outcome example
 
-`multiomic_example` is a four-outcome cis-QTL fixture, of which
-we use the two functional outcomes here (DNAm with T = 64
-irregular CpGs and RNA-seq with T = 32 exon-body positions). Two
-causal SNPs are shared across both outcomes with per-outcome
-shapes and signs. Genotypes use the `susieR::N3finemapping` LD
-scaffold for realistic correlation.
+`multiomic_example` is a four-outcome simulated cis-QTL example.
+We use the two functional outcomes here: DNAm with `T = 64`
+irregular CpGs and RNA-seq with `T = 32` exon-body positions.
+Two causal SNPs are shared across both outcomes; per-outcome
+shapes and signs differ. Genotypes use the
+`susieR::N3finemapping` LD scaffold for realistic correlation.
 
 ```{r load-data}
 data(multiomic_example)

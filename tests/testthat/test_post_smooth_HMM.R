@@ -86,14 +86,15 @@ test_that("mf_fit_hmm uses the correct prior modes when idx_comp is non-contiguo
   expect_true(mean(sign(ours$x_post[1:50])  == sign(x[1:50]))  > 0.9)
   expect_true(mean(sign(ours$x_post[51:100])== sign(x[51:100]))> 0.9)
 
-  # Upstream fsusieR is known to differ here due to the missing
-  # `mu <- mu[idx_comp]` (regression in fc806a5). Document the
-  # divergence numerically so the deviation is greppable: any
-  # future fsusieR fix that restores `mu <- mu[idx_comp]` will
-  # bring this test back to bit-identity, at which point this
-  # block can be replaced by `expect_equal(..., tolerance = 0)`.
+  # Upstream fsusieR has restored `mu <- mu[idx_comp]` (the
+  # regression introduced in fc806a5 was reverted). With both
+  # implementations subsetting `mu` to match the reduced state
+  # space, the smoothers are bit-identical on the
+  # non-contiguous-prefix configuration. See
+  # `inst/notes/refactor-exceptions.md` (HMM-mu-subset entry)
+  # for the history.
   ref <- fsusieR:::fit_hmm(x, sd, halfK = 20)
-  expect_gt(max(abs(ours$x_post - ref$x_post)), 0.1)
+  expect_equal(ours$x_post, ref$x_post, tolerance = 0)
 })
 
 test_that("mf_univariate_hmm_regression matches upstream on contiguous-prefix configs", {

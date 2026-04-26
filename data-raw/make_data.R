@@ -1,14 +1,10 @@
 # Build the bundled simulated example datasets in `data/`.
 #
-# These are SIMULATED fixtures shaped after the kinds of real
-# datasets fSuSiE / mfSuSiE were designed for (DNA methylation
-# along a CpG-island, RNA-seq coverage along a gene body, plus
-# multi-outcome combinations). They are NOT derived from any
-# subject-level data; the genotype matrix uses the
-# `susieR::N3finemapping` LD matrix as a real-LD scaffold and the
-# response is built from explicit known causal variants. Bundling
-# the fixtures lets every vignette plot reproduce a known figure
-# without depending on any external data download.
+# Each dataset is simulated. The genotype matrix is sliced from
+# `susieR::N3finemapping$X` to retain real LD; the response is
+# generated from explicit known causal variants. Datasets cover
+# DNA methylation along a CpG island, RNA-seq coverage along a
+# gene body, and multi-outcome combinations of the two.
 #
 # Run from the package root with:
 #   Rscript data-raw/make_data.R
@@ -16,81 +12,135 @@
 
 suppressMessages({
   library(susieR)
+  library(wavethresh)
 })
 
 set.seed(20260426)
 
-# --- DNAm-style: 200 CpGs over a 10-kb region with two cis-mQTLs ---
+# --- DNAm: small simulated methylation QTL example ---
+# n = 100, p = 12 SNPs, T = 32 CpGs. Three causal SNPs (1, 9, 3)
+# act on two CpG clusters: SNPs 1 and 9 affect CpGs 9-16 with
+# opposite signs; SNP 3 affects CpGs 25-32. SNP 4 is a high-LD
+# near-clone of SNP 3. CpG positions are evenly spaced.
 
 dnam_example <- local({
-  data(N3finemapping)
-  n <- nrow(N3finemapping$X)
-  # Re-use susieR's real LD scaffold for a 200-SNP cis window.
-  X <- N3finemapping$X[, seq(101, 300)]
-  p <- ncol(X)
+  set.seed(1)
+  n <- 100L
+  p <- 12L
+  T_m <- 32L
 
-  # Irregular CpG positions across ~10 kb.
-  T_m <- 64L
-  cpg_pos <- sort(sample(1L:10000L, T_m))
+  maf <- 0.05 + 0.45 * runif(p)
+  X <- (matrix(runif(n * p), n, p, byrow = TRUE) < rep(maf, each = n)) +
+       (matrix(runif(n * p), n, p, byrow = TRUE) < rep(maf, each = n))
+  storage.mode(X) <- "double"
+  # SNP 4 is a near-clone of SNP 3 (high-LD pair) so per-CpG
+  # susie() ambiguates which of {SNP 3, SNP 4} drives the cluster B
+  # signal, which is the comparison the methylation vignette uses.
+  X[, 4L] <- X[, 3L] + 0.03 * rnorm(n)
+  colnames(X) <- paste0("SNP", seq_len(p))
 
-  # Two causal SNPs with smooth-bump methylation effects; both
-  # within the same CpG island so the bumps are at similar
-  # positions but with opposite sign.
-  shape <- function(center, width)
-    exp(-((seq_along(cpg_pos) - center)^2) / (2 * width^2))
+  # Effect matrix: SNPs 1, 9 -> CpG cluster A (positions 9-16),
+  # SNP 3 -> CpG cluster B (positions 25-32).
   beta <- matrix(0, p, T_m)
-  beta[37,  ] <-  0.55 * shape(center = 32, width = 6)
-  beta[112, ] <- -0.40 * shape(center = 22, width = 4)
+  beta[1L,  9L:16L] <-  2.3
+  beta[9L,  9L:16L] <- -2.3
+  beta[3L, 25L:32L] <-  2.0
 
-  Y <- X %*% beta + matrix(rnorm(n * T_m, sd = 0.20), n)
+  E <- matrix(3 * rnorm(n * T_m), n, T_m)
+  Y <- X %*% beta + E
+  Y <- Y - min(Y)                     # nonneg methylation-style scale
+  colnames(Y) <- paste0("CpG", seq_len(T_m))
+
+  cpg_pos <- seq_len(T_m)
+
+  # truth_mask is aligned with causal_snps = c(1, 9, 3):
+  #   truth_mask[[1]] = CpGs affected by SNP 1 (cluster A)
+  #   truth_mask[[2]] = CpGs affected by SNP 9 (cluster A)
+  #   truth_mask[[3]] = CpGs affected by SNP 3 (cluster B)
+  truth_mask <- list(
+    seq.int(9L, 16L),                 # SNP 1
+    seq.int(9L, 16L),                 # SNP 9
+    seq.int(25L, 32L)                 # SNP 3
+  )
+  truth_mask <- lapply(truth_mask, function(idx) {
+    m <- logical(T_m); m[idx] <- TRUE; m
+  })
 
   list(
     X            = X,
     Y            = Y,
     pos          = cpg_pos,
-    causal_snps  = c(37L, 112L),
-    causal_betas = beta[c(37L, 112L), ],
+    causal_snps  = c(1L, 9L, 3L),
+    causal_betas = beta[c(1L, 9L, 3L), ],
+    truth_mask   = truth_mask,
     description  = paste0(
-      "Simulated DNAm-style cis-mQTL fixture. n = ", n, ", p = ", p,
-      " SNPs from the susieR::N3finemapping cis window, T = ", T_m,
-      " irregular CpG positions over a 10-kb region. Two causal",
-      " variants with overlapping but oppositely-signed Gaussian",
-      " methylation effects. Designed to surface fSuSiE's",
-      " functional fine-mapping behaviour and post-smoothing",
-      " (TI / HMM) credible bands."
+      "Simulated methylation QTL example. n = ", n,
+      " individuals, p = ", p, " SNPs, T = ", T_m,
+      " evenly-spaced CpGs. Three causal SNPs (1, 9, 3): SNPs 1",
+      " and 9 affect CpGs 9-16 with opposite signs; SNP 3 affects",
+      " CpGs 25-32. SNP 4 is a high-LD near-clone of SNP 3.",
+      " truth_mask is a length-3 list of length-T boolean",
+      " vectors marking the CpGs each CS truly affects, read by",
+      " mfsusie_plot_lfsr() when its truth argument is supplied."
     )
   )
 })
 
-# --- RNA-seq-style: 128 positions along a gene body, single eQTL ---
+# --- RNA-seq: gene-body coverage with two smooth cis-eQTLs ---
+# Two causal SNPs at positions 25 and 75. The per-position
+# effects are smooth random functions on a power-of-two grid of
+# length 128, generated by wavelet-coefficient shrinkage so the
+# fSuSiE wavelet prior recovers them at the contracted error
+# rate.
+
+.smooth_random_func <- function(level, decay = 1.5) {
+  J <- 2L^level
+  raw <- rnorm(J)
+  wd0 <- wavethresh::wd(raw, filter.number = 1L,
+                        family = "DaubExPhase")
+  for (s in 0L:(level - 1L)) {
+    coefs_s <- wavethresh::accessD(wd0, level = s)
+    wd0 <- wavethresh::putD(wd0, level = s,
+                            v = coefs_s / (decay^(level - s)))
+  }
+  wavethresh::wr(wd0)
+}
 
 rnaseq_example <- local({
+  set.seed(1)
   data(N3finemapping)
-  X <- N3finemapping$X[, seq(401, 600)]
+  X <- N3finemapping$X[, seq_len(100)]
   n <- nrow(X); p <- ncol(X)
   T_m <- 128L
   exon_pos <- seq_len(T_m)
 
-  # One causal eQTL at SNP 73 with a peaked expression effect
-  # concentrated over a 30-position window.
-  shape <- exp(-((exon_pos - 70)^2) / (2 * 8^2))
-  beta  <- matrix(0, p, T_m); beta[73, ] <- 1.5 * shape
+  rsnr  <- 0.5
+  pos1  <- 25L
+  pos2  <- 75L
+  f1    <- .smooth_random_func(level = 7L)
+  f2    <- .smooth_random_func(level = 7L)
 
-  Y <- X %*% beta + matrix(rnorm(n * T_m, sd = 0.45), n)
+  noise <- matrix(rnorm(n * T_m, sd = sqrt(var(f1) / rsnr)), n, T_m)
+  Y     <- tcrossprod(X[, pos1], f1) + tcrossprod(X[, pos2], f2) + noise
+
+  beta <- matrix(0, p, T_m)
+  beta[pos1, ] <- f1
+  beta[pos2, ] <- f2
 
   list(
     X            = X,
     Y            = Y,
     pos          = exon_pos,
-    causal_snps  = 73L,
-    causal_betas = beta[73L, , drop = FALSE],
+    causal_snps  = c(pos1, pos2),
+    causal_betas = beta[c(pos1, pos2), ],
     description  = paste0(
-      "Simulated RNA-seq-style cis-eQTL fixture. n = ", n, ", p = ", p,
+      "Simulated RNA-seq cis-eQTL example. n = ", n, ", p = ", p,
       " SNPs from the susieR::N3finemapping cis window, T = ", T_m,
-      " evenly-spaced exon-body positions. One causal eQTL at SNP",
-      " 73 with a peaked Gaussian effect spanning ~30 positions.",
-      " Designed to surface a clean single-effect fit and the",
-      " HMM smoother's lfsr overlay."
+      " evenly-spaced exon-body positions on a power-of-two grid.",
+      " Two causal eQTLs at SNPs ", pos1, " and ", pos2, " with",
+      " smooth random per-position effects generated by wavelet-",
+      " coefficient shrinkage, matching the smooth-function class",
+      " assumed by the fSuSiE prior."
     )
   )
 })
@@ -142,13 +192,12 @@ multiomic_example <- local({
     ),
     causal_snps = causal,
     description = paste0(
-      "Simulated four-outcome cis-QTL fixture. n = ", n, ", p = ", p,
+      "Simulated four-outcome cis-QTL example. n = ", n, ", p = ", p,
       " SNPs from the susieR::N3finemapping cis window. Outcomes:",
       " DNAm (T = 64, irregular CpGs), RNA-seq (T = 32, exon-body),",
-      " plus two scalar QTLs (eQTL, pQTL). Two causal SNPs (42, 97)",
-      " shared across all four outcomes; shapes and signs differ",
-      " per outcome. Designed to surface mfsusie()'s joint fine-",
-      " mapping and the per-outcome panel layout in mfsusie_plot()."
+      " and two scalar QTLs (eQTL, pQTL). Two causal SNPs (42, 97)",
+      " shared across all four outcomes; per-outcome shapes and",
+      " signs differ."
     )
   )
 })
@@ -234,15 +283,15 @@ gtex_example <- local({
     causal_snps  = c(37L, 112L, 173L),
     causal_betas = beta[c(37L, 112L, 173L), ],
     description  = paste0(
-      "Simulated GTEx-style cis-eQTL fixture mimicking the AHCYL1 / ",
-      "SCD / HSP90AA1 case studies. Designed for the GTEx ",
-      "case-study vignette: the underlying GTEx data are protected ",
-      "and cannot be redistributed, so we simulate a fixture that ",
-      "reproduces the multi-CS structure published in the figures. ",
-      "n = ", n, ", p = ", p, " SNPs over the susieR::N3finemapping ",
-      "LD scaffold, T = ", T_m, " gene-body positions over a ~32 kb ",
-      "window. Three causal SNPs with localized peak effects at 5', ",
-      "mid-body, and 3' positions of the gene."
+      "Simulated GTEx-style cis-eQTL example. n = ", n,
+      ", p = ", p, " SNPs over the susieR::N3finemapping LD",
+      " scaffold, T = ", T_m, " gene-body positions over a ~32 kb",
+      " window. Three causal SNPs with localized peak effects at",
+      " 5', mid-body, and 3' positions of the gene. The simulation",
+      " reproduces the multi-CS structure of the published AHCYL1,",
+      " SCD, and HSP90AA1 case studies; the underlying GTEx",
+      " individual-level data are protected and cannot be",
+      " redistributed."
     )
   )
 })
