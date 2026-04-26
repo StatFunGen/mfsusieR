@@ -5,27 +5,6 @@
 #include "cpp11/declarations.hpp"
 #include <R_ext/Visibility.h>
 
-// post_smooth_hmm.cpp
-list hmm_forward_cpp(doubles_matrix<> emit, doubles_matrix<> P, doubles pi, bool t1_normalize);
-extern "C" SEXP _mfsusieR_hmm_forward_cpp(SEXP emit, SEXP P, SEXP pi, SEXP t1_normalize) {
-  BEGIN_CPP11
-    return cpp11::as_sexp(hmm_forward_cpp(cpp11::as_cpp<cpp11::decay_t<doubles_matrix<>>>(emit), cpp11::as_cpp<cpp11::decay_t<doubles_matrix<>>>(P), cpp11::as_cpp<cpp11::decay_t<doubles>>(pi), cpp11::as_cpp<cpp11::decay_t<bool>>(t1_normalize)));
-  END_CPP11
-}
-// post_smooth_hmm.cpp
-list hmm_backward_cpp(doubles_matrix<> emit, doubles_matrix<> P);
-extern "C" SEXP _mfsusieR_hmm_backward_cpp(SEXP emit, SEXP P) {
-  BEGIN_CPP11
-    return cpp11::as_sexp(hmm_backward_cpp(cpp11::as_cpp<cpp11::decay_t<doubles_matrix<>>>(emit), cpp11::as_cpp<cpp11::decay_t<doubles_matrix<>>>(P)));
-  END_CPP11
-}
-// post_smooth_hmm.cpp
-doubles_matrix<> hmm_xi_cpp(doubles_matrix<> alpha_hat, doubles_matrix<> beta_hat, doubles_matrix<> emit, doubles_matrix<> P);
-extern "C" SEXP _mfsusieR_hmm_xi_cpp(SEXP alpha_hat, SEXP beta_hat, SEXP emit, SEXP P) {
-  BEGIN_CPP11
-    return cpp11::as_sexp(hmm_xi_cpp(cpp11::as_cpp<cpp11::decay_t<doubles_matrix<>>>(alpha_hat), cpp11::as_cpp<cpp11::decay_t<doubles_matrix<>>>(beta_hat), cpp11::as_cpp<cpp11::decay_t<doubles_matrix<>>>(emit), cpp11::as_cpp<cpp11::decay_t<doubles_matrix<>>>(P)));
-  END_CPP11
-}
 // posterior_mixture.cpp
 doubles mixture_log_bf_per_scale_cpp(doubles_matrix<> bhat, doubles_matrix<> shat, doubles sd_grid, doubles pi_grid, double v_scale);
 extern "C" SEXP _mfsusieR_mixture_log_bf_per_scale_cpp(SEXP bhat, SEXP shat, SEXP sd_grid, SEXP pi_grid, SEXP v_scale) {
@@ -43,9 +22,6 @@ extern "C" SEXP _mfsusieR_mixture_posterior_per_scale_cpp(SEXP bhat, SEXP shat, 
 
 extern "C" {
 static const R_CallMethodDef CallEntries[] = {
-    {"_mfsusieR_hmm_backward_cpp",                (DL_FUNC) &_mfsusieR_hmm_backward_cpp,                2},
-    {"_mfsusieR_hmm_forward_cpp",                 (DL_FUNC) &_mfsusieR_hmm_forward_cpp,                 4},
-    {"_mfsusieR_hmm_xi_cpp",                      (DL_FUNC) &_mfsusieR_hmm_xi_cpp,                      4},
     {"_mfsusieR_mixture_log_bf_per_scale_cpp",    (DL_FUNC) &_mfsusieR_mixture_log_bf_per_scale_cpp,    5},
     {"_mfsusieR_mixture_posterior_per_scale_cpp", (DL_FUNC) &_mfsusieR_mixture_posterior_per_scale_cpp, 5},
     {NULL, NULL, 0}
