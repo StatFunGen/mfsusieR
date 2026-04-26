@@ -98,6 +98,16 @@
 #'   arguments forwarded to the per-(outcome, scale) M-step.
 #' @param mixsqp_null_penalty numeric, mixsqp null-component penalty (internal).
 #'   Default 0.7.
+#' @param small_sample_correction logical. When `TRUE`, replaces
+#'   the per-variable Wakefield Normal marginal Bayes factor in
+#'   the SER step with a Johnson 2005 scaled Student-t marginal
+#'   with `df = n - 1` degrees of freedom. Useful for small
+#'   sample sizes where the Wakefield approximation
+#'   under-propagates residual-variance uncertainty into the
+#'   per-variable BF, inflating PIPs at null variants. The
+#'   correction acts on variable selection probabilities only;
+#'   posterior moments given inclusion are unchanged. Default
+#'   `FALSE`.
 #' @param model_init optional `mfsusie` fit object from a prior
 #'   call. When supplied, the IBSS loop is seeded from the
 #'   supplied `alpha`, `mu`, `mu2`, `KL`, `lbf`, `V`, `pi_V`,
@@ -161,7 +171,13 @@ mfsusie <- function(X, Y,
                     quantile_norm             = FALSE,
                     control_mixsqp            = NULL,
                     mixsqp_null_penalty       = 0.7,
-                    model_init                = NULL) {
+                    model_init                = NULL,
+                    small_sample_correction   = FALSE) {
+  if (!is.logical(small_sample_correction) ||
+      length(small_sample_correction) != 1L ||
+      is.na(small_sample_correction)) {
+    stop("`small_sample_correction` must be `TRUE` or `FALSE`.")
+  }
   prior_variance_scope    <- match.arg(prior_variance_scope)
   residual_variance_scope <- match.arg(residual_variance_scope)
   mixture_weight_method   <- match.arg(mixture_weight_method)
@@ -245,7 +261,10 @@ mfsusie <- function(X, Y,
     unmappable_effects         = "none",
     residual_variance_lowerbound = 0,
     residual_variance_upperbound = Inf,
-    model_init                 = model_init
+    model_init                 = model_init,
+    small_sample_correction    = small_sample_correction,
+    small_sample_df            = if (small_sample_correction) data$n - 1L
+                                 else NULL
   )
 
   # 4. Run the susieR workhorse. All per-effect and per-iteration

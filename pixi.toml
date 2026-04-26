@@ -36,6 +36,7 @@ r45 = {features = ["r45"]}
 "r-mixsqp" = "*"
 "r-ashr" = "*"
 "r-matrixstats" = "*"
+"r-laplacesdemon" = "*"  # Student-t kernel for small_sample_correction
 
 # SuSiE-suite peers used by vignettes (cross-platform via
 # the dnachun channel). mfsusieR's `fsusie_why_functional`
