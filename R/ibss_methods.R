@@ -28,7 +28,7 @@
 #' computed scale by scale. Used by `ibss_initialize` to seed
 #' `params$residual_variance` when the user does not supply one.
 #' This shape matches the per-(scale, outcome) sigma2 convention
-#' carried throughout the IBSS loop. The legacy
+#' carried throughout the IBSS loop. The
 #' `per_outcome` mode collapses each entry to a scalar at
 #' update time.
 #'
@@ -69,7 +69,7 @@ initialize_fitted.mf_individual <- function(data, mat_init, ...) {
 #' scalar-only validation of `params$residual_variance` (mfsusieR
 #' uses a list-of-vectors per-(scale, outcome) shape) and routes
 #' through the mfsusieR S3 methods for `initialize_susie_model`,
-#' `initialize_fitted`. Model_init / warm-start is deferred to a
+#' `initialize_fitted`. Model_init / warm-start is deferred.
 #' not supported (param$model_init is ignored).
 #'
 #' @keywords internal

@@ -95,17 +95,20 @@ test_that("mfsusie() fit fields contain no NaN / NA in alpha, mu, mu2, pip, elbo
   expect_false(any(is.na(fit$elbo)))
 })
 
-# ---- save_residuals = TRUE attaches residuals --------------------
+# ---- residuals + lead_X are populated on every fit ---------------
 
-test_that("mfsusie(save_residuals = TRUE) attaches per-modality residuals", {
+test_that("mfsusie() always attaches per-outcome residuals and per-effect lead_X", {
   toy <- make_toy_smoke()
-  fit <- mfsusie(toy$X, toy$Y, L = 5, max_iter = 30,
-                 save_residuals = TRUE, verbose = FALSE)
+  fit <- mfsusie(toy$X, toy$Y, L = 5, max_iter = 30, verbose = FALSE)
   expect_true(!is.null(fit$residuals))
   expect_identical(length(fit$residuals), length(toy$Y))
   for (m in seq_along(fit$residuals)) {
     expect_true(is.matrix(fit$residuals[[m]]))
     expect_identical(nrow(fit$residuals[[m]]), nrow(toy$X))
+  }
+  expect_identical(length(fit$lead_X), nrow(fit$alpha))
+  for (l in seq_along(fit$lead_X)) {
+    expect_identical(length(fit$lead_X[[l]]), nrow(toy$X))
   }
 })
 

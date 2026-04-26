@@ -112,7 +112,7 @@ init_scale_mixture_prior_default <- function(Y_m,
 #'   susieR-degeneracy contract C1 with `length(grid) == 1`.
 #' @param prior_variance_scope `"per_scale"` (default,
 #'   stores prior per scale per outcome) or `"per_outcome"`
-#'   (collapses the scale dimension; legacy mode).
+#'   (collapses the scale dimension).
 #' @param null_prior_weight scalar, default 2.
 #' @param grid_multiplier numeric, forwarded to `ash`.
 #' @return list of class `"mf_prior_scale_mixture"`.

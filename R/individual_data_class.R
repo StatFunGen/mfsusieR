@@ -24,10 +24,9 @@
 #' @param wavelet_family character, see `wd`.
 #' @param standardize logical, scale `X` columns to unit variance.
 #' @param intercept logical, center `X` columns to mean zero.
-#' @param save_residuals logical. When `TRUE`, allocate a
-#'   per-outcome `residuals` slot so post-processors can read from
-#'   the fit. When `FALSE`, post-processors must receive `(X, Y)`
-#'   directly.
+#' @param save_residuals logical, currently no-op. The per-outcome
+#'   `residuals` slot is always allocated (required by
+#'   `mf_post_smooth()`).
 #' @param verbose logical, forwarded to `mf_dwt`'s remap step.
 #' @return list of class `c("mf_individual", "individual")`.
 #' @references

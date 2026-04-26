@@ -233,23 +233,13 @@ test_that("intercept = FALSE skips X centering", {
 
 # ---- Residual storage opt-in / opt-out --------------------------------
 
-test_that("save_residuals = TRUE allocates a residuals slot per modality (default)", {
+test_that("residuals slot is always allocated per outcome", {
   X <- make_X(20, 8)
   Y <- make_Y_functional(20, c(64L, 128L))
   obj <- mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE)
 
   expect_type(obj$residuals, "list")
   expect_identical(length(obj$residuals), 2L)
-})
-
-test_that("save_residuals = FALSE leaves residuals as NULL", {
-  X <- make_X(20, 8)
-  Y <- make_Y_functional(20, 64)
-  obj <- mfsusieR:::create_mf_individual(X = X, Y = Y,
-                                         save_residuals = FALSE,
-                                         verbose = FALSE)
-
-  expect_null(obj$residuals)
 })
 
 # ---- DWT cache contents agree with mf_dwt ------------------------------

@@ -55,8 +55,6 @@
 #'   or `"per_outcome"`. Controls the sigma2 update shape.
 #' @param standardize logical, scale `X` columns to unit variance.
 #' @param intercept logical, center `X` columns to mean zero.
-#' @param save_residuals logical, store per-outcome residuals on
-#'   the fit (default `TRUE`).
 #' @param max_iter integer, maximum IBSS iterations.
 #' @param tol numeric, ELBO change tolerance for convergence.
 #' @param coverage numeric in (0, 1), credible-set coverage.
@@ -97,7 +95,7 @@
 #'   \item{`pi_V`}{`list[M]` of `S_m x K` mixture-weight matrices.}
 #'   \item{`G_prior`}{`list[M]` of `list[S_m]` ash-shaped prior
 #'     records (mutated by the IBSS loop).}
-#'   \item{`sigma2`}{`list[M]` of either scalar (legacy mode) or
+#'   \item{`sigma2`}{`list[M]` of either scalar or
 #'     length-`S_m` per-(scale, outcome) residual variances.}
 #'   \item{`elbo`}{numeric vector of ELBO values per iteration.}
 #'   \item{`niter`, `converged`}{IBSS termination metadata.}
@@ -106,7 +104,7 @@
 #'   \item{`fitted`}{`list[M]` of running per-outcome fits in the
 #'     wavelet domain.}
 #'   \item{`residuals`}{`list[M]` per-outcome residuals, when
-#'     `save_residuals = TRUE`.}
+#'     always populated.}
 #' }
 #'
 #' @references
@@ -126,7 +124,6 @@ mfsusie <- function(X, Y,
                                                   "per_scale"),
                     standardize               = TRUE,
                     intercept                 = TRUE,
-                    save_residuals            = TRUE,
                     max_iter                  = 100,
                     tol                       = 1e-3,
                     coverage                  = 0.95,
@@ -179,7 +176,7 @@ mfsusie <- function(X, Y,
     wavelet_family        = wavelet_family,
     standardize           = standardize,
     intercept             = intercept,
-    save_residuals        = save_residuals,
+
     verbose               = verbose
   )
 
@@ -231,12 +228,19 @@ mfsusie <- function(X, Y,
   fit <- susie_workhorse(data, params)
 
   # 5. Attach per-outcome wavelet-domain residuals (D - fitted)
-  #    when save_residuals = TRUE. susieR's `ibss_finalize` is not
-  #    a generic, so we do this in the wrapper rather than via S3.
-  if (isTRUE(save_residuals)) {
+  #    plus per-effect lead-variable column of X. Both feed
+  #    `mf_post_smooth()` (TI / HMM smoothers) without re-passing
+  #    (X, Y).
+  {
     fit$residuals <- vector("list", data$M)
     for (m in seq_len(data$M)) {
       fit$residuals[[m]] <- data$D[[m]] - fit$fitted[[m]]
+    }
+    L <- nrow(fit$alpha)
+    fit$lead_X <- vector("list", L)
+    for (l in seq_len(L)) {
+      lead <- which.max(fit$alpha[l, ])
+      fit$lead_X[[l]] <- data$X[, lead]   # already centred + scaled
     }
   }
 
