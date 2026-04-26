@@ -6,7 +6,7 @@
 \usage{
 mf_post_smooth(
   fit,
-  method = c("scalewise", "TI", "HMM"),
+  method = c("TI", "scalewise", "HMM", "smash"),
   level = 0.95,
   threshold_factor = 1,
   wavelet_filter = 1L,

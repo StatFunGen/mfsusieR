@@ -333,7 +333,8 @@ print.summary.mfsusie <- function(x, ...) {
 #'   no-op there).
 #' @export
 mf_post_smooth <- function(fit,
-                           method           = c("scalewise", "TI", "HMM"),
+                           method           = c("TI", "scalewise",
+                                                "HMM", "smash"),
                            level            = 0.95,
                            threshold_factor = 1,
                            wavelet_filter   = 1L,
@@ -342,19 +343,35 @@ mf_post_smooth <- function(fit,
   if (!inherits(fit, "mfsusie")) {
     stop("`fit` must be an `mfsusie` (or `fsusie`) fit object.")
   }
-  if (is.null(fit$residuals) || is.null(fit$lead_X)) {
-    stop("`fit$residuals` and `fit$lead_X` are required.")
-  }
   method <- match.arg(method)
   if (level <= 0 || level >= 1) {
     stop("`level` must be in (0, 1).")
+  }
+
+  # Method-aware precondition: only `scalewise` operates on the
+  # fit-internal wavelet posterior alone. The other three need
+  # the lead-variable residuals and the lead-variable column.
+  if (method != "scalewise" &&
+      (is.null(fit$residuals) || is.null(fit$lead_X))) {
+    stop(sprintf(
+      "method = '%s' requires `fit$residuals` and `fit$lead_X`. ",
+      method),
+      "Refit `mfsusie()` with the defaults that retain those slots, ",
+      "or use method = 'scalewise'.")
+  }
+  if (method == "smash" &&
+      !requireNamespace("smashr", quietly = TRUE)) {
+    stop("method = 'smash' requires the `smashr` package. ",
+         "Install via remotes::install_github(\"stephenslab/smashr\") ",
+         "or pick another method.")
   }
 
   switch(method,
          "scalewise" = .post_smooth_scalewise(fit, level, threshold_factor),
          "TI"        = .post_smooth_ti(fit, level, wavelet_filter,
                                        wavelet_family),
-         "HMM"       = .post_smooth_hmm(fit, level, halfK))
+         "HMM"       = .post_smooth_hmm(fit, level, halfK),
+         "smash"     = .post_smooth_smash(fit, level))
 }
 
 # ---- scalewise -----------------------------------------------------
@@ -381,13 +398,20 @@ mf_post_smooth <- function(fit,
       shrunk_w <- if (T_m == 1L) mean_w else
         .scalewise_soft_threshold(mean_w, sd = sqrt(var_w),
           scale_index = meta$scale_index[[m]],
-          T_padded    = T_m,
+          T_basis    = T_m,
           factor      = threshold_factor)
 
       effect_curves[[m]][[l]] <-
         .invert_packed_curve(matrix(shrunk_w, nrow = 1L), meta, m)
-      sd_pos <- abs(.invert_packed_curve(matrix(sqrt(var_w), nrow = 1L),
-                                         meta, m))
+      # Position-space variance: Var(pos[t]) = sum_k W^T_{t,k}^2
+      # * var_w[k]. The previous formula
+      # `abs(invert_dwt(sqrt(var_w)))` mistakes the linear
+      # combination of standard deviations for the position SD.
+      sd_pos <- sqrt(mf_invert_variance_curve(
+        var_w,
+        T_basis      = T_m,
+        filter_number = meta$wavelet_filter %||% 10L,
+        family        = meta$wavelet_family %||% "DaubLeAsymm"))
       mean_pos <- effect_curves[[m]][[l]]
       credible_bands[[m]][[l]] <- cbind(mean_pos - z_crit * sd_pos,
                                         mean_pos + z_crit * sd_pos)
@@ -639,9 +663,9 @@ mf_post_smooth <- function(fit,
 # Soft-threshold the packed wavelet vector per scale at
 # `factor * sd * sqrt(2 log T)`.
 .scalewise_soft_threshold <- function(coef_vec, sd, scale_index,
-                                      T_padded, factor) {
+                                      T_basis, factor) {
   out <- coef_vec
-  T_eff <- T_padded
+  T_eff <- T_basis
   for (idx in scale_index) {
     if (length(idx) == 0L) next
     sigma <- mean(sd[idx], na.rm = TRUE)
@@ -653,7 +677,7 @@ mf_post_smooth <- function(fit,
   out
 }
 
-# Use the existing mf_invert_dwt machinery to bring a length-T_padded
+# Use the existing mf_invert_dwt machinery to bring a length-T_basis
 # packed wavelet vector back to position space.
 .invert_packed_curve <- function(D_packed_row, meta, m) {
   inverted <- mf_invert_dwt(

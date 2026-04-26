@@ -82,3 +82,58 @@ test_that("mf_post_smooth(method = 'scalewise') honors threshold_factor", {
   # Higher threshold shrinks at least as much in L1.
   expect_lte(sum(abs(c_high)), sum(abs(c_low)) + 1e-10)
 })
+
+# Closed-form variance-curve check on a small dyadic input.
+# Verifies that `mf_invert_variance_curve` matches the squared-
+# inverse-DWT-matrix reference at machine precision. This is
+# the corrected formula now used by `.post_smooth_scalewise`.
+
+test_that("mf_invert_variance_curve matches W^2 %*% var_w at machine precision", {
+  set.seed(31L)
+  T_basis <- 8L
+  filt     <- 1L
+  fam      <- "DaubExPhase"
+
+  # Reference: build W^T explicitly column-by-column, square each
+  # entry, multiply by `var_w`. This is the textbook variance
+  # propagation for an orthonormal linear operator with diagonal
+  # input covariance.
+  W_T <- matrix(0, T_basis, T_basis)
+  for (k in seq_len(T_basis)) {
+    e_k <- numeric(T_basis); e_k[k] <- 1
+    inv_k <- mfsusieR:::mf_invert_dwt(matrix(e_k, nrow = 1L),
+                                      column_center = rep(0, T_basis),
+                                      column_scale  = rep(1, T_basis),
+                                      filter_number = filt,
+                                      family        = fam)
+    W_T[, k] <- as.numeric(inv_k)
+  }
+  var_w  <- runif(T_basis, 0.1, 2.0)
+  ref    <- as.numeric((W_T^2) %*% var_w)
+  ours   <- mfsusieR:::mf_invert_variance_curve(
+              var_w, T_basis = T_basis,
+              filter_number = filt, family = fam)
+  expect_equal(ours, ref, tolerance = 1e-14)
+})
+
+test_that("mf_invert_variance_curve agrees with closed-form for a dirac input", {
+  # If var_w is a dirac at index k, the position-space variance
+  # is (column k of W^T)^2.
+  T_basis <- 8L
+  filt     <- 1L
+  fam      <- "DaubExPhase"
+  for (k in seq_len(T_basis)) {
+    var_w     <- numeric(T_basis); var_w[k] <- 1
+    e_k       <- numeric(T_basis); e_k[k]   <- 1
+    inv_k     <- mfsusieR:::mf_invert_dwt(matrix(e_k, nrow = 1L),
+                                          column_center = rep(0, T_basis),
+                                          column_scale  = rep(1, T_basis),
+                                          filter_number = filt,
+                                          family        = fam)
+    expected  <- as.numeric(inv_k)^2
+    got       <- mfsusieR:::mf_invert_variance_curve(
+                   var_w, T_basis = T_basis,
+                   filter_number = filt, family = fam)
+    expect_equal(got, expected, tolerance = 1e-14)
+  }
+})

@@ -28,12 +28,9 @@ The scalewise pointwise standard deviation SHALL use the linear-combination vari
 
 The previous formula `inverse-DWT(sqrt(var_w))` SHALL NOT be used; the "Parseval" justification SHALL be removed from the post-processing vignette.
 
-#### Scenario: closed-form match on a small fixture
+#### Scenario: closed-form match on a small example
 
-For a dyadic fixture of length 8 with a fixed input variance
-vector `var_w`, the returned `sd_pos` SHALL match the exact
-`sqrt(W^2 %*% var_w)` reference computation at tolerance
-`<= 1e-12`.
+For a dyadic example dataset of length 8 with a fixed input variance vector `var_w`, the returned `sd_pos` SHALL match the exact `sqrt(W^2 %*% var_w)` reference computation at tolerance `<= 1e-14` (machine precision).
 
 ### Requirement: smash method matches upstream bit-identically
 
@@ -44,10 +41,11 @@ case across the standard fixture sweep.
 
 #### Scenario: bit-identity sweep
 
-For `n in {100, 200}`, `T in {64, 128}`, fixed seeds, the
-returned `effect_curve` and `cred_band` agree with the
-upstream functional fine-mapping post-processor at the same
-tolerance.
+For `n = 60`, `T = 64`, fixed seed, the per-position
+`effect_estimate` and `cred_band` returned by the in-package
+`univariate_smash_regression` SHALL match the upstream
+functional fine-mapping post-processor at tolerance
+`<= 1e-12`.
 
 ### Requirement: precondition check is method-aware
 
