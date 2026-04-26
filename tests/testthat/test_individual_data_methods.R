@@ -488,8 +488,8 @@ test_that("susieR helpers are cached on the mfsusieR namespace", {
 
 # ---- C3 fidelity vs mvf.susie.alpha::cal_Bhat_Shat_multfsusie ---------
 
-test_that("compute_ser_statistics betahat matches mvf.susie.alpha at 1e-12 (initial residual)", {
-  skip_if_no_mvf_alpha()
+test_that("compute_ser_statistics betahat matches fsusieR cal_Bhat_Shat at 1e-12 (initial residual)", {
+  skip_if_not_installed("fsusieR")
   data <- make_data(n = 50, J = 10, T_per_outcome = 64L)
   model <- make_model(data, L = 3, sigma2_scalar = 1)
 
@@ -497,8 +497,8 @@ test_that("compute_ser_statistics betahat matches mvf.susie.alpha at 1e-12 (init
   model <- mfsusieR:::compute_residuals.mf_individual(data, NULL, model, 1)
   ours <- mfsusieR:::compute_ser_statistics.mf_individual(data, NULL, model, 1)
 
-  # Reference: per modality, fsusieR::cal_Bhat_Shat on (D[[m]], X)
-  # gives the same betahat (since cal_Bhat_Shat does X^T Y / d).
+  # Reference: per outcome, fsusieR's cal_Bhat_Shat on (D[[m]], X)
+  # gives the same betahat (X^T Y / d).
   ref <- fsusieR:::cal_Bhat_Shat(Y = data$D[[1]], X = data$X,
                                   v1 = rep(1, data$n), lowc_wc = NULL)
   expect_equal(ours$betahat[[1]], ref$Bhat, tolerance = 1e-12)
