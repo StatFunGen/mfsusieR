@@ -25,7 +25,7 @@ test_that("minimal fixture loads with the documented shape", {
   expect_identical(fx$N, 200L)
   expect_identical(fx$J, 50L)
   expect_identical(fx$M, 2L)
-  expect_identical(fx$T_per_modality, c(64L, 128L))
+  expect_identical(fx$T_per_outcome, c(64L, 128L))
   expect_identical(fx$L_true, 3L)
 
   expect_true(is.matrix(fx$X))
@@ -36,14 +36,14 @@ test_that("minimal fixture loads with the documented shape", {
   expect_length(fx$Y$Y_f, fx$M)
   for (m in seq_len(fx$M)) {
     expect_true(is.matrix(fx$Y$Y_f[[m]]))
-    expect_identical(dim(fx$Y$Y_f[[m]]), c(fx$N, fx$T_per_modality[m]))
+    expect_identical(dim(fx$Y$Y_f[[m]]), c(fx$N, fx$T_per_outcome[m]))
     expect_false(anyNA(fx$Y$Y_f[[m]]))
   }
   expect_null(fx$Y$Y_u)
 
   expect_length(fx$pos, fx$M)
   for (m in seq_len(fx$M)) {
-    expect_identical(length(fx$pos[[m]]), as.integer(fx$T_per_modality[m]))
+    expect_identical(length(fx$pos[[m]]), as.integer(fx$T_per_outcome[m]))
   }
 
   expect_length(fx$true_idx, fx$L_true)

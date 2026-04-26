@@ -1,4 +1,4 @@
-# Per-(SNP, scale) mixture-of-normals helpers, R-wrapper layer.
+# Per-(variable, scale) mixture-of-normals helpers, R-wrapper layer.
 #
 # The kernels themselves live in `src/posterior_mixture.cpp` (cpp11);
 # this file is the thin wrapper that input-validates and forwards.
@@ -12,7 +12,7 @@
 #   methods/derivation.tex eq:post_f_mix
 #   methods/derivation.tex eq:post_f2_mix
 
-#' Per-(SNP, scale) log-Bayes factor under a mixture-of-normals prior
+#' Per-(variable, scale) log-Bayes factor under a mixture-of-normals prior
 #'
 #' Forwards to the cpp11 kernel
 #' `mixture_log_bf_per_scale_cpp` in `src/posterior_mixture.cpp`. The
@@ -20,7 +20,7 @@
 #' `R/reference_implementations.R` matches this at `<= 1e-12`.
 #'
 #' @param bhat_slice p x |idx_s| matrix of marginal effect estimates
-#'   for one modality, one scale.
+#'   for one outcome, one scale.
 #' @param shat_slice p x |idx_s| matrix of standard errors.
 #' @param sd_grid length-K vector of mixture-component standard
 #'   deviations (`sd_k = 0` for the null component).
@@ -44,11 +44,11 @@ mixture_log_bf_per_scale <- function(bhat_slice,
                                as.numeric(V_scale))
 }
 
-#' Per-(SNP, position) posterior moments under a mixture-of-normals prior
+#' Per-(variable, position) posterior moments under a mixture-of-normals prior
 #'
 #' Forwards to the cpp11 kernel
 #' `mixture_posterior_per_scale_cpp`. Returns the p x |idx_s|
-#' posterior mean and second moment per (SNP, position).
+#' posterior mean and second moment per (variable, position).
 #'
 #' @inheritParams mixture_log_bf_per_scale
 #' @return list with elements `pmean` and `pmean2`, each a p x |idx_s|

@@ -13,16 +13,16 @@
 # (post-processors, in a separate PR group). The IBSS loop itself
 # is susieR's, end-to-end.
 
-#' Multi-functional, multi-modality SuSiE
+#' Multi-functional, multi-outcome SuSiE
 #'
-#' Fit the multi-functional, multi-modality Sum of Single Effects
-#' (mfSuSiE) regression model. Each modality `m` carries a per-sample
+#' Fit the multi-functional, multi-outcome Sum of Single Effects
+#' (mfSuSiE) regression model. Each outcome `m` carries a per-sample
 #' functional response `Y_m` of length `T_m`; `T_m` may differ across
-#' modalities, and either `T_m = 1` (univariate response) or `T_m > 1`
+#' outcomes, and either `T_m = 1` (univariate response) or `T_m > 1`
 #' (functional response on a regular grid) is supported. mfsusieR runs
-#' a per-modality wavelet decomposition, then dispatches into susieR's
+#' a per-outcome wavelet decomposition, then dispatches into susieR's
 #' IBSS workhorse with mfsusieR-specific S3 methods that handle the
-#' per-(scale, modality) mixture-of-normals prior and residual
+#' per-(scale, outcome) mixture-of-normals prior and residual
 #' variance.
 #'
 #' @param X numeric matrix `n x p` of covariates (e.g., genotype dosages).
@@ -30,37 +30,37 @@
 #'   (or a length-n vector when `T_m = 1`).
 #' @param pos optional list of length `M`; each element a numeric vector
 #'   of length `T_m` recording the sampling positions for that
-#'   modality. Defaults to `seq_len(T_m)` per modality.
+#'   outcome. Defaults to `seq_len(T_m)` per outcome.
 #' @param L integer, maximum number of single effects to fit.
 #' @param prior_variance_grid optional length-K vector of mixture
 #'   variances for the scale-mixture-of-normals prior. When `NULL`,
 #'   the data-driven path
 #'   (`compute_marginal_bhat_shat` + `ash`) selects the
-#'   grid per modality.
-#' @param prior_variance_scope `"per_scale_modality"` (default) or
-#'   `"per_modality"`. Controls whether the mixture-weight matrix
+#'   grid per outcome.
+#' @param prior_variance_scope `"per_scale"` (default) or
+#'   `"per_outcome"`. Controls whether the mixture-weight matrix
 #'   `pi_V[[m]]` has a per-scale row dimension or collapses across
 #'   scales.
 #' @param null_prior_weight numeric, weight on the null prior
 #'   component. Default 2 per the manuscript and design.md D5.
-#' @param cross_modality_prior optional cross-modality combiner
+#' @param cross_outcome_prior optional cross-outcome combiner
 #'   object. Defaults to the trivial independence combiner
-#'   (`cross_modality_prior_independent()`).
+#'   (`cross_outcome_prior_independent()`).
 #' @param prior_weights optional length-p numeric vector, the
 #'   variable-selection prior. Defaults to uniform `1/p`.
 #' @param residual_variance optional list of length `M`, initial
-#'   residual variance per modality. Defaults to the per-modality
+#'   residual variance per outcome. Defaults to the per-outcome
 #'   sample variance.
-#' @param residual_variance_method `"per_scale_modality"` (default)
-#'   or `"shared_per_modality"`. Controls the sigma2 update shape.
+#' @param residual_variance_scope `"per_scale"` (default)
+#'   or `"per_outcome"`. Controls the sigma2 update shape.
 #' @param standardize logical, scale `X` columns to unit variance.
 #' @param intercept logical, center `X` columns to mean zero.
-#' @param save_residuals logical, store per-modality residuals on
+#' @param save_residuals logical, store per-outcome residuals on
 #'   the fit (default `TRUE`).
 #' @param max_iter integer, maximum IBSS iterations.
 #' @param tol numeric, ELBO change tolerance for convergence.
 #' @param coverage numeric in (0, 1), credible-set coverage.
-#' @param min_abs_corr numeric, minimum SNP-to-SNP correlation
+#' @param min_abs_corr numeric, minimum variable-to-variable correlation
 #'   inside a credible set (CS purity threshold).
 #' @param L_greedy integer or `NULL`. When non-`NULL`, run susieR's
 #'   greedy outer loop, growing the effect count from `L_greedy` up
@@ -71,7 +71,7 @@
 #' @param mixture_weight_method one of `"mixsqp"` (default) or
 #'   `"none"`. `"mixsqp"` runs the per-effect empirical-Bayes
 #'   update of the mixture weights `pi_V[[m]]` per
-#'   (modality, scale) using the `mixsqp` solver. `"none"` holds
+#'   (outcome, scale) using the `mixsqp` solver. `"none"` holds
 #'   the prior fixed at the initial `prior_variance_grid` /
 #'   `null_prior_weight`; required by the C1 (susieR) degeneracy
 #'   contract.
@@ -79,33 +79,33 @@
 #' @param track_fit logical, retain a per-iteration tracking list on
 #'   the fit. Default `FALSE`.
 #' @param max_padded_log2 integer, log2 cap on the post-remap grid
-#'   length per modality. Default 10.
+#'   length per outcome. Default 10.
 #' @param wavelet_filter_number integer; see
 #'   `filter.select`.
 #' @param wavelet_family character; see `wd`.
 #' @param control_mixsqp optional named list of `mixsqp` control
-#'   arguments forwarded to the per-(modality, scale) M-step.
-#' @param nullweight numeric, mixsqp null-component penalty weight.
+#'   arguments forwarded to the per-(outcome, scale) M-step.
+#' @param mixsqp_null_penalty numeric, mixsqp null-component penalty (internal).
 #'   Default 0.7.
 #'
 #' @return A list of class `c("mfsusie", "susie")` carrying:
 #' \describe{
 #'   \item{`alpha`}{`L x p` posterior inclusion probabilities.}
-#'   \item{`mu`, `mu2`}{`list[L]` of `list[M]` of `p x T_padded[m]`
-#'     matrices: per-effect, per-modality posterior mean and second
+#'   \item{`mu`, `mu2`}{`list[L]` of `list[M]` of `p x T_basis[m]`
+#'     matrices: per-effect, per-outcome posterior mean and second
 #'     moment in the wavelet domain.}
 #'   \item{`pi_V`}{`list[M]` of `S_m x K` mixture-weight matrices.}
 #'   \item{`G_prior`}{`list[M]` of `list[S_m]` ash-shaped prior
 #'     records (mutated by the IBSS loop).}
 #'   \item{`sigma2`}{`list[M]` of either scalar (legacy mode) or
-#'     length-`S_m` per-(scale, modality) residual variances.}
+#'     length-`S_m` per-(scale, outcome) residual variances.}
 #'   \item{`elbo`}{numeric vector of ELBO values per iteration.}
 #'   \item{`niter`, `converged`}{IBSS termination metadata.}
 #'   \item{`pip`}{length-p posterior inclusion probabilities.}
 #'   \item{`sets`}{credible sets via `susie_get_cs`.}
-#'   \item{`fitted`}{`list[M]` of running per-modality fits in the
+#'   \item{`fitted`}{`list[M]` of running per-outcome fits in the
 #'     wavelet domain.}
-#'   \item{`residuals`}{`list[M]` per-modality residuals, when
+#'   \item{`residuals`}{`list[M]` per-outcome residuals, when
 #'     `save_residuals = TRUE`.}
 #' }
 #'
@@ -116,14 +116,14 @@ mfsusie <- function(X, Y,
                     pos                       = NULL,
                     L                         = 10,
                     prior_variance_grid       = NULL,
-                    prior_variance_scope      = c("per_scale_modality",
-                                                  "per_modality"),
+                    prior_variance_scope      = c("per_outcome",
+                                                  "per_scale"),
                     null_prior_weight         = 2,
-                    cross_modality_prior      = NULL,
+                    cross_outcome_prior       = NULL,
                     prior_weights             = NULL,
                     residual_variance         = NULL,
-                    residual_variance_method  = c("per_scale_modality",
-                                                  "shared_per_modality"),
+                    residual_variance_scope   = c("per_outcome",
+                                                  "per_scale"),
                     standardize               = TRUE,
                     intercept                 = TRUE,
                     save_residuals            = TRUE,
@@ -140,16 +140,16 @@ mfsusie <- function(X, Y,
                     wavelet_filter_number     = 10,
                     wavelet_family            = "DaubLeAsymm",
                     control_mixsqp            = NULL,
-                    nullweight                = 0.7) {
-  prior_variance_scope     <- match.arg(prior_variance_scope)
-  residual_variance_method <- match.arg(residual_variance_method)
-  mixture_weight_method    <- match.arg(mixture_weight_method)
+                    mixsqp_null_penalty       = 0.7) {
+  prior_variance_scope    <- match.arg(prior_variance_scope)
+  residual_variance_scope <- match.arg(residual_variance_scope)
+  mixture_weight_method   <- match.arg(mixture_weight_method)
   # Translate the public choice to susieR's internal vocabulary.
   # susieR's `single_effect_regression.default` skips the
   # per-effect prior update entirely when `estimate_prior_method
   # == "none"`; "mixsqp" routes through our mfsusieR override
   # `optimize_prior_variance.mf_individual`, which runs the
-  # mixsqp M step on `pi_V` per (modality, scale).
+  # mixsqp M step on `pi_V` per (outcome, scale).
   estimate_prior_method <- if (mixture_weight_method == "mixsqp") "optim" else "none"
 
   # The wavelet basis needs at least 4 sampled positions per curve.
@@ -183,7 +183,7 @@ mfsusie <- function(X, Y,
     verbose               = verbose
   )
 
-  # 2. Build the prior (scale-mixture-of-normals + cross-modality
+  # 2. Build the prior (scale-mixture-of-normals + cross-outcome
   #    combiner). The G_prior carried on the fit is mutated per
   #    effect by `optimize_prior_variance.mf_individual`.
   prior <- mf_prior_scale_mixture(
@@ -198,9 +198,9 @@ mfsusie <- function(X, Y,
     L                          = L,
     prior_weights              = prior_weights,
     prior                      = prior,
-    cross_modality_prior       = cross_modality_prior,
+    cross_outcome_prior        = cross_outcome_prior,
     residual_variance          = residual_variance,
-    residual_variance_method   = residual_variance_method,
+    residual_variance_scope    = residual_variance_scope,
     estimate_residual_variance = TRUE,
     estimate_prior_variance    = (estimate_prior_method != "none"),
     estimate_prior_method      = estimate_prior_method,   # forwarded to single_effect_regression scaffolding
@@ -215,7 +215,7 @@ mfsusie <- function(X, Y,
     standardize                = standardize,
     track_fit                  = track_fit,
     verbose                    = verbose,
-    nullweight                 = nullweight,
+    mixsqp_null_penalty        = mixsqp_null_penalty,
     control_mixsqp             = control_mixsqp,
     L_greedy                   = L_greedy,
     lbf_min                    = lbf_min,
@@ -230,7 +230,7 @@ mfsusie <- function(X, Y,
   #    registered by `.onLoad`.
   fit <- susie_workhorse(data, params)
 
-  # 5. Attach per-modality wavelet-domain residuals (D - fitted)
+  # 5. Attach per-outcome wavelet-domain residuals (D - fitted)
   #    when save_residuals = TRUE. susieR's `ibss_finalize` is not
   #    a generic, so we do this in the wrapper rather than via S3.
   if (isTRUE(save_residuals)) {
@@ -244,12 +244,12 @@ mfsusie <- function(X, Y,
   #    `predict.mfsusie`, `coef.mfsusie`, `fitted.mfsusie` can
   #    project posterior coefficients back to the original Y scale
   #    without the user passing `data` again.
-  fit$mf_meta <- list(
+  fit$dwt_meta <- list(
     M               = data$M,
     pos             = data$pos,
-    T_padded        = data$T_padded,
+    T_basis        = data$T_basis,
     scale_index     = data$scale_index,
-    csd_X           = data$csd_X,
+    csd           = data$csd,
     X_center        = data$wavelet_meta$X_center,
     X_scale         = data$wavelet_meta$X_scale,
     column_center   = data$wavelet_meta$column_center,

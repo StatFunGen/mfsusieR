@@ -5,21 +5,21 @@
 # caches `model$residuals = X^T R_l` for downstream SER stats.
 # compute_ser_statistics turns the cached `XtR` into per-position
 # `Bhat / Shat^2`. update_fitted_values folds the new posterior
-# back into the running per-modality fit `model$fitted[[m]]`.
+# back into the running per-outcome fit `model$fitted[[m]]`.
 #
-# All three are per-modality lapply over `seq_len(data$M)` plus
+# All three are per-outcome lapply over `seq_len(data$M)` plus
 # matrix-level BLAS ops; no C++ needed at this layer.
 #
 # Manuscript references: methods/algorithms.tex eq:partial_resid;
-# methods/derivation.tex eq:bhat_shat_per_modality.
+# methods/derivation.tex eq:bhat_shat_per_outcome.
 
 #' Per-effect partial residual on `mf_individual`
 #'
-#' For each modality m, computes the contribution of effect `l`
+#' For each outcome m, computes the contribution of effect `l`
 #' to the running fit `Xb_lm = X %*% (alpha_l * mu_l[[m]])`,
 #' removes it from `model$fitted[[m]]` to obtain the without-l
 #' fit, and subtracts that from the wavelet matrix `data$D[[m]]`
-#' to get the residual. Caches `XtR_m = X^T R_m` per modality on
+#' to get the residual. Caches `XtR_m = X^T R_m` per outcome on
 #' `model$residuals[[m]]`. Mirrors `compute_residuals.individual`
 #' (susieR) and `compute_residuals.mv_individual` (mvsusieR).
 #'
@@ -35,7 +35,7 @@ compute_residuals.mf_individual <- function(data, params, model, l, ...) {
 
   alpha_l <- model$alpha[l, ]
   for (m in seq_len(M)) {
-    # alpha_l . mu_l[[m]] is p x T_padded[m]; X is n x p. Xb is n x T_padded[m].
+    # alpha_l . mu_l[[m]] is p x T_basis[m]; X is n x p. Xb is n x T_basis[m].
     b_lm  <- alpha_l * model$mu[[l]][[m]]
     Xb_lm <- X %*% b_lm
 
@@ -52,17 +52,17 @@ compute_residuals.mf_individual <- function(data, params, model, l, ...) {
 
 #' Per-effect SER statistics on `mf_individual`
 #'
-#' Per modality: `Bhat = X^T R / colSums(X^2)`,
+#' Per outcome: `Bhat = X^T R / colSums(X^2)`,
 #' `Shat^2 = sigma2 / colSums(X^2)` (single-effect-residual scalar
 #' form). Mirrors `compute_ser_statistics.individual` (susieR);
-#' the per-modality lapply replaces the scalar T = 1 path.
+#' the per-outcome lapply replaces the scalar T = 1 path.
 #' `model$residuals` is set by the prior `compute_residuals` call
-#' in the IBSS sweep; `data$predictor_weights` is cached at data
+#' in the IBSS sweep; `data$xtx_diag` is cached at data
 #' construction.
 #'
-#' Returned list shape (per modality):
-#'   `betahat[[m]]`  has shape `p x T_padded[m]` and
-#'   `shat2[[m]]`    has shape `p x T_padded[m]`.
+#' Returned list shape (per outcome):
+#'   `betahat[[m]]`  has shape `p x T_basis[m]` and
+#'   `shat2[[m]]`    has shape `p x T_basis[m]`.
 #' Plus the optim_init / optim_bounds / optim_scale fields the
 #' susieR IBSS expects.
 #'
@@ -73,7 +73,7 @@ compute_ser_statistics.mf_individual <- function(data, params, model, l, ...) {
   betahat <- vector("list", M)
   shat2   <- vector("list", M)
   for (m in seq_len(M)) {
-    bs <- mf_per_modality_bhat_shat(data, model, m)
+    bs <- mf_per_outcome_bhat_shat(data, model, m)
     betahat[[m]] <- bs$bhat
     shat2[[m]]   <- bs$shat2
   }
@@ -92,13 +92,13 @@ compute_ser_statistics.mf_individual <- function(data, params, model, l, ...) {
   )
 }
 
-# Per-modality residual variance broadcast to per-position. Returns
-# a length-T_padded[m] vector where each entry is the residual
+# Per-outcome residual variance broadcast to per-position. Returns
+# a length-T_basis[m] vector where each entry is the residual
 # variance at that wavelet-coefficient position. Centralizes the
-# scalar-vs-per-(scale, modality) `model$sigma2` shape branch.
+# scalar-vs-per-(scale, outcome) `model$sigma2` shape branch.
 mf_sigma2_per_position <- function(data, model, m) {
   sigma2_m <- model$sigma2[[m]]
-  T_pad    <- data$T_padded[m]
+  T_pad    <- data$T_basis[m]
   if (length(sigma2_m) == 1L) {
     rep(sigma2_m, T_pad)
   } else {
@@ -110,12 +110,12 @@ mf_sigma2_per_position <- function(data, model, m) {
   }
 }
 
-# Per-modality (Bhat, Shat) derivation from the cached residuals on
+# Per-outcome (Bhat, Shat) derivation from the cached residuals on
 # `model$residuals[[m]]`. Shared by `compute_ser_statistics` and
 # `calculate_posterior_moments` so the divide-by-pw and per-scale
 # sigma2 broadcast lives in one place.
-mf_per_modality_bhat_shat <- function(data, model, m) {
-  pw    <- data$predictor_weights
+mf_per_outcome_bhat_shat <- function(data, model, m) {
+  pw    <- data$xtx_diag
   XtR_m <- model$residuals[[m]]
   bhat_m <- XtR_m / pw
   sigma2_per_pos <- mf_sigma2_per_position(data, model, m)
@@ -125,29 +125,29 @@ mf_per_modality_bhat_shat <- function(data, model, m) {
 
 #' Per-effect mixture-aware log-likelihood and weights on `mf_individual`
 #'
-#' For each modality m and scale s, computes the per-(SNP, scale)
+#' For each outcome m and scale s, computes the per-(variable, scale)
 #' log-Bayes factor via the cpp11 kernel
-#' `mixture_log_bf_per_scale`. Sums across scales (within modality)
-#' to get a per-modality log-BF vector of length p, combines across
-#' modalities via the S3 generic `combine_modality_lbfs` (default
+#' `mixture_log_bf_per_scale`. Sums across scales (within outcome)
+#' to get a per-outcome log-BF vector of length p, combines across
+#' outcomes via the S3 generic `combine_outcome_lbfs` (default
 #' independence: `Reduce("+", ...)`), then computes alpha as the
 #' softmax of `lbf_combined + log(model$pi)` and the SuSiE
 #' `lbf_model = log(sum(pi * BF))` aggregate.
 #'
 #' Mirrors `loglik.individual` with K = 1, no NIG, and adds
-#' the per-modality / per-scale aggregation. Stores `model$alpha[l, ]`,
+#' the per-outcome / per-scale aggregation. Stores `model$alpha[l, ]`,
 #' `model$lbf[l]`, `model$lbf_variable[l, ]` when `l` is non-NULL;
 #' otherwise returns the aggregate `lbf_model` scalar (used by the
 #' V-optim caller in `update_model_variance.mf_individual`, PR group 6).
 #'
 #' @references
 #' Manuscript: methods/derivation.tex eq:post_alpha
-#' Manuscript: methods/online_method.tex line 41 (cross-modality combine)
+#' Manuscript: methods/online_method.tex line 41 (cross-outcome combine)
 #' @keywords internal
 #' @noRd
 loglik.mf_individual <- function(data, params, model, V, ser_stats, l = NULL, ...) {
   M <- data$M
-  modality_lbfs <- vector("list", M)
+  outcome_lbfs <- vector("list", M)
   for (m in seq_len(M)) {
     Bhat_m <- ser_stats$betahat[[m]]
     Shat_m <- sqrt(ser_stats$shat2[[m]])
@@ -155,7 +155,7 @@ loglik.mf_individual <- function(data, params, model, V, ser_stats, l = NULL, ..
     lbf_m  <- 0
     # Iterate G_prior groups directly; each entry carries the
     # column indices it covers (`$idx`). One uniform loop for
-    # `per_modality` (length 1) and `per_scale_modality` (length S_m).
+    # `per_outcome` (length 1) and `per_scale` (length S_m).
     for (s in seq_along(G_m)) {
       idx <- G_m[[s]]$idx
       g_s <- G_m[[s]]$fitted_g
@@ -164,17 +164,17 @@ loglik.mf_individual <- function(data, params, model, V, ser_stats, l = NULL, ..
         Shat_m[, idx, drop = FALSE],
         g_s$sd, g_s$pi, V_scale = V)
     }
-    modality_lbfs[[m]] <- lbf_m
+    outcome_lbfs[[m]] <- lbf_m
   }
 
-  lbf_combined <- combine_modality_lbfs(model$cross_modality_combiner,
-                                        modality_lbfs, model)
+  lbf_combined <- combine_outcome_lbfs(model$cross_outcome_combiner,
+                                        outcome_lbfs, model)
 
   # Stable softmax with zero-pw handling. Mirrors susieR's
   # `lbf_stabilization` + `compute_posterior_weights` (7 lines vs 8;
-  # inlined to keep the per-(modality, position) shat2 logic explicit
+  # inlined to keep the per-(outcome, position) shat2 logic explicit
   # rather than passing a marker vector to the susieR helper).
-  zero_pw <- data$predictor_weights == 0
+  zero_pw <- data$xtx_diag == 0
   if (any(zero_pw)) lbf_combined[zero_pw] <- 0
   lpo       <- lbf_combined + log(model$pi + sqrt(.Machine$double.eps))
   m_max     <- max(lpo)
@@ -193,13 +193,13 @@ loglik.mf_individual <- function(data, params, model, V, ser_stats, l = NULL, ..
 
 #' Per-effect posterior moments on `mf_individual` (mixture-aware)
 #'
-#' For each modality m and scale s, calls the cpp11 kernel
-#' `mixture_posterior_per_scale` to compute per-(SNP, position)
+#' For each outcome m and scale s, calls the cpp11 kernel
+#' `mixture_posterior_per_scale` to compute per-(variable, position)
 #' posterior mean and second moment under the per-scale mixture-of-
 #' normals prior, then writes the result into the corresponding
 #' columns of `model$mu[[l]][[m]]` and `model$mu2[[l]][[m]]`. Bhat
 #' and Shat are re-derived from cached `model$residuals[[m]]` and
-#' `data$predictor_weights` (mirrors `calculate_posterior_moments.individual`).
+#' `data$xtx_diag` (mirrors `calculate_posterior_moments.individual`).
 #'
 #' Manuscript references:
 #'   methods/derivation.tex eq:post_f_mix
@@ -210,13 +210,13 @@ loglik.mf_individual <- function(data, params, model, V, ser_stats, l = NULL, ..
 calculate_posterior_moments.mf_individual <- function(data, params, model, V, l, ...) {
   p <- data$p
   for (m in seq_len(data$M)) {
-    bs <- mf_per_modality_bhat_shat(data, model, m)
+    bs <- mf_per_outcome_bhat_shat(data, model, m)
     bhat_m <- bs$bhat
     shat_m <- sqrt(bs$shat2)
 
     G_m    <- model$G_prior[[m]]
-    mu_lm  <- matrix(0, nrow = p, ncol = data$T_padded[m])
-    mu2_lm <- matrix(0, nrow = p, ncol = data$T_padded[m])
+    mu_lm  <- matrix(0, nrow = p, ncol = data$T_basis[m])
+    mu2_lm <- matrix(0, nrow = p, ncol = data$T_basis[m])
     for (s in seq_along(G_m)) {
       idx <- G_m[[s]]$idx
       g_s <- G_m[[s]]$fitted_g
@@ -236,8 +236,8 @@ calculate_posterior_moments.mf_individual <- function(data, params, model, V, l,
 #' Per-effect SER posterior expected log-likelihood
 #'
 #' Generalizes `SER_posterior_e_loglik.individual` to
-#' per-modality, per-(scale, modality) residual variance. For each
-#' modality m,
+#' per-outcome, per-(scale, outcome) residual variance. For each
+#' outcome m,
 #' `L_m = sum_t [ -0.5 * n * log(2 pi sigma2_t)
 #'                - 0.5 / sigma2_t * (sum_n R[n,t]^2
 #'                                     - 2 sum_n R[n,t] * (X * Eb)[n,t]
@@ -255,7 +255,7 @@ calculate_posterior_moments.mf_individual <- function(data, params, model, V, l,
 SER_posterior_e_loglik.mf_individual <- function(data, params, model, l, ...) {
   X       <- data$X
   alpha_l <- model$alpha[l, ]
-  pw      <- data$predictor_weights
+  pw      <- data$xtx_diag
   out     <- 0
   for (m in seq_len(data$M)) {
     Eb_m  <- alpha_l * model$mu[[l]][[m]]
@@ -279,7 +279,7 @@ SER_posterior_e_loglik.mf_individual <- function(data, params, model, l, ...) {
 #' Per-effect KL divergence on `mf_individual`
 #'
 #' Mirrors `compute_kl.individual`'s "Standard Gaussian KL"
-#' branch generalized across modalities and per-(scale, modality)
+#' branch generalized across outcomes and per-(scale, outcome)
 #' residual variance:
 #' `KL_l = -[ lbf_l + sum_m sum_n sum_t log dnorm(R_m[n, t]; 0, sqrt(sigma2_t)) ]
 #'        + SER_posterior_e_loglik(l)`,
@@ -320,16 +320,16 @@ neg_loglik.mf_individual <- function(data, params, model, V_param, ser_stats, ..
   -loglik.mf_individual(data, params, model, V, ser_stats)
 }
 
-#' Per-modality expected squared residuals
+#' Per-outcome expected squared residuals
 #'
-#' Returns the length-`T_padded[m]` vector of per-position
+#' Returns the length-`T_basis[m]` vector of per-position
 #' `E_q[||Y_m[, t] - sum_l X * b_lm[, t]||^2]` for the SER posterior:
 #'
 #' `ER2_m[t] = ||Y_m[, t] - sum_l X * (alpha_l * mu_lm)[, t]||^2
 #'           + sum_l ((alpha_l * pw)^T * mu2_l_m[, t]
 #'                    - ||X * (alpha_l * mu_lm[, t])||^2)`
 #'
-#' The first term reuses `model$fitted[[m]]`, the running per-modality
+#' The first term reuses `model$fitted[[m]]`, the running per-outcome
 #' fit maintained by `update_fitted_values`. Used by
 #' `update_variance_components` and `Eloglik`.
 #'
@@ -339,8 +339,8 @@ neg_loglik.mf_individual <- function(data, params, model, V_param, ser_stats, ..
 #' @noRd
 mf_get_ER2_per_position <- function(data, model, m) {
   X     <- data$X
-  pw    <- data$predictor_weights
-  T_pad <- data$T_padded[m]
+  pw    <- data$xtx_diag
+  T_pad <- data$T_basis[m]
 
   # Cached running fit: model$fitted[[m]] = X %*% sum_l (alpha_l * mu_lm).
   res_m <- data$D[[m]] - model$fitted[[m]]
@@ -359,13 +359,13 @@ mf_get_ER2_per_position <- function(data, model, m) {
   rss_t + bias_t
 }
 
-#' Update per-modality (or per-(scale, modality)) residual variance
+#' Update per-outcome (or per-(scale, outcome)) residual variance
 #'
-#' Computes `sigma2_m` per modality using
+#' Computes `sigma2_m` per outcome using
 #' `mf_get_ER2_per_position`, then aggregates to the shape selected
-#' by `params$residual_variance_method`:
-#' - `"shared_per_modality"` (legacy): `sigma2_m = sum_t ER2_m[t] / (n * T_pad[m])`
-#' - `"per_scale_modality"` (default): per scale `s`,
+#' by `params$residual_variance_scope`:
+#' - `"per_outcome"` (legacy): `sigma2_m = sum_t ER2_m[t] / (n * T_pad[m])`
+#' - `"per_scale"` (default): per scale `s`,
 #'   `sigma2_{m,s} = sum_{t in idx_s} ER2_m[t] / (n * |idx_s|)`
 #'
 #' @references
@@ -373,15 +373,15 @@ mf_get_ER2_per_position <- function(data, model, m) {
 #' @keywords internal
 #' @noRd
 update_variance_components.mf_individual <- function(data, params, model, ...) {
-  method <- params$residual_variance_method %||% "per_scale_modality"
-  if (!method %in% c("per_scale_modality", "shared_per_modality")) {
-    stop("`residual_variance_method` must be one of 'per_scale_modality' or 'shared_per_modality'.")
+  method <- params$residual_variance_scope %||% "per_scale"
+  if (!method %in% c("per_scale", "per_outcome")) {
+    stop("`residual_variance_scope` must be one of 'per_scale' or 'per_outcome'.")
   }
   for (m in seq_len(data$M)) {
     er2_t <- mf_get_ER2_per_position(data, model, m)
     n     <- data$n
-    if (method == "shared_per_modality") {
-      model$sigma2[[m]] <- sum(er2_t) / (n * data$T_padded[m])
+    if (method == "per_outcome") {
+      model$sigma2[[m]] <- sum(er2_t) / (n * data$T_basis[m])
     } else {
       indx_m <- data$scale_index[[m]]
       sigma2_per_scale <- vapply(indx_m, function(idx) {
@@ -396,9 +396,9 @@ update_variance_components.mf_individual <- function(data, params, model, ...) {
 #' Per-effect prior update for `mf_individual` (mixsqp on `pi_V`)
 #'
 #' Overrides `optimize_prior_variance` for the
-#' `mf_individual` data class. Per (modality, scale), builds the
+#' `mf_individual` data class. Per (outcome, scale), builds the
 #' mixsqp likelihood matrix (`mf_em_likelihood_per_scale`) from the
-#' per-modality (Bhat, Shat) in `ser_stats`, runs the M step
+#' per-outcome (Bhat, Shat) in `ser_stats`, runs the M step
 #' (`mf_em_m_step_per_scale`) with `zeta = model$alpha[l, ]`, and
 #' writes the new mixture weights into both
 #' `model$G_prior[[m]][[s]]$fitted_g$pi` and `model$pi_V[[m]][s, ]`.
@@ -421,7 +421,7 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
   if (is.null(l)) {
     stop("`optimize_prior_variance.mf_individual` requires the effect index `l`.")
   }
-  nullweight <- params$nullweight     %||% 0.7
+  mixsqp_null_penalty <- params$mixsqp_null_penalty     %||% 0.7
   control    <- params$control_mixsqp %||% list()
   zeta_l     <- model$alpha[l, ]
 
@@ -430,9 +430,9 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
     shat_m <- sqrt(ser_stats$shat2[[m]])
     G_m    <- model$G_prior[[m]]
     # Uniform group loop: each G_prior entry holds the column
-    # indices it covers (`$idx`). For `per_modality` there is one
+    # indices it covers (`$idx`). For `per_outcome` there is one
     # group spanning every wavelet column (one mixsqp solve over
-    # the full modality); for `per_scale_modality` there are S_m
+    # the full outcome); for `per_scale` there are S_m
     # groups, one per wavelet scale (S_m independent mixsqp solves).
     for (s in seq_along(G_m)) {
       idx     <- G_m[[s]]$idx
@@ -443,7 +443,7 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
         sd_grid)
       new_pi <- mf_em_m_step_per_scale(
         L_mat, zeta_l, idx_size = length(idx),
-        nullweight = nullweight,
+        mixsqp_null_penalty = mixsqp_null_penalty,
         control_mixsqp = control)
       model$G_prior[[m]][[s]]$fitted_g$pi <- new_pi
       model$pi_V[[m]][s, ]                 <- new_pi
@@ -455,11 +455,11 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
 #' Per-iteration residual variance + derived-quantity update for `mf_individual`
 #'
 #' Mirrors `update_model_variance.default`'s orchestration:
-#' calls `update_variance_components` (refresh per-modality or
-#' per-(scale, modality) sigma2), then `update_derived_quantities`
-#' (refresh the running per-modality fit). Bounds are not applied
+#' calls `update_variance_components` (refresh per-outcome or
+#' per-(scale, outcome) sigma2), then `update_derived_quantities`
+#' (refresh the running per-outcome fit). Bounds are not applied
 #' per-element here because mfsusieR's sigma2 is a list of
-#' length-`S_m` vectors per modality; `params$residual_variance_lowerbound`
+#' length-`S_m` vectors per outcome; `params$residual_variance_lowerbound`
 #' / `_upperbound` semantics for that shape are deferred to a later
 #' refinement.
 #'
@@ -471,17 +471,17 @@ update_model_variance.mf_individual <- function(data, params, model, ...) {
   update_derived_quantities(data, params, model)
 }
 
-#' Recompute the running per-modality fit `model$fitted[[m]]`
+#' Recompute the running per-outcome fit `model$fitted[[m]]`
 #'
 #' Called by `update_model_variance` after a sigma2 update. The
-#' fit is `X %*% sum_l alpha_l * mu_l[[m]]` per modality. Mirrors
+#' fit is `X %*% sum_l alpha_l * mu_l[[m]]` per outcome. Mirrors
 #' `update_derived_quantities.default`.
 #'
 #' @keywords internal
 #' @noRd
 update_derived_quantities.mf_individual <- function(data, params, model, ...) {
   for (m in seq_len(data$M)) {
-    postF_m <- matrix(0, nrow = data$p, ncol = data$T_padded[m])
+    postF_m <- matrix(0, nrow = data$p, ncol = data$T_basis[m])
     for (l in seq_len(model$L)) {
       postF_m <- postF_m + model$alpha[l, ] * model$mu[[l]][[m]]
     }
@@ -490,7 +490,7 @@ update_derived_quantities.mf_individual <- function(data, params, model, ...) {
   model
 }
 
-#' Aggregate expected log-likelihood across modalities
+#' Aggregate expected log-likelihood across outcomes
 #'
 #' Mirrors `Eloglik.individual`:
 #' `Eloglik = sum_m sum_t -0.5 * n * log(2 pi sigma2_t) - 0.5 / sigma2_t * ER2_m[t]`
@@ -532,10 +532,10 @@ get_objective.mf_individual <- function(data, params, model, ...) {
 
 #' Fold the per-effect posterior into the running fit
 #'
-#' Per modality, sets
+#' Per outcome, sets
 #' `model$fitted[[m]] <- model$fitted_without_l[[m]] + X %*% (alpha_l * mu_lm)`,
-#' where `mu_lm` is the per-effect, per-modality posterior mean
-#' (a `p x T_padded[m]` matrix). Called after
+#' where `mu_lm` is the per-effect, per-outcome posterior mean
+#' (a `p x T_basis[m]` matrix). Called after
 #' `calculate_posterior_moments` updates alpha_l, mu_l. Mirrors
 #' the inline susie / mvsusie pattern of recomputing Xr from
 #' Xr_without_l + the new effect contribution.

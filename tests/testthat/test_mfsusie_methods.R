@@ -92,7 +92,7 @@ test_that("print.mfsusie output contains key fit metadata", {
   txt <- capture.output(print(toy$fit))
   expect_true(any(grepl("p \\(predictors\\):", txt)))
   expect_true(any(grepl("L \\(effects\\):", txt)))
-  expect_true(any(grepl("M \\(modalities\\):", txt)))
+  expect_true(any(grepl("M \\(outcomes\\):", txt)))
   expect_true(any(grepl("iterations:", txt)))
   expect_true(any(grepl("top PIPs", txt)))
 })
@@ -103,12 +103,12 @@ test_that("summary.mfsusie returns a list of class 'summary.mfsusie' with docume
   toy <- make_toy_fit()
   s <- summary(toy$fit)
   expect_s3_class(s, "summary.mfsusie")
-  expect_named(s, c("n_effects", "n_snps", "n_modalities", "T_padded",
+  expect_named(s, c("n_effects", "n_variables", "n_outcomes", "T_basis",
                     "converged", "n_iter", "elbo_final", "pip", "cs"),
                ignore.order = TRUE)
-  expect_identical(s$n_snps, ncol(toy$fit$alpha))
+  expect_identical(s$n_variables, ncol(toy$fit$alpha))
   expect_identical(s$n_effects, nrow(toy$fit$alpha))
-  expect_identical(s$n_modalities, 2L)
+  expect_identical(s$n_outcomes, 2L)
   expect_true(is.numeric(s$pip))
 })
 

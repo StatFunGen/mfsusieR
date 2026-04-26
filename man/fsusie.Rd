@@ -2,7 +2,7 @@
 % Please edit documentation in R/fsusie.R
 \name{fsusie}
 \alias{fsusie}
-\title{Single-modality functional SuSiE}
+\title{Single-outcome functional SuSiE}
 \usage{
 fsusie(Y, X, pos = NULL, ...)
 }
@@ -17,7 +17,7 @@ sampling positions. Defaults to \code{seq_len(ncol(Y))}.}
 
 \item{...}{forwarded to \code{mfsusie()}. See \code{?mfsusie} for the full
 parameter set; arguments that only make sense in the
-multi-modality case (currently just \code{cross_modality_prior})
+multi-outcome case (currently just \code{cross_outcome_prior})
 error out.}
 }
 \value{
@@ -25,14 +25,14 @@ a list of class \code{c("mfsusie", "susie")}. See \code{?mfsusie}
 for the documented field set.
 }
 \description{
-Convenience wrapper around \code{mfsusie()} for the single-modality
+Convenience wrapper around \code{mfsusie()} for the single-outcome
 case (\code{M = 1}). The response \code{Y} may be scalar (\code{T = 1},
 susieR-degenerate path) or functional (\code{T > 1}, wavelet-basis
 path). Internally \code{fsusie(Y, X, pos, ...)} is equivalent to
 \code{mfsusie(X, list(Y), list(pos), ...)}.
 }
 \details{
-Multi-modality-only arguments (e.g. \code{cross_modality_prior}) are
+Multi-outcome-only arguments (e.g. \code{cross_outcome_prior}) are
 rejected with an explicit error to keep the wrapper honest about
 its \code{M = 1} scope.
 }

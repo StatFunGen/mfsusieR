@@ -21,15 +21,15 @@
 
 # ---- get_var_y -------------------------------------------------
 
-#' Initial residual variance estimate per modality
+#' Initial residual variance estimate per outcome
 #'
 #' Returns a list of length `M`; each entry is a length-`S_m` vector
 #' (one per wavelet scale) of marginal sample variances of `data$D[[m]]`
 #' computed scale by scale. Used by `ibss_initialize` to seed
 #' `params$residual_variance` when the user does not supply one.
-#' This shape matches the per-(scale, modality) sigma2 convention
+#' This shape matches the per-(scale, outcome) sigma2 convention
 #' carried throughout the IBSS loop. The legacy
-#' `shared_per_modality` mode collapses each entry to a scalar at
+#' `per_outcome` mode collapses each entry to a scalar at
 #' update time.
 #'
 #' @keywords internal
@@ -45,7 +45,7 @@ get_var_y.mf_individual <- function(data, ...) {
 
 # ---- initialize_fitted -----------------------------------------
 
-#' Per-modality fitted-values initializer
+#' Per-outcome fitted-values initializer
 #'
 #' Returns the list of extra fields to merge into `model` after
 #' `initialize_susie_model.mf_individual` runs. The running fit
@@ -67,7 +67,7 @@ initialize_fitted.mf_individual <- function(data, mat_init, ...) {
 #'
 #' Mirrors `ibss_initialize.default` but skips its
 #' scalar-only validation of `params$residual_variance` (mfsusieR
-#' uses a list-of-vectors per-(scale, modality) shape) and routes
+#' uses a list-of-vectors per-(scale, outcome) shape) and routes
 #' through the mfsusieR S3 methods for `initialize_susie_model`,
 #' `initialize_fitted`. Model_init / warm-start is deferred to a
 #' later PR group (v1 ignores `params$model_init`).
@@ -170,7 +170,7 @@ trim_null_effects.mf_individual <- function(data, params, model) {
 # `get_intercept`, `get_variable_names`, `get_zscore`,
 # `cleanup_model`) via dispatch, so mfsusieR overrides those rather
 # than trying to register an `ibss_finalize.mf_individual` method.
-# Per-modality residual attachment happens in the public `mfsusie()`
+# Per-outcome residual attachment happens in the public `mfsusie()`
 # wrapper after `susie_workhorse` returns.
 
 # ---- cleanup_model --------------------------------------------
@@ -209,32 +209,32 @@ configure_data.mf_individual <- function(data, params, ...) {
 
 # ---- User-facing post-fit accessors ---------------------------
 
-#' Per-modality column scale factors of X
+#' Per-outcome column scale factors of X
 #' @keywords internal
 #' @noRd
 get_scale_factors.mf_individual <- function(data, params, ...) {
-  data$csd_X
+  data$csd
 }
 
-#' Per-modality intercepts (length `M`)
+#' Per-outcome intercepts (length `M`)
 #'
-#' Reconstructs the intercept per modality on the original Y scale.
-#' Returns a list of length `M`; each entry is a length-`T_padded[m]`
+#' Reconstructs the intercept per outcome on the original Y scale.
+#' Returns a list of length `M`; each entry is a length-`T_basis[m]`
 #' vector. Computed from per-effect posterior means projected back
-#' through the inverse wavelet transform when `T_padded[m] > 1`.
+#' through the inverse wavelet transform when `T_basis[m] > 1`.
 #'
 #' @keywords internal
 #' @noRd
 get_intercept.mf_individual <- function(data, params, model, ...) {
   if (!isTRUE(params$intercept)) {
-    return(lapply(data$T_padded, function(T_m) rep(0, T_m)))
+    return(lapply(data$T_basis, function(T_m) rep(0, T_m)))
   }
-  # mfsusieR centers Y per-modality, per-column at construction.
+  # mfsusieR centers Y per-outcome, per-column at construction.
   # Intercept reconstruction handed to a future PR group; v1 returns 0.
-  lapply(data$T_padded, function(T_m) rep(0, T_m))
+  lapply(data$T_basis, function(T_m) rep(0, T_m))
 }
 
-#' Per-modality fitted values (length-M list of n x T_padded matrices)
+#' Per-outcome fitted values (length-M list of n x T_basis matrices)
 #' @keywords internal
 #' @noRd
 get_fitted.mf_individual <- function(data, params, model, ...) {

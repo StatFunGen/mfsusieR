@@ -35,7 +35,7 @@ test_that("mixture_log_bf_per_scale summed over scales matches fsusieR::log_BF a
   attr(G_prior_f, "class") <- "mixture_normal_per_scale"
 
   # Initial-state Bhat / Shat (zero-init effects -> residual = D).
-  pw   <- data$predictor_weights
+  pw   <- data$xtx_diag
   XtD  <- crossprod(data$X, data$D[[1]])
   Bhat <- XtD / pw
   Shat <- sqrt(matrix(1 / pw, J, ncol(data$D[[1]])))
@@ -85,7 +85,7 @@ test_that("mixture_posterior_per_scale matches fsusieR::post_mat_mean / post_mat
   G_prior_f <- rep(list(ash_record), length(data$scale_index[[1]]))
   attr(G_prior_f, "class") <- "mixture_normal_per_scale"
 
-  pw   <- data$predictor_weights
+  pw   <- data$xtx_diag
   XtD  <- crossprod(data$X, data$D[[1]])
   Bhat <- XtD / pw
   Shat <- sqrt(matrix(1 / pw, J, ncol(data$D[[1]])))

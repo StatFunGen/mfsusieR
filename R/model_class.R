@@ -14,7 +14,7 @@
 #
 # @references
 # Manuscript: methods/online_method.tex
-# (per-modality wavelet decomposition + IBSS dispatch).
+# (per-outcome wavelet decomposition + IBSS dispatch).
 
 #' Initialize the `mfsusie` model from an `mf_individual` data class
 #'
@@ -26,8 +26,8 @@
 #'   `V_grid`, `pi`, `null_prior_weight`), and
 #'   `residual_variance` (initial sigma2; either a length-M list
 #'   of scalars for legacy mode or a length-M list of length-`S_m`
-#'   vectors for per-(scale, modality) mode).
-#' @param var_y per-modality variance of the observed response
+#'   vectors for per-(scale, outcome) mode).
+#' @param var_y per-outcome variance of the observed response
 #'   curves, used as a fallback when `params$residual_variance` is
 #'   NULL.
 #' @param ... ignored.
@@ -39,10 +39,10 @@ initialize_susie_model.mf_individual <- function(data, params, var_y, ...) {
   L <- as.integer(params$L)
   p <- data$p
   M <- data$M
-  T_padded <- data$T_padded
+  T_basis <- data$T_basis
 
   # Per-effect posterior moments. mu[[l]][[m]] and mu2[[l]][[m]] are
-  # p x T_padded[m] matrices; the nested-list shape lets ragged T_m
+  # p x T_basis[m] matrices; the nested-list shape lets ragged T_m
   # coexist without padding to a common T.
   mu  <- vector("list", L)
   mu2 <- vector("list", L)
@@ -50,13 +50,13 @@ initialize_susie_model.mf_individual <- function(data, params, var_y, ...) {
     mu[[l]]  <- vector("list", M)
     mu2[[l]] <- vector("list", M)
     for (m in seq_len(M)) {
-      mu[[l]][[m]]  <- matrix(0, nrow = p, ncol = T_padded[m])
-      mu2[[l]][[m]] <- matrix(0, nrow = p, ncol = T_padded[m])
+      mu[[l]][[m]]  <- matrix(0, nrow = p, ncol = T_basis[m])
+      mu2[[l]][[m]] <- matrix(0, nrow = p, ncol = T_basis[m])
     }
   }
 
   # Prior structure. V_grid: list[M] of length-K vectors (or list[M]
-  # of S_m x K matrices for `per_scale_modality`). pi_V: list[M] of
+  # of S_m x K matrices for `per_scale`). pi_V: list[M] of
   # S_m x K mixture-weight matrices. null_prior_weight: scalar.
   prior <- params$prior
   V_grid             <- if (is.null(prior)) NULL else prior$V_grid
@@ -64,17 +64,17 @@ initialize_susie_model.mf_individual <- function(data, params, var_y, ...) {
   null_prior_weight  <- if (is.null(prior)) 0   else prior$null_prior_weight
   G_prior            <- if (is.null(prior)) NULL else prior$G_prior
 
-  # Cross-modality combiner. Defaults to the trivial independence
+  # Cross-outcome combiner. Defaults to the trivial independence
   # combiner.
-  cross_modality_combiner <- if (is.null(params$cross_modality_prior)) {
-    cross_modality_prior_independent()
+  cross_outcome_combiner <- if (is.null(params$cross_outcome_prior)) {
+    cross_outcome_prior_independent()
   } else {
-    params$cross_modality_prior
+    params$cross_outcome_prior
   }
 
   # Residual variance. `sigma2` is a list[M]: scalar entries under
-  # `shared_per_modality`, length-S_m vectors under
-  # `per_scale_modality` (the default). Falls back to `var_y` when
+  # `per_outcome`, length-S_m vectors under
+  # `per_scale` (the default). Falls back to `var_y` when
   # `params$residual_variance` is NULL.
   sigma2 <- params$residual_variance
   if (is.null(sigma2)) {
@@ -91,10 +91,10 @@ initialize_susie_model.mf_individual <- function(data, params, var_y, ...) {
     prior_weights <- rep(1 / p, p)
   }
 
-  # Per-modality fitted values (running sum of effect curves).
+  # Per-outcome fitted values (running sum of effect curves).
   fitted_values <- vector("list", M)
   for (m in seq_len(M)) {
-    fitted_values[[m]] <- matrix(0, nrow = data$n, ncol = T_padded[m])
+    fitted_values[[m]] <- matrix(0, nrow = data$n, ncol = T_basis[m])
   }
 
   model <- list(
@@ -106,7 +106,7 @@ initialize_susie_model.mf_individual <- function(data, params, var_y, ...) {
     pi_V              = pi_V,
     null_prior_weight = null_prior_weight,
     G_prior           = G_prior,
-    cross_modality_combiner = cross_modality_combiner,
+    cross_outcome_combiner = cross_outcome_combiner,
     KL                = rep(NA_real_, L),
     lbf               = rep(NA_real_, L),
     lbf_variable      = matrix(NA_real_, nrow = L, ncol = p),
@@ -147,10 +147,10 @@ get_posterior_moments_l.mfsusie <- function(model, l) {
 
 #' Per-effect posterior mean curves (alpha-weighted mu)
 #'
-#' Returns a list of length M where element m is a `p x T_padded[m]`
+#' Returns a list of length M where element m is a `p x T_basis[m]`
 #' matrix; row j of element m is `alpha[l, j] * mu[[l]][[m]][j, ]`,
-#' the contribution of SNP j to the posterior mean of effect l on
-#' modality m.
+#' the contribution of variable j to the posterior mean of effect l on
+#' outcome m.
 #' @keywords internal
 #' @noRd
 get_posterior_mean_l.mfsusie <- function(model, l) {
@@ -160,7 +160,7 @@ get_posterior_mean_l.mfsusie <- function(model, l) {
 
 #' Posterior mean curves summed over all L effects
 #'
-#' Returns a list of length M where element m is a `p x T_padded[m]`
+#' Returns a list of length M where element m is a `p x T_basis[m]`
 #' matrix giving `sum_l alpha[l, j] * mu[[l]][[m]][j, ]`. Used by
 #' `get_posterior_mean_sum` callers in the IBSS dispatch.
 #' @keywords internal

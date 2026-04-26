@@ -1,11 +1,11 @@
 ---
-title: "Joint multi-modality fine-mapping with mfsusie()"
+title: "Joint multi-outcome fine-mapping with mfsusie()"
 author: "Gao Wang and contributors"
 output:
   rmarkdown::html_vignette:
     toc: true
 vignette: >
-  %\VignetteIndexEntry{Joint multi-modality fine-mapping with mfsusie()}
+  %\VignetteIndexEntry{Joint multi-outcome fine-mapping with mfsusie()}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -18,10 +18,10 @@ knitr::opts_chunk$set(
 ```
 
 `mfsusie()` extends `fsusie()` from one response to many. Each
-modality `m` is a matrix `n x T_m`; modalities can be functional
+outcome `m` is a matrix `n x T_m`; outcomes can be functional
 (`T_m > 1`) or scalar (`T_m = 1`), and `T_m` may differ across
-modalities. The fit returns one credible set list and one PIP vector
-per SNP combining evidence from every modality.
+outcomes. The fit returns one credible set list and one PIP vector
+per variable combining evidence from every outcome.
 
 ```{r setup, message = FALSE}
 library(mfsusieR)
@@ -29,12 +29,12 @@ library(susieR)
 set.seed(1)
 ```
 
-## Three-modality fixture
+## Three-outcome fixture
 
-Two functional modalities (e.g., ChIP-seq and ATAC-seq tracks at
+Two functional outcomes (e.g., ChIP-seq and ATAC-seq tracks at
 different resolutions) plus three scalar phenotypes (e.g., gene
-expression in three tissues). Two causal SNPs, both shared across all
-five modalities; mfsusie should combine the evidence into tight
+expression in three tissues). Two causal variables, both shared across all
+five outcomes; mfsusie should combine the evidence into tight
 credible sets.
 
 ```{r simulate}
@@ -45,7 +45,7 @@ n <- nrow(X); p <- ncol(X)
 T_func <- c(32L, 64L)
 n_scalar <- 3L
 
-# Causal beta: same two SNPs, different per-modality strength.
+# Causal beta: same two variables, different per-outcome strength.
 shape_low  <- exp(-((seq_len(T_func[1]) - T_func[1] / 2)^2) / (2 * 4^2))
 shape_high <- exp(-((seq_len(T_func[2]) - T_func[2] / 2)^2) / (2 * 6^2))
 beta_func1 <- matrix(0, p, T_func[1]); beta_func1[37, ] <- 1.0 * shape_low
@@ -60,7 +60,7 @@ Y_func1 <- X %*% beta_func1 + matrix(rnorm(n * T_func[1], sd = 0.3), n)
 Y_func2 <- X %*% beta_func2 + matrix(rnorm(n * T_func[2], sd = 0.3), n)
 Y_scalar <- X %*% beta_scalar + matrix(rnorm(n * n_scalar, sd = 0.3), n)
 
-# Pack scalar modalities one at a time so each is a column matrix.
+# Pack scalar outcomes one at a time so each is a column matrix.
 Y_list <- list(
   Y_func1,
   Y_func2,
@@ -76,23 +76,23 @@ sapply(Y_list, ncol)
 
 ```{r fit}
 fit <- mfsusie(X, Y_list, L = 5,
-               prior_variance_scope = "per_modality",
+               prior_variance_scope = "per_outcome",
                verbose = FALSE)
 fit$niter; fit$converged
 length(fit$sets$cs)
 ```
 
-The two causal SNPs should dominate the PIPs:
+The two causal variables should dominate the PIPs:
 
 ```{r pip}
 plot(fit$pip, pch = 16, col = ifelse(fit$pip > 0.9, "red", "grey60"),
-     xlab = "SNP index", ylab = "PIP",
+     xlab = "variable index", ylab = "PIP",
      main = "PIPs from joint mfsusie fit")
 abline(v = c(37, 88), lty = 2, col = "blue")
 fit$sets$cs
 ```
 
-## Per-modality effect curves
+## Per-outcome effect curves
 
 `coef(fit)` returns a list of length `M`. Element `m` is an `L x T_m`
 matrix.
@@ -101,19 +101,19 @@ matrix.
 B_hat <- coef(fit)
 sapply(B_hat, dim)
 
-# Plot the effect on functional modality 2 for each detected effect.
+# Plot the effect on functional outcome 2 for each detected effect.
 matplot(t(B_hat[[2]]), type = "l", lty = 1,
-        xlab = "position (modality 2)", ylab = "effect",
-        main = "Effect curves on functional modality 2")
+        xlab = "position (outcome 2)", ylab = "effect",
+        main = "Effect curves on functional outcome 2")
 abline(h = 0, col = "grey80")
 ```
 
 ## Choosing `prior_variance_scope`
 
-- `"per_modality"` (used above): one mixture-of-normals prior shared
-  across every wavelet scale of a modality. Faster; appropriate when
+- `"per_outcome"` (used above): one mixture-of-normals prior shared
+  across every wavelet scale of a outcome. Faster; appropriate when
   the scales are exchangeable a priori.
-- `"per_scale_modality"` (default): one mixture per (modality, scale),
+- `"per_scale"` (default): one mixture per (outcome, scale),
   letting different scales adapt independently. More flexible at the
   cost of a larger M-step.
 
@@ -124,7 +124,7 @@ the fit object structure are identical.
 
 Use `mfsusie()` when:
 
-- A SNP plausibly affects multiple distinct phenotypes (different
+- A variable plausibly affects multiple distinct phenotypes (different
   tissues, different molecular layers).
 - The phenotypes have heterogeneous shapes (some scalar, some
   functional, some at different sampling resolutions). mfsusie does
@@ -133,4 +133,4 @@ Use `mfsusie()` when:
   rather than ad-hoc colocalisation across separate fsusie fits.
 
 Use `fsusie()` when there is exactly one response (functional or
-scalar) and no reason to model joint effects across modalities.
+scalar) and no reason to model joint effects across outcomes.

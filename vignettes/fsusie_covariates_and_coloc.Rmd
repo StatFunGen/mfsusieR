@@ -19,7 +19,7 @@ knitr::opts_chunk$set(
 
 This vignette covers two adjacent workflows that wrap a single
 `fsusie()` fit: (i) regressing out covariates before fine-mapping, and
-(ii) colocalising two functional traits via per-trait fits and a
+(ii) colocalising two functional outcomes via per-outcome fits and a
 shared posterior.
 
 ```{r setup, message = FALSE}
@@ -63,9 +63,9 @@ Equivalent options when `Z` is large: regress `Y` on `Z` once with
 `stats::lm.fit` and pass the residual matrix; or include `Z` in `X`
 with `prior_weights` set to `0` on the covariate columns.
 
-## Colocalisation across two functional traits
+## Colocalisation across two functional outcomes
 
-The standard recipe: fit `fsusie()` on each trait separately, then
+The standard recipe: fit `fsusie()` on each outcome separately, then
 combine the per-effect posterior probabilities of association across
 the two CSes into a coloc-style PP.H4 statistic. Because both fits
 return per-effect `alpha` matrices on the same `X`, the combination is
@@ -81,7 +81,7 @@ Y2 <- X %*% beta2 + matrix(rnorm(n * T_m, sd = 0.4), n)
 Y3 <- X %*% beta3 + matrix(rnorm(n * T_m, sd = 0.4), n)
 ```
 
-Fit both traits and a non-colocalising third for comparison.
+Fit both outcomes and a non-colocalising third for comparison.
 
 ```{r coloc-fit}
 fit1 <- fsusie(Y1, X, pos = positions, L = 3, verbose = FALSE)
@@ -89,7 +89,7 @@ fit2 <- fsusie(Y2, X, pos = positions, L = 3, verbose = FALSE)
 fit3 <- fsusie(Y3, X, pos = positions, L = 3, verbose = FALSE)
 
 # Per-effect colocalisation: outer product of alpha rows, summed
-# over effects, summed over the diagonal (same SNP causal in both).
+# over effects, summed over the diagonal (same variable causal in both).
 coloc_pp <- function(a, b) {
   L <- min(nrow(a), nrow(b))
   sum(vapply(seq_len(L), function(l) sum(a[l, ] * b[l, ]), numeric(1)))
@@ -108,6 +108,6 @@ per-effect alpha matrices into the standard
 - `fsusie()` does not mutate `X` and `Y` in place; the residualisation
   pattern above is the recommended idiom.
 - The colocalisation snippet here is intentionally minimal. For
-  multi-trait colocalisation across more than two traits, see
-  [the multi-modality intro](mfsusie_intro.html), which fits all
-  modalities jointly and avoids the post-hoc combine.
+  multi-outcome colocalisation across more than two outcomes, see
+  [the multi-outcome intro](mfsusie_intro.html), which fits all
+  outcomes jointly and avoids the post-hoc combine.
