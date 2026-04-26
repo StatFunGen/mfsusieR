@@ -248,8 +248,12 @@ gtex_example <- local({
   bp_at <- function(idx) as.integer(round(exon_pos[1L] +
                                           (idx - 1L) * diff(range(exon_pos)) /
                                           (T_m - 1L)))
-  peak_bp <- vapply(peak_idx, bp_at, integer(1L))
-  half_w  <- c(750L, 600L, 500L)              # half-widths in bp
+  peak_bp     <- vapply(peak_idx, bp_at, integer(1L))
+  bp_per_idx  <- diff(range(exon_pos)) / (T_m - 1L)
+  # Exon half-width = 2 * sigma in bp -- covers the peak's main
+  # support (~95% of the Gaussian mass at +/- 2 sigma) so the
+  # exon block is roughly as wide as the visible peak.
+  half_w      <- as.integer(round(2 * peak_w * bp_per_idx))
   exon_starts <- c(109990500L,
                    peak_bp - half_w,
                    110021000L)
