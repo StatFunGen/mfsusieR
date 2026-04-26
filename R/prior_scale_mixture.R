@@ -7,8 +7,8 @@
 #      distribute mixture weights with `null_prior_weight`. No ash
 #      fit. The susieR-degeneracy contract C1 takes this path.
 #   2. `prior_variance_grid = NULL` -- per modality, call
-#      `susieR::compute_marginal_bhat_shat(X, data$D[[m]])` and
-#      `ashr::ash` to fit the K-vector grid, then assemble.
+#      `compute_marginal_bhat_shat(X, data$D[[m]])` and
+#      `ash` to fit the K-vector grid, then assemble.
 #
 # Same control-flow for any `T_m`. NO `T_m == 1` branch. Public
 # `mfsusie()` warns when any `T_m <= 3`.
@@ -35,8 +35,8 @@ distribute_mixture_weights <- function(K, null_prior_weight) {
 
 #' Per-modality data-driven prior init via susieR helper + ash
 #'
-#' Calls `susieR::compute_marginal_bhat_shat(X, Y_m)` to obtain
-#' Bhat / Shat, draws a sample, and fits `ashr::ash` to obtain
+#' Calls `compute_marginal_bhat_shat(X, Y_m)` to obtain
+#' Bhat / Shat, draws a sample, and fits `ash` to obtain
 #' the K-vector grid of mixture variances. The seed sequence
 #' (`set.seed(1)`) and sample-size caps (5000 for
 #' `mixture_normal`, 50000 for `mixture_normal_per_scale`) are
@@ -50,7 +50,7 @@ distribute_mixture_weights <- function(K, null_prior_weight) {
 #'   `"mixture_normal_per_scale"`.
 #' @param scale_index list of integer vectors from
 #'   `gen_wavelet_indx`. Required for `mixture_normal_per_scale`.
-#' @param grid_multiplier numeric, forwarded to `ashr::ash` as
+#' @param grid_multiplier numeric, forwarded to `ash` as
 #'   `gridmult`.
 #' @return list with `G_prior` (the ash fit, possibly replicated)
 #'   and `tt` (the marginal Bhat / Shat from the susieR helper).
@@ -67,7 +67,7 @@ init_scale_mixture_prior_default <- function(Y_m,
     stop("`groups` is required: a list of column-index vectors covered by each prior entry.")
   }
 
-  bs <- susieR::compute_marginal_bhat_shat(X, Y_m)
+  bs <- compute_marginal_bhat_shat(X, Y_m)
 
   sample_size <- if (prior_class == "mixture_normal_per_scale") 50000 else 5000
   pool_dim    <- prod(dim(bs$Bhat))
@@ -78,7 +78,7 @@ init_scale_mixture_prior_default <- function(Y_m,
   set.seed(1)
   sdhat <- c(0.01, sample(bs$Shat, size = draw_n))
 
-  t_ash <- ashr::ash(betahat, sdhat,
+  t_ash <- ash(betahat, sdhat,
                      mixcompdist = "normal",
                      outputlevel = 0,
                      gridmult    = grid_multiplier)
@@ -114,7 +114,7 @@ init_scale_mixture_prior_default <- function(Y_m,
 #'   stores prior per scale per modality) or `"per_modality"`
 #'   (collapses the scale dimension; legacy mode).
 #' @param null_prior_weight scalar, default 2 per design.md D5/D7.
-#' @param grid_multiplier numeric, forwarded to `ashr::ash`.
+#' @param grid_multiplier numeric, forwarded to `ash`.
 #' @return list of class `"mf_prior_scale_mixture"`.
 #' @references
 #' Manuscript: methods/derivation.tex eq:additive_model.
@@ -182,7 +182,7 @@ mf_prior_scale_mixture <- function(data,
       pi_weights[[m]] <- matrix(pi_kvec, nrow = length(groups_m),
                                 ncol = K + 1, byrow = TRUE)
     } else {
-      # Data-driven path: susieR helper -> ashr::ash. Helper
+      # Data-driven path: susieR helper -> ash. Helper
       # returns one G_prior entry per group, with `$idx` attached.
       out <- init_scale_mixture_prior_default(
         Y_m             = data$D[[m]],

@@ -1,26 +1,16 @@
-# Package load hook + namespace plumbing.
-#
-# Registers S3 methods on susieR's internal generics so that
-# `susieR::ibss_fit` dispatches to the mfsusieR per-iteration methods
-# when the data class inherits from `mf_individual`. Mirrors the
-# pattern in `mvsusieR/R/zzz.R` (registering on `mv_individual`).
-#
-# Caches susieR internal helpers (`lbf_stabilization`,
-# `compute_posterior_weights`, `warning_message`) as package-level
-# bindings so the methods can call them without `susieR:::`.
-#
-# Numerical routines do not live here.
+# Package load hook + namespace plumbing. Registers S3 methods on
+# susieR's per-iteration generics so that `ibss_fit` dispatches to
+# mfsusieR methods when the data class inherits from `mf_individual`.
+# Caches susieR internals as package-level bindings so methods call
+# them bare. No numerics here.
 
-# Null-coalescing operator fallback for R < 4.4.0 (mvsusieR pattern).
+# Null-coalescing operator fallback for R < 4.4.0.
 if (!exists("%||%", baseenv())) {
   `%||%` <- function(x, y) if (is.null(x)) y else x
 }
 
-# Cached susieR internals - populated by .onLoad()
+# Cached susieR internals (populated by .onLoad).
 warning_message            <- NULL
-# Cached susieR S3 generics so the per-effect / per-iteration methods
-# can call the generic (and pick up future subclass overrides) without
-# going through `susieR:::`.
 SER_posterior_e_loglik     <- NULL
 update_variance_components <- NULL
 update_derived_quantities  <- NULL
@@ -36,8 +26,7 @@ get_cs                     <- NULL
   susie_ns <- asNamespace("susieR")
   pkg_ns   <- asNamespace(pkgname)
 
-  # Cache susieR internals used by `loglik.mf_individual` and
-  # forthcoming PR-7 finalize methods.
+  # Cache susieR internals used by per-iteration methods.
   for (fn in c("warning_message",
                "SER_posterior_e_loglik",
                "update_variance_components",
@@ -50,8 +39,7 @@ get_cs                     <- NULL
   }
 
   # Register S3 methods for the susieR generics dispatched on
-  # `mf_individual`. New per-iteration methods land here as PR groups
-  # 6, 6b, 7 add them; the list grows.
+  # `mf_individual`.
   mf_generics <- c(
     # per-effect SER step
     "compute_residuals",
@@ -93,8 +81,7 @@ get_cs                     <- NULL
     registerS3method(g, "mf_individual", method_fn, envir = susie_ns)
   }
 
-  # Register S3 methods for the `mfsusie` model class (per-effect
-  # accessors mirroring mvsusieR's mvsusie methods).
+  # Register S3 accessors for the `mfsusie` model class.
   mfsusie_generics <- c(
     "get_alpha_l",
     "get_posterior_mean_l",

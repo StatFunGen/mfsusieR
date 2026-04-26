@@ -3,8 +3,8 @@
 # `mfsusie()` is a thin orchestrator over susieR's IBSS workhorse:
 #   1. construct the `mf_individual` data class (wavelet decomposition,
 #      X centering / scaling, prior init);
-#   2. assemble the `params` list expected by `susieR::susie_workhorse`;
-#   3. call `susieR::susie_workhorse(data, params)`, which dispatches
+#   2. assemble the `params` list expected by `susie_workhorse`;
+#   3. call `susie_workhorse(data, params)`, which dispatches
 #      every per-effect / per-iteration step to the `.mf_individual` /
 #      `.mfsusie` S3 methods registered by `.onLoad`;
 #   4. return the resulting `mfsusie` fit.
@@ -35,7 +35,7 @@
 #' @param prior_variance_grid optional length-K vector of mixture
 #'   variances for the scale-mixture-of-normals prior. When `NULL`,
 #'   the data-driven path
-#'   (`susieR::compute_marginal_bhat_shat` + `ashr::ash`) selects the
+#'   (`compute_marginal_bhat_shat` + `ash`) selects the
 #'   grid per modality.
 #' @param prior_variance_scope `"per_scale_modality"` (default) or
 #'   `"per_modality"`. Controls whether the mixture-weight matrix
@@ -81,8 +81,8 @@
 #' @param max_padded_log2 integer, log2 cap on the post-remap grid
 #'   length per modality. Default 10.
 #' @param wavelet_filter_number integer; see
-#'   `wavethresh::filter.select`.
-#' @param wavelet_family character; see `wavethresh::wd`.
+#'   `filter.select`.
+#' @param wavelet_family character; see `wd`.
 #' @param control_mixsqp optional named list of `mixsqp` control
 #'   arguments forwarded to the per-(modality, scale) M-step.
 #' @param nullweight numeric, mixsqp null-component penalty weight.
@@ -102,7 +102,7 @@
 #'   \item{`elbo`}{numeric vector of ELBO values per iteration.}
 #'   \item{`niter`, `converged`}{IBSS termination metadata.}
 #'   \item{`pip`}{length-J posterior inclusion probabilities.}
-#'   \item{`sets`}{credible sets via `susieR::susie_get_cs`.}
+#'   \item{`sets`}{credible sets via `susie_get_cs`.}
 #'   \item{`fitted`}{`list[M]` of running per-modality fits in the
 #'     wavelet domain.}
 #'   \item{`residuals`}{`list[M]` per-modality residuals, when
@@ -152,6 +152,23 @@ mfsusie <- function(X, Y,
   # mixsqp M step on `pi_V` per (modality, scale).
   estimate_prior_method <- if (mixture_weight_method == "mixsqp") "optim" else "none"
 
+  # The wavelet basis needs at least 4 sampled positions per curve.
+  # 1 position routes to the scalar (degenerate) path; 2 or 3
+  # positions sit in a no-man's-land that fits per-position
+  # scalars without smoothing benefit.
+  ncol_Y <- vapply(Y,
+    function(Ym) if (is.matrix(Ym)) ncol(Ym) else length(Ym),
+    integer(1))
+  short_Y <- which(ncol_Y > 1L & ncol_Y <= 3L)
+  if (length(short_Y) > 0L) {
+    detail <- paste(sprintf("Y[[%d]] has %d columns",
+                            short_Y, ncol_Y[short_Y]),
+                    collapse = "; ")
+    warning_message(sprintf(
+      "%s. Each Y[[m]] is a response matrix with one column per sampled position; the wavelet basis needs at least 4 columns to add power. Either collapse the response to a single column (treat it as a scalar phenotype) or measure more positions before calling mfsusie().",
+      detail), style = "hint")
+  }
+
   # 1. Construct the data class.
   data <- create_mf_individual(
     X                     = X,
@@ -176,7 +193,7 @@ mfsusie <- function(X, Y,
     null_prior_weight    = null_prior_weight
   )
 
-  # 3. Assemble params for `susieR::susie_workhorse`.
+  # 3. Assemble params for `susie_workhorse`.
   params <- list(
     L                          = L,
     prior_weights              = prior_weights,
@@ -211,7 +228,7 @@ mfsusie <- function(X, Y,
   # 4. Run the susieR workhorse. All per-effect and per-iteration
   #    work dispatches to the .mf_individual / .mfsusie S3 methods
   #    registered by `.onLoad`.
-  fit <- susieR::susie_workhorse(data, params)
+  fit <- susie_workhorse(data, params)
 
   # 5. Attach per-modality wavelet-domain residuals (D - fitted)
   #    when save_residuals = TRUE. susieR's `ibss_finalize` is not

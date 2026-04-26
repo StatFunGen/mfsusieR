@@ -1,17 +1,7 @@
-# `mf_individual` data class.
-#
-# The internal data class threaded through `susieR::susie_workhorse`
-# via S3 method dispatch. Holds the SNP matrix `X`, per-modality
-# remapped responses, the per-modality DWT cache, scale-index lists,
-# and (when `save_residuals = TRUE`) the per-modality residuals
-# filled in by `ibss_finalize.mf_individual`.
-#
-# Univariate (`T_m = 1`), single-modality (`M = 1`), and ragged
-# multi-modality inputs all flow through this one class with shape
-# branches, mirroring the `mvsusieR/refactor-s3` paradigm where one
-# `mv_individual` covers `R = 1` and `R > 1`.
-#
-# `create_mf_individual` is internal. `mfsusie()` is the only caller.
+# `mf_individual` data class. Threaded through
+# `susie_workhorse` via S3 dispatch. One class covers
+# univariate (`T_m = 1`), single-modality (`M = 1`), and ragged
+# multi-modality inputs.
 
 #' Construct the internal `mf_individual` data class
 #'
@@ -30,16 +20,14 @@
 #' @param max_padded_log2 integer, log2 cap on the post-remap grid
 #'   length per modality. Default 10.
 #' @param wavelet_filter_number integer, see
-#'   `wavethresh::filter.select`.
-#' @param wavelet_family character, see `wavethresh::wd`.
+#'   `filter.select`.
+#' @param wavelet_family character, see `wd`.
 #' @param standardize logical, scale `X` columns to unit variance.
 #' @param intercept logical, center `X` columns to mean zero.
-#' @param save_residuals logical, allocate `residuals` storage on
-#'   the object so post-processors can read residuals from the fit
-#'   without the caller passing `(X, Y)` again. Set to `FALSE` for
-#'   memory-bounded fits; the post-processors then take `(X, Y)`
-#'   explicitly. See `inst/notes/refactor-discipline.md` for the
-#'   rationale.
+#' @param save_residuals logical. When `TRUE`, allocate a
+#'   per-modality `residuals` slot so post-processors can read from
+#'   the fit. When `FALSE`, post-processors must receive `(X, Y)`
+#'   directly.
 #' @param verbose logical, forwarded to `mf_dwt`'s remap step.
 #' @return list of class `c("mf_individual", "individual")`.
 #' @references
@@ -105,7 +93,7 @@ create_mf_individual <- function(X,
   X_centered <- if (intercept) sweep(X, 2, X_center, "-") else X
 
   if (standardize) {
-    X_scale <- matrixStats::colSds(X_centered, center = rep(0, J))
+    X_scale <- colSds(X_centered, center = rep(0, J))
     X_scale[X_scale == 0] <- 1
     X_processed <- sweep(X_centered, 2, X_scale, "/")
   } else {
@@ -135,9 +123,8 @@ create_mf_individual <- function(X,
     pos_grid[[m]]      <- out$pos
     column_center[[m]] <- out$column_center
     column_scale[[m]]  <- out$column_scale
-    # Reconstruct the post-remap, post-colScale Y from the wavelet
-    # cache lazily when needed. For now, store a remapped Y at the
-    # padded grid for residual computation downstream.
+    # Cache the post-remap Y on the padded grid for downstream
+    # residual computation; the wavelet representation lives in `D`.
     Y_remapped[[m]] <- if (T_padded[m] == 1L) {
       Y[[m]]
     } else {
@@ -156,12 +143,8 @@ create_mf_individual <- function(X,
     scale_index  = scale_index,
     T_padded     = T_padded,
     csd_X        = X_scale,
-    predictor_weights = colSums(X_processed^2),  # X'X diagonal; cached
-                                                 # per the susieR / mvsusieR
-                                                 # pattern, used by SER stats
-                                                 # in compute_ser_statistics
-                                                 # without per-iteration
-                                                 # recompute.
+    predictor_weights = colSums(X_processed^2),  # X'X diagonal, cached
+                                                 # for SER stats per IBSS sweep
     n            = n,
     J            = J,
     p            = J,    # alias for susieR helpers that read `data$p`

@@ -1,7 +1,7 @@
 # Cross-modality prior plug-in seam (mf-prior/spec.md).
 #
 # The dispatch verb is `combine_modality_lbfs` (S3 generic), not
-# `apply` (collides with base::apply). When non-NULL, the
+# `apply` (collides with apply). When non-NULL, the
 # cross_modality_prior on `mfsusie()` modifies the per-modality
 # log-Bayes factors before they are summed into a joint log-BF in
 # the SER step. The default in v1 is the trivial independent

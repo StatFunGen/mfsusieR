@@ -5,7 +5,7 @@
 # remapping of unevenly-spaced or non-power-of-two functional inputs
 # onto a power-of-two grid via the Kovac-Silverman lifting scheme,
 # scale-index generation, and a row-wise DWT wrapper around
-# `wavethresh::wd`. None of the helpers are exported.
+# `wd`. None of the helpers are exported.
 
 #' Test whether a numeric value is integer-valued
 #'
@@ -52,7 +52,7 @@ col_scale <- function(x,
 
   cm <- colMeans(x, na.rm = TRUE)
   csd <- if (scale) {
-    matrixStats::colSds(x, center = cm, na.rm = TRUE)
+    colSds(x, center = cm, na.rm = TRUE)
   } else {
     rep(1, length(cm))
   }
@@ -83,7 +83,7 @@ col_scale <- function(x,
 #'
 #' Returns the next power of two above `n - 1`, capped at
 #' `2^max_scale`. Used to size the regular grid that
-#' `wavethresh::makegrid` interpolates onto.
+#' `makegrid` interpolates onto.
 #'
 #' @param n integer, sample count along one curve.
 #' @param max_scale integer, log2 cap on grid length.
@@ -100,7 +100,7 @@ power_of_two_gridn <- function(n, max_scale = 10) {
 #' positions `bp` (in `[0, 1]`) onto a regular grid of length
 #' `power_of_two_gridn(length(bp), max_scale)`. The interpolation
 #' is the lifting scheme of Kovac and Silverman (2000), implemented
-#' in `wavethresh::makegrid`.
+#' in `makegrid`.
 #'
 #' @param y numeric vector of observed values along one curve.
 #' @param bp numeric vector of scaled positions in `[0, 1]` matching
@@ -112,7 +112,7 @@ power_of_two_gridn <- function(n, max_scale = 10) {
 #' @keywords internal
 #' @noRd
 interpol_ks <- function(y, bp, gridn) {
-  wavethresh::makegrid(t = bp, y = y, gridn = gridn)$gridy
+  makegrid(t = bp, y = y, gridn = gridn)$gridy
 }
 
 #' Interpolate a matrix of curves onto a power-of-two grid
@@ -146,7 +146,7 @@ interpol_mat <- function(Y, pos, max_scale = 10) {
   gridn <- power_of_two_gridn(length(pos), max_scale)
   Y_new <- t(apply(Y, 1, interpol_ks, bp = bp, gridn = gridn))
 
-  raw_grid <- wavethresh::makegrid(t = bp, y = seq_len(ncol(Y)),
+  raw_grid <- makegrid(t = bp, y = seq_len(ncol(Y)),
                                    gridn = gridn)$gridt
   outing_grid <- start_pos +
     (end_pos - start_pos) * (raw_grid - min(raw_grid)) /
@@ -174,7 +174,7 @@ interpol_mat <- function(Y, pos, max_scale = 10) {
 #' @keywords internal
 #' @noRd
 remap_data <- function(Y, pos, verbose = TRUE, max_scale = 10) {
-  na_rows <- which(!stats::complete.cases(Y))
+  na_rows <- which(!complete.cases(Y))
   if (length(na_rows) > 0) {
     Y[is.na(Y)] <- 0
   }
@@ -190,8 +190,9 @@ remap_data <- function(Y, pos, verbose = TRUE, max_scale = 10) {
     Y <- inter$Y
     outing_grid <- inter$outing_grid
     if (verbose) {
-      message("Response matrix dimensions not equal to n x 2^J ",
-              "or unevenly spaced data; interpolation procedure used")
+      warning_message(
+        "ncol(Y) is not 2^J or positions are unevenly spaced; interpolated to a regular dyadic grid.",
+        style = "hint")
     }
   } else {
     outing_grid <- pos
@@ -206,7 +207,7 @@ remap_data <- function(Y, pos, verbose = TRUE, max_scale = 10) {
 #' Generate the wavelet-coefficient scale-index list
 #'
 #' Returns a list mapping wavelet scales to the column indices of a
-#' `wavethresh::wd` `$D` vector at level of resolution `lev_res`.
+#' `wd` `$D` vector at level of resolution `lev_res`.
 #' Element 1 is scale 0, element 2 is scale 1, ..., element
 #' `lev_res` is the finest detail scale, and the final element is
 #' the position of the smoothing (C) coefficient.
@@ -241,13 +242,13 @@ gen_wavelet_indx <- function(lev_res) {
 
 #' Row-wise discrete wavelet transform of a matrix of curves
 #'
-#' Applies `wavethresh::wd` to each row of `data`, collecting the D
+#' Applies `wd` to each row of `data`, collecting the D
 #' (detail) coefficients into a matrix and the C (smooth) coefficient
 #' into a vector. NA rows are zero-filled before the transform and
 #' restored to NA on output. The number of columns of `data` MUST be
 #' a power of two.
 #'
-#' `max_scale` is passed through to `wavethresh::wd` as its
+#' `max_scale` is passed through to `wd` as its
 #' `min.scale` argument (wavethresh's convention names the smallest
 #' decomposition scale, which equals our largest decomposition
 #' depth). Setting `max_scale` equal to or above `log2(ncol(data))`
@@ -258,12 +259,12 @@ gen_wavelet_indx <- function(lev_res) {
 #'
 #' @param data numeric matrix `n x J`, one curve per row, `J` a
 #'   power of two.
-#' @param filter_number integer, see `wavethresh::filter.select`.
+#' @param filter_number integer, see `filter.select`.
 #'   Default 10 (Daubechies least-asymmetric, 10 vanishing moments).
 #' @param family character, wavelet family name passed to
-#'   `wavethresh::wd`. Default `"DaubLeAsymm"`.
+#'   `wd`. Default `"DaubLeAsymm"`.
 #' @param max_scale integer, log2 cap shared with `remap_data`.
-#'   Forwarded to `wavethresh::wd` as `min.scale`. Default `10`.
+#'   Forwarded to `wd` as `min.scale`. Default `10`.
 #' @return list of class `"DWT"` with elements `C` (length-`n`
 #'   vector of smoothing coefficients), `D` (`n x (J - 1)` matrix of
 #'   detail coefficients), `J` (log2 of input length),
@@ -274,7 +275,7 @@ dwt_matrix <- function(data,
                        filter_number = 10,
                        family        = "DaubLeAsymm",
                        max_scale     = 10) {
-  na_rows <- which(!stats::complete.cases(data))
+  na_rows <- which(!complete.cases(data))
   if (length(na_rows) > 0) {
     data[is.na(data)] <- 0
   }
@@ -283,12 +284,12 @@ dwt_matrix <- function(data,
   D <- matrix(NA_real_, nrow = n, ncol = J - 1)
   C <- rep(NA_real_, n)
   for (i in seq_len(n)) {
-    w <- wavethresh::wd(data[i, ],
+    w <- wd(data[i, ],
                         filter.number = filter_number,
                         family        = family,
                         min.scale     = max_scale)
     D[i, ] <- w$D
-    C[i]   <- wavethresh::accessC(w, level = 0)
+    C[i]   <- accessC(w, level = 0)
   }
   if (length(na_rows) > 0) {
     D[na_rows, ] <- NA

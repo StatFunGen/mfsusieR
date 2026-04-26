@@ -134,7 +134,7 @@ mf_per_modality_bhat_shat <- function(data, model, m) {
 #' softmax of `lbf_combined + log(model$pi)` and the SuSiE
 #' `lbf_model = log(sum(pi * BF))` aggregate.
 #'
-#' Mirrors `susieR::loglik.individual` with K = 1, no NIG, and adds
+#' Mirrors `loglik.individual` with K = 1, no NIG, and adds
 #' the per-modality / per-scale aggregation. Stores `model$alpha[l, ]`,
 #' `model$lbf[l]`, `model$lbf_variable[l, ]` when `l` is non-NULL;
 #' otherwise returns the aggregate `lbf_model` scalar (used by the
@@ -199,7 +199,7 @@ loglik.mf_individual <- function(data, params, model, V, ser_stats, l = NULL, ..
 #' normals prior, then writes the result into the corresponding
 #' columns of `model$mu[[l]][[m]]` and `model$mu2[[l]][[m]]`. Bhat
 #' and Shat are re-derived from cached `model$residuals[[m]]` and
-#' `data$predictor_weights` (mirrors `susieR::calculate_posterior_moments.individual`).
+#' `data$predictor_weights` (mirrors `calculate_posterior_moments.individual`).
 #'
 #' Manuscript references:
 #'   methods/derivation.tex eq:post_f_mix
@@ -235,7 +235,7 @@ calculate_posterior_moments.mf_individual <- function(data, params, model, V, l,
 
 #' Per-effect SER posterior expected log-likelihood
 #'
-#' Generalizes `susieR::SER_posterior_e_loglik.individual` to
+#' Generalizes `SER_posterior_e_loglik.individual` to
 #' per-modality, per-(scale, modality) residual variance. For each
 #' modality m,
 #' `L_m = sum_t [ -0.5 * n * log(2 pi sigma2_t)
@@ -278,7 +278,7 @@ SER_posterior_e_loglik.mf_individual <- function(data, params, model, l, ...) {
 
 #' Per-effect KL divergence on `mf_individual`
 #'
-#' Mirrors `susieR::compute_kl.individual`'s "Standard Gaussian KL"
+#' Mirrors `compute_kl.individual`'s "Standard Gaussian KL"
 #' branch generalized across modalities and per-(scale, modality)
 #' residual variance:
 #' `KL_l = -[ lbf_l + sum_m sum_n sum_t log dnorm(R_m[n, t]; 0, sqrt(sigma2_t)) ]
@@ -309,7 +309,7 @@ compute_kl.mf_individual <- function(data, params, model, l, ...) {
 
 #' Negative log-likelihood for the V-optim caller
 #'
-#' Mirrors `susieR::neg_loglik.individual`. Converts the optim
+#' Mirrors `neg_loglik.individual`. Converts the optim
 #' parameter from log-scale to V (per `compute_ser_statistics`'s
 #' `optim_scale = "log"`) and returns `-loglik(...)`.
 #'
@@ -395,7 +395,7 @@ update_variance_components.mf_individual <- function(data, params, model, ...) {
 
 #' Per-effect prior update for `mf_individual` (mixsqp on `pi_V`)
 #'
-#' Overrides `susieR::optimize_prior_variance` for the
+#' Overrides `optimize_prior_variance` for the
 #' `mf_individual` data class. Per (modality, scale), builds the
 #' mixsqp likelihood matrix (`mf_em_likelihood_per_scale`) from the
 #' per-modality (Bhat, Shat) in `ser_stats`, runs the M step
@@ -454,7 +454,7 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
 
 #' Per-iteration residual variance + derived-quantity update for `mf_individual`
 #'
-#' Mirrors `susieR::update_model_variance.default`'s orchestration:
+#' Mirrors `update_model_variance.default`'s orchestration:
 #' calls `update_variance_components` (refresh per-modality or
 #' per-(scale, modality) sigma2), then `update_derived_quantities`
 #' (refresh the running per-modality fit). Bounds are not applied
@@ -475,7 +475,7 @@ update_model_variance.mf_individual <- function(data, params, model, ...) {
 #'
 #' Called by `update_model_variance` after a sigma2 update. The
 #' fit is `X %*% sum_l alpha_l * mu_l[[m]]` per modality. Mirrors
-#' `susieR::update_derived_quantities.default`.
+#' `update_derived_quantities.default`.
 #'
 #' @keywords internal
 #' @noRd
@@ -492,7 +492,7 @@ update_derived_quantities.mf_individual <- function(data, params, model, ...) {
 
 #' Aggregate expected log-likelihood across modalities
 #'
-#' Mirrors `susieR::Eloglik.individual`:
+#' Mirrors `Eloglik.individual`:
 #' `Eloglik = sum_m sum_t -0.5 * n * log(2 pi sigma2_t) - 0.5 / sigma2_t * ER2_m[t]`
 #'
 #' @references
@@ -512,7 +512,7 @@ Eloglik.mf_individual <- function(data, model, ...) {
 
 #' ELBO for an `mf_individual` fit
 #'
-#' Mirrors `susieR::get_objective.individual`:
+#' Mirrors `get_objective.individual`:
 #' `ELBO = Eloglik - sum_l KL_l`. The per-effect KL stored in
 #' `model$KL[l]` (set by `compute_kl.mf_individual`) already
 #' contains both the Gaussian component
