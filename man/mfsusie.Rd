@@ -25,7 +25,7 @@ mfsusie(
   min_abs_corr = 0.5,
   L_greedy = NULL,
   lbf_min = 0.1,
-  estimate_prior_method = c("optim", "none"),
+  mixture_weight_method = c("mixsqp", "none"),
   verbose = FALSE,
   track_fit = FALSE,
   max_padded_log2 = 10,
@@ -99,9 +99,10 @@ to \code{L} in linear steps until the fit saturates
 \item{lbf_min}{numeric saturation threshold for the greedy outer
 loop. Default 0.1.}
 
-\item{estimate_prior_method}{one of \code{"optim"} (default) or
-\code{"none"}. \code{"optim"} runs the per-effect mixture-weight EM
-step (mixsqp on \code{pi_V} per (modality, scale)). \code{"none"} holds
+\item{mixture_weight_method}{one of \code{"mixsqp"} (default) or
+\code{"none"}. \code{"mixsqp"} runs the per-effect empirical-Bayes
+update of the mixture weights \code{pi_V[[m]]} per
+(modality, scale) using the \code{mixsqp} solver. \code{"none"} holds
 the prior fixed at the initial \code{prior_variance_grid} /
 \code{null_prior_weight}; required by the C1 (susieR) degeneracy
 contract.}

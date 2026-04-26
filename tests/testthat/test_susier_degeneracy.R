@@ -51,7 +51,7 @@ c1_fit_pair <- function(X, y, L = 5, V = 0.2) {
     prior_variance_scope     = "per_modality",
     null_prior_weight        = 0,
     residual_variance_method = "shared_per_modality",
-    estimate_prior_method    = "none",
+    mixture_weight_method    = "none",
     L_greedy                 = NULL,
     max_iter = 100, tol = 1e-8,
     verbose = FALSE
