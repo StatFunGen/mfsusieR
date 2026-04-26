@@ -1,0 +1,165 @@
+---
+title: "Post-processing fsusie / mfsusie effect curves"
+author: "Gao Wang and contributors"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+vignette: >
+  %\VignetteIndexEntry{Post-processing fsusie / mfsusie effect curves}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r knitr-opts, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE, comment = "#>",
+  fig.width = 7, fig.height = 5, fig.align = "center", dpi = 120
+)
+```
+
+## Why post-process
+
+`mfsusie()` and `fsusie()` fit the model in the wavelet domain. The
+per-effect posterior is summarised by `coef(fit)`, which inverts the
+wavelet representation back to position space. The raw inverse curve
+is correct but visually wiggly: small fine-scale wavelet coefficients
+contribute pointwise noise that obscures the underlying shape, and
+the fit returns no pointwise credible band by default.
+
+The post-processor `mf_post_smooth(fit)` applies translation-invariant
+wavelet thresholding (TIWT) to the per-effect wavelet posterior mean,
+shrinking small fine-scale coefficients to zero, and computes
+pointwise credible bands from the wavelet posterior variance. The
+resulting fit gains two slots:
+
+- `fit$effect_curves[[m]][[l]]` — smoothed position-space curve for
+  outcome `m`, effect `l`.
+- `fit$credible_bands[[m]][[l]]` — `T_basis x 2` matrix
+  `[lower, upper]`.
+
+`fsusie_plot()` and `mfsusie_plot()` automatically draw the smoothed
+curves + bands when those slots are populated; otherwise they fall
+back to the raw inverse-DWT curves.
+
+## A small example
+
+```{r setup, message = FALSE}
+library(mfsusieR)
+library(susieR)
+set.seed(1)
+```
+
+Simulate one functional outcome with a smooth bell-shaped effect at
+each of two causal variables:
+
+```{r simulate}
+data(N3finemapping)
+X <- N3finemapping$X[, seq_len(150)]
+n <- nrow(X); p <- ncol(X); T_m <- 64
+
+positions <- seq_len(T_m)
+shape <- exp(-((positions - T_m / 2)^2) / (2 * (T_m / 8)^2))
+beta <- matrix(0, p, T_m)
+beta[42, ] <-  1.5 * shape
+beta[97, ] <- -1.0 * shape
+Y <- X %*% beta + matrix(rnorm(n * T_m, sd = 0.5), n)
+
+fit <- fsusie(Y, X, pos = positions, L = 3, verbose = FALSE)
+```
+
+## Before smoothing
+
+`fsusie_plot()` on the unsmoothed fit shows curves recovered by
+`coef()` (raw inverse DWT). They track the true bell-shape but the
+fine wavelet scales add visible jitter, and there are no credible
+bands.
+
+```{r before, fig.cap = "Raw effect curves (no smoothing). Top: PIPs. Bottom: per-effect inverse-DWT curve."}
+fsusie_plot(fit)
+```
+
+## After smoothing
+
+```{r smooth}
+fit_s <- mf_post_smooth(fit)
+```
+
+The same plot call now uses the smoothed curves and adds 95% pointwise
+credible bands as transparent ribbons:
+
+```{r after, fig.cap = "After mf_post_smooth(): TIWT-smoothed curves with 95% pointwise credible bands."}
+fsusie_plot(fit_s)
+```
+
+The shape is preserved, fine-scale jitter is suppressed, and the
+ribbon makes it obvious where the curve is significantly different
+from zero (band excludes 0).
+
+## Tuning the smoother
+
+`mf_post_smooth()` exposes two knobs:
+
+- `level` — credible-band coverage. Default `0.95`. Drop to `0.90`
+  for narrower bands; raise to `0.99` for wider.
+- `threshold_factor` — multiplier on the universal SureShrink
+  threshold `sigma * sqrt(2 log T)`. `1` is standard. Smaller values
+  keep more fine-scale wavelet energy (less smoothing); larger
+  values smooth more aggressively.
+
+```{r tuning, fig.cap = "Same fit smoothed with threshold_factor = 0.5 (less smoothing)."}
+fit_light <- mf_post_smooth(fit, threshold_factor = 0.5)
+fsusie_plot(fit_light)
+```
+
+## Multi-outcome usage
+
+`mf_post_smooth()` works on `mfsusie()` fits the same way; the
+returned fit has `$effect_curves[[m]]` and `$credible_bands[[m]]`
+populated for every functional outcome. Scalar outcomes
+(`T_m = 1`) are passed through (no smoothing needed) and get a
+band derived from the wavelet posterior SD.
+
+```{r mfsusie}
+T_per <- c(64L, 32L)
+Y_list <- lapply(T_per, function(T_m) {
+  X %*% matrix(rep(beta[, 1] * 0 + 0.6 * shape[seq_len(T_m)], p),
+               nrow = p, byrow = TRUE) +
+    matrix(rnorm(n * T_m, sd = 0.4), n)
+})
+# Make beta non-trivial again per outcome.
+Y_list[[1]] <- X %*% beta + matrix(rnorm(n * T_m, sd = 0.5), n)
+beta2 <- matrix(0, p, 32L)
+beta2[42, ] <- 1.0 * exp(-((seq_len(32) - 16)^2) / (2 * 4^2))
+Y_list[[2]] <- X %*% beta2 + matrix(rnorm(n * 32L, sd = 0.4), n)
+
+fit_m <- mfsusie(X, Y_list, L = 3, verbose = FALSE)
+fit_m_s <- mf_post_smooth(fit_m)
+```
+
+```{r mfsusie-plot, fig.cap = "Multi-outcome fit, smoothed. Top-left: PIPs across all outcomes. Other panels: per-outcome smoothed effect curves with 95% credible bands."}
+mfsusie_plot(fit_m_s)
+```
+
+## Method
+
+The current `method = "tiwt"` performs scalewise soft-thresholding
+of the wavelet posterior mean:
+
+1. For each effect `l` and outcome `m`, compute the wavelet-domain
+   posterior mean `mean_w = alpha[l, ] %*% mu[[l]][[m]]` and the
+   posterior second moment via `mu2`. The pointwise variance is
+   `var_w = alpha[l, ] %*% mu2[[l]][[m]] - mean_w^2`.
+2. Per wavelet scale `s`, soft-threshold `mean_w[scale_index[[s]]]`
+   at `factor * sd_s * sqrt(2 log T)`, where `sd_s` is the mean
+   posterior SD on that scale.
+3. Invert the thresholded coefficients via `mf_invert_dwt()` to
+   obtain the smoothed position-space curve.
+4. Compute the pointwise SD by inverting `sqrt(var_w)` (Parseval
+   approximation on the orthonormal basis) and form the credible
+   band as `mean_pos +/- z(level) * sd_pos`.
+
+This is a v1 smoother. Cycle-spinning translation-invariant
+denoising (the full TI estimator from the fSuSiE paper) and
+empirical-Bayes wavelet shrinkage (`smashr`) are planned
+extensions; both will be exposed via the same
+`method = "..."` argument when added.
