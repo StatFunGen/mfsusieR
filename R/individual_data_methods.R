@@ -364,7 +364,7 @@ mf_get_ER2_per_position <- function(data, model, m) {
 #' Computes `sigma2_m` per outcome using
 #' `mf_get_ER2_per_position`, then aggregates to the shape selected
 #' by `params$residual_variance_scope`:
-#' - `"per_outcome"` (legacy): `sigma2_m = sum_t ER2_m[t] / (n * T_pad[m])`
+#' - `"per_outcome"` (shared per outcome): `sigma2_m = sum_t ER2_m[t] / (n * T_pad[m])`
 #' - `"per_scale"` (default): per scale `s`,
 #'   `sigma2_{m,s} = sum_{t in idx_s} ER2_m[t] / (n * |idx_s|)`
 #'
@@ -460,7 +460,7 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
 #' (refresh the running per-outcome fit). Bounds are not applied
 #' per-element here because mfsusieR's sigma2 is a list of
 #' length-`S_m` vectors per outcome; `params$residual_variance_lowerbound`
-#' / `_upperbound` semantics for that shape are deferred to a later
+
 #' refinement.
 #'
 #' @keywords internal

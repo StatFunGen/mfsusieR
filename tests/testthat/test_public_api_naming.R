@@ -52,7 +52,7 @@ test_that("mfsusie() argument names are snake_case (apart from SuSiE lineage)", 
 test_that("mfsusie() argument list contains the canonical public-API names", {
   required <- c("X", "Y", "pos", "L", "prior_variance_grid",
                 "null_prior_weight", "residual_variance_scope",
-                "save_residuals", "max_iter", "tol",
+                "max_iter", "tol",
                 "L_greedy", "lbf_min")
   args <- formalArgs(mfsusie)
   missing_args <- setdiff(required, args)

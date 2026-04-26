@@ -1,146 +1,147 @@
-# Add `fsusie_plot()` / `mfsusie_plot()`, packaged example data, and refreshed vignettes
+# Add `mfsusie_plot()`, `mf_post_smooth()` (scalewise / TI / HMM),
+# packaged example data, and refreshed vignettes
 
 ## Why
 
-Vignettes currently render with simulated data inline, so figures are
-unstable across knit runs and not comparable to the figures shown in
-the fSuSiE paper / `fsusieR` and `mvf.susie.alpha` original vignettes.
-Plotting in vignettes is ad-hoc (`matplot`, `plot(fit$pip)`, base
-graphics) without a unified API.
+Vignettes used inline simulations and ad-hoc base-R plotting. The
+SuSiE family has paired plot helpers (`susieR::susie_plot`,
+`mvsusieR::mvsusie_plot`, `fsusieR::plot_susiF`); mfsusieR was
+missing the equivalent. Effect curves were the raw inverse-DWT of
+the wavelet posterior, which is correct but visually noisy and
+without credible bands.
 
-The SuSiE family already has paired plotting helpers:
-
-- `susieR::susie_plot()` — PIP plot for scalar SuSiE
-- `mvsusieR::mvsusie_plot()` — PIP plot + per-outcome effect / lfsr
-  plot for multi-trait scalar SuSiE
-- `fsusieR::plot_susiF()` — PIP plot + per-effect functional curve
-  with credible bands (uses ggplot2 + cowplot)
-
-mfsusieR is missing the equivalent. Vignettes can't show the actual
-methylation / chromatin-track figures readers expect from this
-package family.
+fSuSiE provides three post-processing smoothers
+(`smash_regression`, `TI_regression`, `HMM_regression`). mfsusieR
+needs the same three so users get publication-quality figures
+matching fSuSiE / mfSuSiE paper figures.
 
 ## What changes
 
-### 1. Plot API
+### 1. Plot API (single function)
 
-Three plotting functions, all base R (no ggplot, no cowplot):
+- Re-export `susieR::susie_plot()` for the standard PIP plot.
+- New `mfsusie_plot(fit, m = NULL, ...)` (base R only, no
+  `ggplot2` / `cowplot` dependency). Auto-detects `M`:
+  - `M = 1` -> 2-panel column (PIP top, effect bottom)
+  - `M > 1` -> dense grid (PIP top-left, M effect panels)
+  - `m = i` -> single-outcome effect panel only
+- S3 method `plot.mfsusie()` dispatches to `mfsusie_plot()`.
+- LFSR overlay: when `fit$lfsr_curves[[m]][[l]]` is populated
+  (HMM smoother), the plot draws it as a secondary black trace
+  with a dashed `0.05` reference line, mirroring
+  `fsusieR::plot_susiF_effect`'s style.
+- Color palette: Okabe-Ito (modern, colorblind-friendly).
 
-- **PIP plot for either fsusie or mfsusie fit**: re-export
-  `susieR::susie_plot()` from mfsusieR. The fit object inherits from
-  `c("mfsusie", "susie")` so `susie_plot(fit, y = "PIP")` already
-  works. We just expose it.
+### 2. `mf_post_smooth(fit, method = c("scalewise", "TI", "HMM"))`
 
-- **`fsusie_plot(fit, ...)`**: single-outcome functional effect plot.
-  Takes a fit from `fsusie()` (M=1, T_m > 1). Plots the per-effect
-  curves against the post-remap position grid, colored by credible
-  set, with optional credible bands (when post-processing is
-  available; section 2 below) and optional affected-region shading.
+Single user-facing entry point with method dispatch. Operates on
+`fit` only (no `X`, no `Y`). The `mfsusie()` / `fsusie()` wrapper
+saves what's needed:
 
-- **`mfsusie_plot(fit, m = NULL, ...)`**: multi-outcome version.
-  When `m` is `NULL` (default), tiles one panel per outcome via
-  `par(mfrow = ...)`; the user can also pass a single `m` index to
-  see one outcome. Each panel shows the per-effect curves on the
-  outcome's position grid colored by CS, plus a top-right legend
-  with the variable index of the sentinel for each CS. Scalar
-  outcomes (`T_m = 1`) get a dot-plot with horizontal CS bars
-  instead of curves.
+- `fit$residuals[[m]]` -- wavelet-domain residual `D - fitted`.
+- `fit$lead_X[[l]]` -- per-effect lead-variable column of the
+  centred + scaled `X`. Length-`n` numeric vectors, one per
+  effect.
 
-- **`plot.mfsusie(x, ...)`** S3 method: dispatch on the fit class so
-  `plot(fit)` Just Works. Defaults to `mfsusie_plot()`; degenerates
-  to `fsusie_plot()` when `M == 1`.
+Both are always populated. The `save_residuals` argument is
+removed from the public API (cost is < 1 MB per fit).
 
-### 2. Post-processed effect storage on fit objects
+Three method implementations:
 
-For credible-band shading on `fsusie_plot()` / `mfsusie_plot()`, the
-fit needs:
+- **`"scalewise"`** -- per-scale soft-threshold of the lead
+  variable's wavelet posterior mean at `factor * sigma_s *
+  sqrt(2 log T)`. Pointwise band from `mu2 - mu^2` Parseval-
+  inverted. Fast, uses no residuals.
+- **`"TI"`** -- faithful port of `fsusieR::univariate_TI_regression`.
+  For each effect: subtract other effects from the
+  position-space response, regress on the lead variable,
+  stationary-wavelet-transform, scalewise `ashr::ash` shrinkage
+  on detail coefficients, cycle-spinning average via
+  `wavethresh::av.basis`. Pointwise variance via the ported
+  `wd.var` / `AvBasis.var` / `convert.var` helpers (~300 lines
+  added to `R/utils_wavelet.R`).
+- **`"HMM"`** -- faithful port of
+  `fsusieR::univariate_HMM_regression`. Per-position regression on
+  lead variable, then `fit_hmm` posterior smoothing. Populates
+  `fit$lfsr_curves[[m]][[l]]` in addition to
+  `effect_curves` / `credible_bands`.
 
-- `fit$effect_curves[[m]]` — a length-`L` list of length-`T_m`
-  vectors holding the post-remap-grid-to-original-grid-back-projected
-  effect for each effect `l`, optionally smoothed.
-- `fit$credible_bands[[m]]` (optional) — a length-`L` list of
-  `T_m x 2` matrices `[lower, upper]` holding the credible-band
-  endpoints. When absent, the plot draws curves only, no bands.
-- `fit$lfsr_curves[[m]]` (optional) — local false sign rate curves
-  per effect. When present, the plot shows them as a secondary
-  black curve with a 0.05 threshold dashed line.
+### 3. cpp11 acceleration (deferred, but planned)
 
-These slots are populated by the post-processor (`mf_post_smooth()`,
-PR group 6b) when run. The plot functions handle absence gracefully:
-they fall back to plotting the wavelet-domain effect curves
-projected through `mf_invert_dwt()` (which `coef.mfsusie()` already
-does).
+The TI and HMM smoothers loop over wavelet shifts and per-position
+regressions; both can be slow on T_basis = 1024. cpp11 ports of
+the inner loops are tracked as a follow-up under
+`add-cpp11-smoothers` (a separate OpenSpec change). Pure-R
+versions ship now and are correct.
 
-### 3. Packaged example data
+### 4. Packaged example data
 
-Add two datasets under `data/` so vignettes are reproducible.
-`susieR::N3finemapping` is already available via the `susieR`
-Imports and is used directly without re-packaging:
+Two `.rda` files under `data/` so vignettes load via `data(<name>)`
+without external paths:
 
-- `data/fsusie_methyl_example.rda` — small DNAm fixture (n ~= 200,
-  p ~= 100, T_m ~= 64) for `fsusie_dnam_case_study.Rmd`. Either a
-  trimmed version of `fsusie-experiments/fig_1_data` or a fixed-seed
-  simulation saved as RDA.
-- `data/mfsusie_joint_example.rda` — joint-fine-mapping fixture
-  (M = 5: 2 functional + 3 scalar; n ~= 200; p ~= 100). Either ported
-  from `mvf.susie.alpha` simulation outputs (via
-  `mvf.susie.alpha::simu_effect_multfsusie` with fixed seed, run
-  once and saved) or built locally in
-  `data-raw/make_mfsusie_data.R`.
+- `data(fsusie_methyl_example)` -- DNAm fixture from
+  `~/GIT/fsusie-experiments/plot/CR1_CR2/CR1_CR2_obj.RData`,
+  trimmed to ~250 KB. Sample IDs replaced with anonymous
+  `S001..S<n>`; PHI fields stripped; only public reference
+  identifiers (chrom, position, alleles, CpG positions) retained.
+- `data(mfsusie_joint_example)` -- multi-outcome fixture, similarly
+  trimmed and de-identified. Source: trimmed from CASS4 region.
 
-Each rda file is added to the `data/` directory and roxygen
-documentation added in `R/data.R`. Total data size kept under
-~500KB to stay within CRAN's 5MB package size budget.
+Build scripts under `data-raw/`; `.Rbuildignore`d.
 
-### 4. Vignette refresh
+### 5. Vignette refresh
 
-All seven vignettes:
+Eight vignettes:
 
-- Replace inline simulations with `data(<example>)` loads from the
-  packaged datasets above. Existing inline simulations stay as a
-  one-paragraph "or simulate your own" callout.
-- Replace ad-hoc `matplot()` / `plot()` calls with `susie_plot()`,
-  `fsusie_plot()`, or `mfsusie_plot()` as appropriate.
-- Add reference figures: each vignette ends with a "Reference"
-  section that names the original fsusieR / mvf.susie.alpha vignette
-  whose figure ours reproduces.
+- `getting_started.Rmd` -- public-API tour; uses
+  `data(fsusie_methyl_example)` for an `mfsusie_plot()` preview.
+- `fsusie_intro.Rmd` -- adapts `fsusieR::fsusie_intro`.
+- `fsusie_covariates_and_coloc.Rmd` -- adapts
+  `fsusieR::Adjusting_covariate` + `Coloc_fsusie`.
+- `fsusie_dnam_case_study.Rmd` -- uses
+  `data(fsusie_methyl_example)` (CR1/CR2 region).
+- `fsusie_why_functional.Rmd` -- adapts
+  `fsusieR::Limitation_SuSiE` + `susie_top_PC_fails`.
+- `mfsusie_intro.Rmd` -- uses `data(mfsusie_joint_example)` (CASS4).
+- `mfsusie_long_running_fits.Rmd` -- keep current.
+- `post_processing.Rmd` -- demonstrates all three smoothers with
+  before / after plots, plus an LFSR curve panel for HMM.
 
-Specific vignette-by-vignette mapping:
+Every vignette uses `mfsusie_plot()` (or `susie_plot()` for PIPs)
+instead of ad-hoc `matplot()`. Titles describe topics, not entry
+points (e.g., "DNA methylation QTL fine-mapping" not
+"DNA methylation QTL fine-mapping with `fsusie()`").
 
-- `getting_started.Rmd` — small fsusie_plot() + mfsusie_plot()
-  preview using the packaged data. Keep the `susieR` C1 numerical
-  identity demo.
-- `fsusie_intro.Rmd` — adapts `fsusieR::fsusie_intro` with our
-  packaged data + `fsusie_plot()`.
-- `fsusie_covariates_and_coloc.Rmd` — adapts
-  `fsusieR::Adjusting_covariate` + `fsusieR::Coloc_fsusie`.
-- `fsusie_dnam_case_study.Rmd` — adapts `fsusieR::methyl_demo`
-  using `data(fsusie_methyl_example)`.
-- `fsusie_why_functional.Rmd` — adapts `fsusieR::Limitation_SuSiE`
-  + `susie_top_PC_fails`.
-- `mfsusie_intro.Rmd` — adapts
-  `mvf.susie.alpha::joint_functional_and_univariate_fine_mapping`
-  using `data(mfsusie_joint_example)`.
-- `mfsusie_long_running_fits.Rmd` — keep current content; add an
-  `mfsusie_plot()` preview at the end.
+### 6. NAMESPACE / Imports
 
-### 5. NAMESPACE / Imports
-
-- Export `fsusie_plot`, `mfsusie_plot`, `plot.mfsusie`.
-- Re-export `susieR::susie_plot` so users do `mfsusieR::susie_plot()`
-  without loading susieR explicitly.
-- No new package Imports. Plot uses `graphics::*` (base) and
-  `grDevices::*` (already loaded by R).
+- `export(mfsusie_plot, mf_post_smooth, susie_plot)` (last is a
+  re-export from susieR).
+- `S3method(plot, mfsusie)`.
+- New `@importFrom wavethresh av.basis convert nlevelsWT` (already
+  partially imported).
+- `ashr::ash` is already imported.
+- No new package Imports.
 
 ## Impact
 
-- Affected specs: new `mf-plot/spec.md` (added under
-  `inst/openspec/specs/`).
-- Affected code: ~3 new R files (`R/fsusie_plot.R`,
-  `R/mfsusie_plot.R`, `R/data.R`); `R/mfsusie_methods.R` gains
-  `plot.mfsusie`; `data/*.rda` added; all vignettes rewritten.
-- Tests: smoke tests that the plot functions don't error
-  (`expect_silent(plot(fit))` style) plus snapshot tests for the
-  data-loading paths.
+- Affected specs: new `inst/openspec/specs/mf-plot/spec.md` and
+  `inst/openspec/specs/mf-post-processing/spec.md`.
+- Affected code: new `R/utils_wavelet.R` extensions (variance
+  helpers); `R/mfsusie_methods.R` gains the three smoother
+  implementations and the unified `mfsusie_plot()` dispatch path
+  (already merged into `R/mfsusie_methods.R` in the current
+  session); `R/mfsusie.R` always populates residuals + lead_X.
+- Affected tests: new `test_post_smooth.R` covering smoke +
+  bit-identity vs `fsusieR` (skip-when-not-installed) for TI / HMM
+  point estimates at `<= 1e-8`; smoke for scalewise.
+- Affected vignettes: all 8 refreshed.
 - No behaviour change in `fsusie()` / `mfsusie()`. Pure additive.
-- Pre-1.0; no deprecation needed.
+- Pre-1.0; no deprecation.
+
+## Out of scope (own future change)
+
+- cpp11 acceleration of TI/HMM inner loops --
+  `add-cpp11-smoothers`.
+- Smash smoother (`fsusieR::smash_regression`) -- adds `smashr`
+  Imports; track in `add-smash-smoother`.
+- Gviz integration -- `add-gviz-plotting`.

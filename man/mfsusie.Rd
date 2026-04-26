@@ -18,7 +18,6 @@ mfsusie(
   residual_variance_scope = c("per_outcome", "per_scale"),
   standardize = TRUE,
   intercept = TRUE,
-  save_residuals = TRUE,
   max_iter = 100,
   tol = 0.001,
   coverage = 0.95,
@@ -79,9 +78,6 @@ or \code{"per_outcome"}. Controls the sigma2 update shape.}
 
 \item{intercept}{logical, center \code{X} columns to mean zero.}
 
-\item{save_residuals}{logical, store per-outcome residuals on
-the fit (default \code{TRUE}).}
-
 \item{max_iter}{integer, maximum IBSS iterations.}
 
 \item{tol}{numeric, ELBO change tolerance for convergence.}
@@ -136,7 +132,7 @@ moment in the wavelet domain.}
 \item{\code{pi_V}}{\code{list[M]} of \verb{S_m x K} mixture-weight matrices.}
 \item{\code{G_prior}}{\code{list[M]} of \code{list[S_m]} ash-shaped prior
 records (mutated by the IBSS loop).}
-\item{\code{sigma2}}{\code{list[M]} of either scalar (legacy mode) or
+\item{\code{sigma2}}{\code{list[M]} of either scalar or
 length-\code{S_m} per-(scale, outcome) residual variances.}
 \item{\code{elbo}}{numeric vector of ELBO values per iteration.}
 \item{\code{niter}, \code{converged}}{IBSS termination metadata.}
@@ -145,7 +141,7 @@ length-\code{S_m} per-(scale, outcome) residual variances.}
 \item{\code{fitted}}{\code{list[M]} of running per-outcome fits in the
 wavelet domain.}
 \item{\code{residuals}}{\code{list[M]} per-outcome residuals, when
-\code{save_residuals = TRUE}.}
+always populated.}
 }
 }
 \description{

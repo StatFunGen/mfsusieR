@@ -6,35 +6,68 @@
 \usage{
 mf_post_smooth(
   fit,
-  method = c("scalewise"),
+  method = c("scalewise", "TI", "HMM"),
   level = 0.95,
-  threshold_factor = 1
+  threshold_factor = 1,
+  wavelet_filter = 1L,
+  wavelet_family = "DaubExPhase",
+  halfK = 20L
 )
 }
 \arguments{
 \item{fit}{a fit returned by \code{mfsusie()} or \code{fsusie()}.}
 
-\item{method}{character, smoother. Currently only
-\code{"scalewise"} is implemented.}
+\item{method}{one of \code{"scalewise"}, \code{"TI"}, \code{"HMM"}.}
 
 \item{level}{numeric in (0, 1), credible-band coverage.
-Default 0.95 (-> +/- 1.96 * sd).}
+Default 0.95.}
 
-\item{threshold_factor}{numeric, multiplier on the
-\verb{sqrt(2 log T)} universal threshold. 1 = standard SureShrink;
-< 1 keeps more wavelet energy (less smoothing); > 1 smoothes
-more aggressively. Default 1.}
+\item{threshold_factor}{numeric, multiplier on the universal
+\verb{sqrt(2 log T)} threshold for \code{method = "scalewise"}. Ignored
+by other methods.}
+
+\item{wavelet_filter}{integer, wavelet filter number for the TI
+stationary-wavelet transform. Default 1 (Haar).}
+
+\item{wavelet_family}{character, wavelet family for the TI
+stationary-wavelet transform. Default \code{"DaubExPhase"}.}
+
+\item{halfK}{integer, half-grid size for the HMM \code{fit_hmm}
+helper. Default 20.}
 }
 \value{
 the input fit with \verb{$effect_curves} and
-\verb{$credible_bands} populated. Scalar outcomes
-(\code{T_basis[m] = 1}) are passed through unchanged (no smoothing
-needed).
+\verb{$credible_bands} populated. \verb{$lfsr_curves} is also populated
+when \code{method = "HMM"}. Scalar outcomes
+(\code{T_basis[m] = 1}) skip the wavelet step (smoothing is a
+no-op there).
 }
 \description{
-Post-smooth a fit's per-effect curves and add credible bands
+Three smoothing methods are dispatched by \code{method}:
 }
-\references{
-Manuscript: Denault et al. (2025) Methods, "Refining the effect
-estimates" (bioRxiv 10.1101/2025.08.17.670732).
+\details{
+\itemize{
+\item \code{"scalewise"} -- per-scale soft-thresholding of the lead
+variable's wavelet posterior mean. Fast, no iterations,
+uses only the wavelet posterior moments. Suitable for quick
+visual cleanup.
+\item \code{"TI"} -- cycle-spinning translation-invariant denoising
+(Coifman & Donoho 1995). For each effect, isolates the
+per-effect residual response (in position space), regresses
+onto the lead variable's column of X via the saved residual
+\itemize{
+\item lead column, applies the stationary wavelet transform
+row-by-row, scalewise \code{ashr::ash} shrinkage on wavelet
+coefficients, and inverts via cycle-spinning average.
+Produces tighter credible bands than scalewise; matches the
+approach used in fsusieR.
+}
+\item \code{"HMM"} -- hidden Markov denoising on per-position regression
+coefficients. Yields a posterior mean curve plus per-position
+\code{lfsr_curves}.
+}
+
+All three operate on the fit alone: residuals are read from
+\code{fit$residuals} and the per-effect lead variable column from
+\code{fit$lead_X}, both populated by \code{mfsusie(..., save_residuals = TRUE)}.
 }
