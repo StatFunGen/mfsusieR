@@ -491,64 +491,80 @@ mf_post_smooth <- function(fit,
 .univariate_ti_regression <- function(Y_pos, x_lead,
                                       filter_number, family,
                                       z_crit) {
-  # Stationary wavelet transform of each row of Y_pos.
-  T_pos <- ncol(Y_pos)
-  dummy <- wavethresh::wd(Y_pos[1L, ], type = "station",
-                          filter.number = filter_number,
-                          family        = family)
-  Y_f <- do.call(rbind, lapply(seq_len(nrow(Y_pos)), function(i)
-    wavethresh::wd(Y_pos[i, ], type = "station",
-                   filter.number = filter_number,
-                   family        = family)$D))
-  Y_c <- do.call(rbind, lapply(seq_len(nrow(Y_pos)), function(i)
-    wavethresh::wd(Y_pos[i, ], type = "station",
-                   filter.number = filter_number,
-                   family        = family)$C))
+  # Per-column SD normalisation matches the upstream pipeline:
+  # scale Y (per position) and X (one column) to unit variance,
+  # run wavelet regression on the scaled inputs, then unscale at
+  # the end by the recorded column SDs.
+  Y_sc  <- col_scale(Y_pos, center = TRUE, scale = TRUE)
+  csd_Y <- attr(Y_sc, "scaled:scale")
+  x_mat <- col_scale(matrix(x_lead, ncol = 1L),
+                     center = TRUE, scale = TRUE)
+  csd_X <- attr(x_mat, "scaled:scale")
+  x_sc  <- as.numeric(x_mat)
 
-  # Univariate regression of each wavelet column on x_lead.
-  ss_x   <- sum(x_lead^2)
-  bhat_d <- as.numeric(crossprod(x_lead, Y_f)) / ss_x
-  bhat_c <- as.numeric(crossprod(x_lead, Y_c)) / ss_x
-  resid_d <- Y_f - tcrossprod(x_lead, bhat_d)
-  resid_c <- Y_c - tcrossprod(x_lead, bhat_c)
-  shat_d <- sqrt(colMeans(resid_d^2) / ss_x)
-  shat_c <- sqrt(colMeans(resid_c^2) / ss_x)
+  # Stationary wavelet transform of each row of Y_sc.
+  T_pos <- ncol(Y_sc)
+  dummy <- wd(Y_sc[1L, ], type = "station",
+              filter.number = filter_number, family = family)
+  Y_f <- do.call(rbind, lapply(seq_len(nrow(Y_sc)), function(i)
+    wd(Y_sc[i, ], type = "station",
+       filter.number = filter_number, family = family)$D))
+  Y_c <- do.call(rbind, lapply(seq_len(nrow(Y_sc)), function(i)
+    wd(Y_sc[i, ], type = "station",
+       filter.number = filter_number, family = family)$C))
 
-  # Scalewise ash shrinkage of D coefficients.
-  fl  <- dummy$fl.dbase$first.last.d
-  n   <- 2L^wavethresh::nlevelsWT(dummy)
-  K   <- nrow(fl)
-  wd_post <- numeric(length(bhat_d))
-  wd_var  <- numeric(length(bhat_d))
+  # Univariate regression of each wavelet column on x_sc. Use
+  # susieR's `compute_marginal_bhat_shat` so we reuse the
+  # backbone regression helper rather than re-deriving X'Y/X'X
+  # locally.
+  reg_d  <- compute_marginal_bhat_shat(matrix(x_sc, ncol = 1L), Y_f)
+  reg_c  <- compute_marginal_bhat_shat(matrix(x_sc, ncol = 1L), Y_c)
+  bhat_d <- as.numeric(reg_d$Bhat)
+  shat_d <- as.numeric(reg_d$Shat)
+  bhat_c <- as.numeric(reg_c$Bhat)
+  shat_c <- as.numeric(reg_c$Shat)
+
+  # Scalewise ash shrinkage of D coefficients. `n_basis` is the
+  # length of the original signal, distinct from sample count `n`.
+  fl       <- dummy$fl.dbase$first.last.d
+  n_basis  <- 2L^nlevelsWT(dummy)
+  K        <- nrow(fl)
+  wd_post  <- numeric(length(bhat_d))
+  wd_var   <- numeric(length(bhat_d))
   for (s in seq_len(K)) {
     first_s   <- fl[s, 1L]
     offset_s  <- fl[s, 3L]
-    idx <- (offset_s + 1L - first_s):(offset_s + n - first_s)
-    t_ash <- ashr::ash(bhat_d[idx], shat_d[idx],
-                       nullweight = 30, mixcompdist = "normal")
+    idx <- (offset_s + 1L - first_s):(offset_s + n_basis - first_s)
+    t_ash <- ash(bhat_d[idx], shat_d[idx],
+                 nullweight = 30, mixcompdist = "normal")
     wd_post[idx] <- t_ash$result$PosteriorMean
     wd_var[idx]  <- t_ash$result$PosteriorSD^2
   }
-  t_ash_c <- ashr::ash(bhat_c, shat_c,
-                       nullweight = 3, mixcompdist = "normal")
+  t_ash_c <- ash(bhat_c, shat_c,
+                 nullweight = 3, mixcompdist = "normal")
 
   # Cycle-spinning average via av.basis.
   dummy$D <- wd_post
   dummy$C <- t_ash_c$result$PosteriorMean
-  mywst <- wavethresh::convert(dummy)
-  fitted_func <- wavethresh::av.basis(mywst,
-                                      level = dummy$nlevels - 1L,
-                                      ix1 = 0, ix2 = 1,
-                                      filter = mywst$filter)
+  mywst   <- convert(dummy)
+  fitted_func_sc <- av.basis(mywst,
+                             level = dummy$nlevels - 1L,
+                             ix1 = 0, ix2 = 1,
+                             filter = mywst$filter)
 
-  # Exact pointwise variance via the squared-filter wd /
-  # convert / AvBasis pipeline.
-  var_wd       <- wd_variance(rep(0, T_pos),
-                              filter.number = filter_number,
-                              family        = family)
-  var_wd$D     <- wd_var
-  fitted_var   <- av_basis_variance(wst_variance(var_wd))
-  fitted_sd    <- sqrt(pmax(fitted_var, 0))
+  # Exact pointwise variance via squared-filter wd / wst /
+  # av-basis pipeline. The variance basis uses the upstream
+  # default filter (10, DaubLeAsymm) regardless of the smoothing
+  # filter; matches the upstream univariate_TI_regression bit-for-bit.
+  var_wd <- wd_variance(rep(0, T_pos))
+  var_wd$D <- wd_var
+  fitted_var_sc <- av_basis_variance(wst_variance(var_wd))
+
+  # Unscale: recover the position-space estimate on the original
+  # Y / X scale.
+  fitted_func <- fitted_func_sc * csd_Y / csd_X
+  fitted_var  <- fitted_var_sc  * (csd_Y / csd_X)^2
+  fitted_sd   <- sqrt(pmax(fitted_var, 0))
 
   cred_band <- rbind(up  = fitted_func + z_crit * fitted_sd,
                      low = fitted_func - z_crit * fitted_sd)
