@@ -1,0 +1,280 @@
+---
+title: "Practical data applications"
+author: "Anjing Liu, Gao Wang, William Denault"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Practical data applications}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse  = TRUE,
+  comment   = "#>",
+  fig.align = "center",
+  fig.width = 7, fig.height = 4,
+  dpi = 110
+)
+```
+
+## Motivation
+
+This vignette walks through three preprocessing and inference
+options on `mfsusie()` that matter on real-world functional
+fine-mapping data:
+
+- `low_count_filter`: mask wavelet columns whose
+  absolute-value median is at or below a user-supplied
+  threshold. Columns that carry no signal contribute noise to
+  the prior init and the SER step; masking them removes that
+  noise.
+- `quantile_norm`: apply a column-wise rank-based normal
+  quantile transform to the wavelet matrix. Heavy-tailed
+  wavelet coefficients (a common signature of sparse-count
+  assays) violate the Normal-likelihood assumption underlying
+  the SuSiE Bayes factor; the transform repairs the marginal.
+- `small_sample_correction`: replace the per-variable
+  Wakefield Normal marginal Bayes factor with the Johnson 2005
+  scaled Student-t marginal, with degrees of freedom
+  `df = n - 1`. Useful when `n` is small.
+
+The motivating dataset is a chromatin-accessibility scQTL panel
+by Anjing Liu and William Denault: 169 cis-regions, 84
+individuals, 6 brain cell types per region (Ast, Exc, Inh, Mic,
+Oli, OPC), 10240 binned coverage values per cell-type after
+window expansion. The genotype and individual-level read counts
+are not redistributable, so this vignette uses a small
+simulated dataset shaped after the same characteristics
+(`n = 40`, two outcomes, sparse-coverage columns in one
+outcome, heavy-tailed contamination in the other) to exercise
+the same code paths on data the reader can run locally.
+
+```{r load, message = FALSE}
+library(mfsusieR)
+data(practical_fits)
+practical_fits$cell_types
+```
+
+`practical_fits` carries five fits on the same simulated
+dataset (`n = 40`, `p = 25`, `M = 2`, `T_m = 32`, signal SNP at
+index 7), one per configuration:
+
+```{r fit-summary}
+summarize_fit <- function(fit) {
+  data.frame(
+    niter        = fit$niter,
+    converged    = fit$converged,
+    n_credible   = length(fit$sets$cs),
+    pip_signal   = round(fit$pip[practical_fits$signal_snp], 3),
+    pip_max_null = round(max(fit$pip[-practical_fits$signal_snp]), 3),
+    pip_sum_null = round(sum(fit$pip[-practical_fits$signal_snp]), 3)
+  )
+}
+do.call(rbind,
+        lapply(c("default", "johnson", "lowcount", "qn", "combined"),
+               function(nm) cbind(config = nm,
+                                  summarize_fit(practical_fits[[nm]]))))
+```
+
+The default Wakefield kernel puts `PIP = 1.0` on the signal
+SNP. The corrections, applied one at a time, return slightly
+lower PIP values; this is the methodologically honest answer
+under each correction's assumption set. Below we walk through
+the three options in turn.
+
+## Low-count filtering
+
+`low_count_filter = c` masks wavelet-domain columns with
+`median(|column|) <= c`. The masked columns contribute
+`(Bhat = 0, Shat = 1)` at every IBSS iteration and are
+excluded from the ash sampling pool that initializes the
+mixture-of-normals prior. The threshold is in the same units as
+the wavelet coefficients (so the right value depends on the
+scale of the input).
+
+In the source ATAC-seq dataset, cell types with small total
+read counts have many bins where the per-individual log1p
+coverage is essentially zero. Those bins do not contribute
+information about the SNP-effect curve; passing them through
+unmasked inflates the SER residual variance and pulls the
+mixture prior toward a degenerate spike at zero.
+
+In the simulated dataset, outcome 1 carries a block of 8 bins
+at very low SNR. Setting `low_count_filter = 0.02` masks those
+bins; the per-variable PIP at the signal SNP is unchanged on
+this clean simulation, but the SER residual variance is no
+longer inflated by the masked columns.
+
+```{r usage-low-count, eval = FALSE}
+fit <- mfsusie(X, Y_list,
+               low_count_filter = 0.02,
+               L = 8)
+```
+
+```{r plot-low-count, fig.cap = "PIP comparison: default vs low_count_filter."}
+pip_default  <- practical_fits$default$pip
+pip_lowcount <- practical_fits$lowcount$pip
+plot(pip_default, pip_lowcount,
+     xlim = c(0, 1), ylim = c(0, 1),
+     pch = 16, cex = 0.9, col = "#1f78b4",
+     xlab = "PIP (default)",
+     ylab = "PIP (low_count_filter = 0.02)",
+     main = "low_count_filter")
+abline(0, 1, lty = 3, col = "grey50")
+```
+
+## Quantile normalization
+
+`quantile_norm = TRUE` applies a column-wise rank-based normal
+quantile transform to the per-outcome wavelet matrix before the
+IBSS loop. After the transform every wavelet column is
+marginally standard Gaussian, which restores the SuSiE Bayes
+factor's distributional assumption.
+
+In the source ATAC-seq dataset, log1p coverage in
+sparse-coverage cell types has many zeros and a heavy right
+tail. The corresponding wavelet coefficients inherit the
+heavy-tailed marginal, and per-variable Bayes factors are
+biased toward over-confidence at variants where the heavy
+tails happen to align.
+
+In the simulated dataset, outcome 2 carries 18% per-cell heavy
+contamination. Setting `quantile_norm = TRUE` Gaussianizes the
+wavelet coefficients and the SER step receives a marginal
+matching the SuSiE assumption. On this dataset
+`quantile_norm = TRUE` reduces PIP at the signal SNP from
+`1.000` to `0.903`. The reduction reflects the more honest
+uncertainty estimate once heavy-tail outliers are no longer
+inflating per-variable Bayes factors.
+
+```{r usage-qn, eval = FALSE}
+fit <- mfsusie(X, Y_list,
+               quantile_norm = TRUE,
+               L = 8)
+```
+
+```{r plot-qn, fig.cap = "PIP comparison: default vs quantile_norm."}
+pip_qn <- practical_fits$qn$pip
+plot(pip_default, pip_qn,
+     xlim = c(0, 1), ylim = c(0, 1),
+     pch = 16, cex = 0.9, col = "#1f78b4",
+     xlab = "PIP (default)",
+     ylab = "PIP (quantile_norm = TRUE)",
+     main = "quantile_norm")
+abline(0, 1, lty = 3, col = "grey50")
+```
+
+`quantile_norm` is most useful on outcomes with heavy-tailed
+wavelet coefficients and non-trivial signal density. On
+outcomes that are mostly zero (e.g. cell types with very low
+coverage), the rank transform turns the zeros into uniform
+Gaussian noise and can dilute weak signals; pair it with
+`low_count_filter` so the no-information columns are masked
+before the rank transform sees them.
+
+## Small-sample correction
+
+`small_sample_correction = TRUE` replaces the per-variable
+Wakefield Normal marginal Bayes factor with the Johnson 2005
+scaled Student-t marginal. The two kernels differ only in the
+density used in the per-component mixture:
+
+$$
+\text{Wakefield: } \mathrm{dnorm}\bigl(\hat{\beta}_j;\; 0,\;
+   \sqrt{\sigma_k^2 + \hat{s}_j^2}\bigr),
+$$
+
+$$
+\text{Johnson-t: } \mathrm{dst}\bigl(\hat{\beta}_j;\;
+   \tau = (\sigma_k^2 + \hat{s}_j^2)^{-1},\; \nu = n - 1\bigr).
+$$
+
+The Student-t marginal arises from the Johnson 2005 JRSSB
+construction (an objective Bayes factor for a t test); for the
+multi-functional case, the same marginal is exposed in the
+legacy `mvf.susie.alpha::multfsusie(..., cor_small = TRUE)`
+and `fsusieR::susiF(..., cor_small = TRUE)` switches. For
+small `n` the Student-t marginal places more mass in the tails
+than the Normal, which dampens the per-variable Bayes factor at
+variants whose `\hat{\beta} / \hat{s}` is large by chance.
+Posterior moments given inclusion are unchanged; only the
+variable-selection probabilities are corrected.
+
+The mfsusieR Johnson-t kernel and the upstream
+`fsusieR::log_BF(..., df = n - 1)` reference agree at machine
+precision (one ULP) on the same inputs.
+
+```{r usage-johnson, eval = FALSE}
+fit <- mfsusie(X, Y_list,
+               small_sample_correction = TRUE,
+               L = 8)
+```
+
+```{r plot-johnson, fig.cap = "PIP comparison: default vs small_sample_correction."}
+pip_johnson <- practical_fits$johnson$pip
+plot(pip_default, pip_johnson,
+     xlim = c(0, 1), ylim = c(0, 1),
+     pch = 16, cex = 0.9, col = "#1f78b4",
+     xlab = "PIP (default Wakefield)",
+     ylab = "PIP (small_sample_correction = TRUE)",
+     main = "small_sample_correction")
+abline(0, 1, lty = 3, col = "grey50")
+```
+
+On this simulated dataset the Johnson-t correction shaves
+`PIP[signal SNP]` from `1.000` to `0.994`. The shift is small
+because the simulation is clean enough that the Wakefield
+marginal is already nearly correct; on the source ATAC-seq
+panel the difference is larger because coverage and signal are
+both noisier.
+
+## Choosing among the three options
+
+The three options act on different points in the pipeline and
+combine without conflict:
+
+| Option | Acts on | When to use |
+|---|---|---|
+| `low_count_filter` | wavelet columns with `median(|.|) <= c` | sparse-coverage assays where some cell types have many near-zero bins |
+| `quantile_norm` | wavelet matrix per outcome | heavy-tailed wavelet coefficients (e.g. log1p of sparse counts) |
+| `small_sample_correction` | per-variable SER Bayes factor | small `n` (here `n = 40`); rule-of-thumb `n <= 100` |
+
+A typical small-cohort sparse-count fit might combine all
+three:
+
+```{r combined, eval = FALSE}
+fit <- mfsusie(X, Y_list,
+               low_count_filter        = 0.02,
+               quantile_norm           = TRUE,
+               small_sample_correction = TRUE,
+               L = 8)
+```
+
+```{r plot-combined, fig.cap = "PIP comparison: default vs all three combined."}
+pip_combined <- practical_fits$combined$pip
+plot(pip_default, pip_combined,
+     xlim = c(0, 1), ylim = c(0, 1),
+     pch = 16, cex = 0.9, col = "#1f78b4",
+     xlab = "PIP (default)",
+     ylab = "PIP (all three combined)",
+     main = "all three combined")
+abline(0, 1, lty = 3, col = "grey50")
+```
+
+On this simulation, combining all three corrections drops the
+signal SNP's PIP further (from `1.000` to `0.333`). Stack the
+corrections with care: each one widens the variable-selection
+prior in a different way, and on a small clean dataset the
+combined effect can over-correct. On the messier source
+dataset, where the Wakefield default is over-confident, the
+combination produces more conservative credible sets.
+
+## Source dataset
+
+The motivating ATAC-seq panel is described in Anjing Liu and
+William Denault's MultifSuSiE manuscript. The small sample size
+(`n = 84`) and the sparse, heavy-tailed coverage make this
+exactly the regime where the three options matter. The panel is
+not redistributable, so the simulation in this vignette is
+seeded for reproducibility and the same code paths are exercised.
