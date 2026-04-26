@@ -374,7 +374,7 @@ group 7.
 
 Depends on 7.1 (`mfsusie()`) and 6b (post-processors).
 
-- [ ] 7d.1 Implement `tests/testthat/test_fsusier_degeneracy.R` per
+- [x] 7d.1 Implement `tests/testthat/test_fsusier_degeneracy.R` per
       the contract in `mf-ibss/spec.md` "single-modality functional
       case reduces exactly to fsusieR::susiF" (design.md D11b). For
       each `L in c(1, 5, 10)` and `T_1 in c(64, 128)` on a fixed
