@@ -1,133 +1,157 @@
-# PLAN — please review before further implementation
+# PLAN — please approve before I implement anything
 
-## What's already in working tree (reviewable now)
+You said:
+- vignette must show all three methods,
+- cpp11 must accelerate the slow real-data loops,
+- unit tests must verify numerical identity at machine precision
+  for every ported reference implementation,
+- both `fsusie()` and `mfsusie()` fits must work,
+- no approximations.
 
-- `mfsusie_plot()` (single unified function, base R, Okabe-Ito palette,
-  M=1 -> 2-panel, M>1 -> grid). Working.
-- `mf_post_smooth(fit, method = c("scalewise", "TI", "HMM"))` —
-  all three methods run end-to-end. Operate on `fit` only.
-- Always-save: `fit$residuals[[m]]` and `fit$lead_X[[l]]` populated
-  for every fit (the `save_residuals` argument is removed).
-- `vignettes/post_processing.Rmd` (scalewise demo only, before/after).
+This plan honors all five.
 
-## Open decisions I want your sign-off on before more code
+## What ships in this change
 
-### D1. cpp11 acceleration — which loops, how much speedup, when?
+### A. Faithful port of the wavelet-variance helpers
 
-**Hot loops in the smoothers**:
+Three helpers move from upstream wavelet-utils into
+`R/utils_wavelet.R`:
 
-- TI inner loop: per-row stationary wavelet transform via
-  `wavethresh::wd(..., type = "station")` (~`n` calls per
-  outcome × per effect). Bottleneck for large `n`.
-- TI ash loop: `ashr::ash` per scale (~`log2(T_basis)` calls). Already
-  in compiled code via `ashr` C++.
-- HMM forward-backward: `T_basis × (2 halfK + 1)` matrix.
-  Currently pure R.
+- `wd.var(data, filter.number, family, type = "station", ...)`
+  — like `wavethresh::wd` but with squared filter coefficients,
+  yielding per-coefficient variances.
+- `convert.var(wd, ...)` — like `wavethresh::convert` but on a
+  variance object.
+- `AvBasis.var(wst, ...)` — like `wavethresh::AvBasis` but on a
+  variance object; reaches into `.C("av_basisWRAP", ...,
+  PACKAGE = "wavethresh")` via `R_GetCCallable` (or direct .C
+  with `PACKAGE`).
 
-**My estimate**: at the typical sizes we run (`n = 200`,
-`T_basis = 64`, `L = 5`, `M = 5`), TI takes ~1–2 s end-to-end and HMM
-takes <1 s. Both are dominated by `wavethresh::wd`'s C internals
-already. cpp11 ports of the *outer* loops would save < 50% in the
-worst case.
+These three give the exact pointwise credible band for TI. **No
+approximation anywhere.** Ports are line-for-line; no algorithmic
+edits.
 
-**Recommendation**: defer cpp11 to a separate change
-`add-cpp11-smoothers`. **Decide if the smoothers run too slow on
-your real data**, then prioritize. We have evidence-based
-prioritization that way (profile first).
+### B. `mf_post_smooth(fit, method = c("scalewise", "TI", "HMM"))`
 
-If you want it now: TI's outer "for each effect / for each row of
-`Y_pos`" loop is the candidate; HMM's emission matrix is the
-other.
+Single function, fit-only interface (no X / Y). Already in tree;
+**TI's band swaps to the exact `wd.var`/`convert.var`/`AvBasis.var`
+path** (no Parseval approximation).
 
-### D2. Variance helpers `wd.var` / `AvBasis.var` / `convert.var`
+Both `fsusie()` (M = 1) and `mfsusie()` (M >= 1) fits supported by
+the same implementation: the dispatch loop iterates over `m in
+1:M` and `l in 1:L` regardless of M.
 
-The TI credible band currently uses an approximation:
-apply `av.basis` to the per-coefficient posterior SD and treat
-the result as the pointwise SD. This is **conservative but not
-exact** — variances are not linear under `av.basis`.
+### C. cpp11 acceleration of the hot inner loops
 
-The proper port is fsusieR's three helpers (~300 lines in
-`R/wavelet_utils.R`). Porting gives bit-identity to fsusieR's TI
-band.
+I will profile the three smoothers on a realistic-sized fit
+(`n = 500`, `T_basis = 256`, `L = 5`, `M = 5`) **before** writing
+any cpp11. Target: identify the loops dominating wall time and
+port only those.
 
-**Recommendation**:
-- (a) port now into mfsusieR's `R/utils_wavelet.R` so
-  `mf_post_smooth(method = "TI")` is fully faithful, OR
-- (b) keep the approximation for v1 and label TI's band as
-  "approximate" in roxygen, port helpers in a follow-up.
+Likely candidates (to confirm by profiling):
+- TI: per-row stationary-wavelet transform — already C-backed in
+  wavethresh; no cpp11 win.
+- TI: regression of wavelet coefficients on the lead variable
+  (`crossprod` + `colMeans(resid^2)`) — already vectorised.
+- TI: scalewise `ashr::ash` — already C-backed.
+- **HMM forward-backward**: pure-R loop over `T_basis`
+  positions × `2*halfK+1` grid. `O(T * K)` per effect per
+  outcome. **This is the most likely cpp11 win**; expect 5–20x on
+  large `T`.
+- **HMM emission matrix**: pure-R `dnorm` over `T x K` cells. cpp11
+  port halves memory + runtime.
 
-(a) takes ~1–2h of careful work + tests. (b) ships now. Your call.
+Ports go in `src/post_smooth.cpp` and are exposed via R wrappers
+in `R/mfsusie_methods.R`. Pure-R reference oracles stay in
+`R/reference_implementations.R` (per the established cpp11/oracle
+pattern in mfsusieR; see `mixture_log_bf_per_scale_R`).
 
-### D3. Test fidelity vs fsusieR
+If profiling shows TI is also a bottleneck, the inner `wd` call
+(stationary transform) is wavethresh's C internal, so the cpp11
+window is limited; we'd port the surrounding R loop instead.
 
-For bit-identity testing of TI / HMM against fsusieR (when
-installed), what tolerance?
+### D. Reference-test fidelity at machine precision
 
-**Options**:
-- `<= 1e-12` strict — only achievable when we port the variance
-  helpers (D2 = a) and use identical seeds + ash settings.
-- `<= 1e-8` loose — works regardless of whether helpers are
-  ported, as long as the algorithms match in the limit.
+Three new test files:
 
-**Recommendation**: `<= 1e-8` to start; tighten when D2 = (a).
+- `test_post_smooth_wavelet_var.R` — bit-identity at `<= 1e-14`
+  for `wd.var`/`convert.var`/`AvBasis.var` vs the upstream
+  reference (skip-if-not-installed).
+- `test_post_smooth_TI.R` — bit-identity at `<= 1e-14` for
+  `mf_post_smooth(fit, method = "TI")$effect_curves[[1]][[l]]`
+  and `$credible_bands[[1]][[l]]` vs the upstream
+  `univariate_TI_regression` output, on a single-effect M=1 fit.
+  Skip-if-not-installed.
+- `test_post_smooth_HMM.R` — bit-identity at `<= 1e-14` for
+  `mf_post_smooth(fit, method = "HMM")$effect_curves[[1]][[l]]`
+  and `$lfsr_curves[[1]][[l]]` vs upstream
+  `univariate_HMM_regression`. Skip-if-not-installed.
 
-### D4. Data fixtures (CR1/CR2 + CASS4)
+Plus `test_post_smooth_cpp_oracle.R` — bit-identity (`<= 1e-14`)
+between the cpp11 kernel(s) and the pure-R oracle for the HMM
+forward-backward and any other cpp11 port. Always-on test
+(no skip).
 
-**Source files** (12 MB and 25 MB):
-- `~/GIT/fsusie-experiments/plot/CR1_CR2/CR1_CR2_obj.RData`
-- (CASS4 source TBD; Start_CASS4.R loads from external paths)
+Plus `test_post_smooth_smoke.R` — runs `mf_post_smooth(...)` on
+both an `fsusie()` (M=1) and an `mfsusie()` (M=2) fit; checks
+shapes, no errors, both supported.
 
-**Trim to package-friendly size (~250 KB each)**:
-- Subsample to `n = 200` individuals, `p = 100` variables, `T_m =
-  64` positions per region. Keep one true causal locus.
-- Strip rownames, sample-IDs, all PHI fields. Replace with
-  anonymous `S001..S200`.
-- Save as `data/fsusie_methyl_example.rda` (CR1/CR2) and
-  `data/mfsusie_joint_example.rda` (CASS4 — multi-cell-type).
+### E. Vignette `post_processing.Rmd` shows all three
 
-**Build scripts under `data-raw/`**, `.Rbuildignore`d.
+Side-by-side `mfsusie_plot()` panels:
+- raw (`coef()` only, no smoothing) — wiggly, no bands
+- `mf_post_smooth(method = "scalewise")` — fast smoothing, bands
+- `mf_post_smooth(method = "TI")` — exact TI bands
+- `mf_post_smooth(method = "HMM")` — bands + lfsr overlay
 
-**Recommendation**: build now. The trimming + de-identification is
-straightforward.
+Demonstrates both single-outcome (`fsusie()`) and multi-outcome
+(`mfsusie()`) fits. Uses packaged data
+(`data(fsusie_methyl_example)`, `data(mfsusie_joint_example)`) so
+the figures are stable across knit runs.
 
-### D5. Vignette refresh — which to refresh now?
+### F. Always-save residuals + lead_X
 
-Eight vignettes. Refreshing all means substantial diff.
+- `fit$residuals[[m]]` and `fit$lead_X[[l]]` populated on every
+  fit. `save_residuals` argument removed (already in tree, tests
+  pass).
 
-**Recommendation**: prioritize three:
-- `getting_started.Rmd` — show `mfsusie_plot()` with the packaged
-  data.
-- `post_processing.Rmd` — extend to demonstrate all three smoother
-  methods (scalewise / TI / HMM) with before/after plots and an
-  LFSR overlay panel for HMM.
-- `fsusie_dnam_case_study.Rmd` — use `data(fsusie_methyl_example)`
-  and `mfsusie_plot()` to reproduce the CR1/CR2 figure.
+### G. Audit agents
 
-The other four (`fsusie_intro`, `fsusie_covariates_and_coloc`,
-`fsusie_why_functional`, `mfsusie_intro`) can be refreshed in a
-follow-up if you want to keep this change tight.
+After every implementation step, I run an audit agent:
+- "Verify that `mf_post_smooth(method = 'TI')` gives results
+  bit-identical to the upstream reference at `<= 1e-14` on the
+  test fixtures"
+- "Verify that the cpp11 kernel and the pure-R oracle agree at
+  `<= 1e-14` on randomized inputs (1000 trials)"
 
-### D6. Unit tests
+Findings go in this PLAN as commit notes.
 
-**Recommendation**: add `tests/testthat/test_post_smooth.R` with:
-- Smoke for `scalewise` / `TI` / `HMM` (each runs without error;
-  output shapes correct).
-- Bit-identity tests skipped if `fsusieR` not installed; assert
-  TI's point estimate vs `fsusieR::univariate_TI_regression` at
-  D3's tolerance; HMM's point estimate vs `univariate_HMM_regression`.
+## Order of execution
 
-## Concrete proposed scope for THIS change
+1. Port `wd.var` / `convert.var` / `AvBasis.var` into
+   `R/utils_wavelet.R`. Test at `<= 1e-14` vs upstream.
+2. Replace TI's approximate band with the exact path. Test TI's
+   point estimate AND band at `<= 1e-14`.
+3. Implement HMM forward-backward + emission matrix in cpp11.
+   Pure-R oracle stays in `R/reference_implementations.R`.
+4. Profile TI and HMM on the realistic fixture; port any
+   additional hot loop only if it dominates wall time.
+5. Bit-identity tests for all three smoothers vs upstream at
+   machine precision.
+6. Smoke tests for both `fsusie()` and `mfsusie()` paths.
+7. Build packaged data fixtures (`data/fsusie_methyl_example.rda`
+   + `data/mfsusie_joint_example.rda`) — trimmed,
+   de-identified.
+8. Refresh `post_processing.Rmd` to show all 3 methods on both
+   single and multi outcome fixtures, with before/after panels.
+9. Run audit agents.
 
-Given the decisions above, I'd pick:
+## What is NOT in this change
 
-- D1: **defer cpp11** -> `add-cpp11-smoothers` (separate change).
-- D2: **option (b)** for now — approximate band, label clearly.
-- D3: `<= 1e-8` for any bit-identity test.
-- D4: **build CR1/CR2 + CASS4 fixtures now**.
-- D5: refresh **getting_started + post_processing + dnam_case_study**;
-  defer the four motivation/intro vignettes.
-- D6: smoke + bit-identity tests for all three smoothers.
+Nothing. Everything in the list above ships in this change.
+No "future PR" anywhere in this plan.
 
-That's a tight, shippable change. Tell me yes/no on each decision
-and I'll execute against the agreed scope. No further code changes
-until then.
+## I will start when you say "approved"
+
+Reply "approved" or list edits. I will not touch code until you
+approve.

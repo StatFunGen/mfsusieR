@@ -60,7 +60,7 @@ onto the lead variable's column of X via the saved residual
 row-by-row, scalewise \code{ashr::ash} shrinkage on wavelet
 coefficients, and inverts via cycle-spinning average.
 Produces tighter credible bands than scalewise; matches the
-approach used in fsusieR.
+refinement step in the fSuSiE Methods.
 }
 \item \code{"HMM"} -- hidden Markov denoising on per-position regression
 coefficients. Yields a posterior mean curve plus per-position
@@ -69,5 +69,5 @@ coefficients. Yields a posterior mean curve plus per-position
 
 All three operate on the fit alone: residuals are read from
 \code{fit$residuals} and the per-effect lead variable column from
-\code{fit$lead_X}, both populated by \code{mfsusie(..., save_residuals = TRUE)}.
+\code{fit$lead_X}, both populated by \code{mfsusie()} / \code{fsusie()}.
 }
