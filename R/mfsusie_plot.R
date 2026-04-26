@@ -98,7 +98,7 @@ mf_cs_colors <- function(n_cs) {
   pur_min <- if (is.data.frame(pur) && "min.abs.corr" %in% colnames(pur))
     suppressWarnings(min(pur$min.abs.corr, na.rm = TRUE)) else NA_real_
   if (is.finite(pur_min))
-    parts <- c(parts, sprintf("min purity %.2f", pur_min))
+    parts <- c(parts, sprintf("min |r| %.2f", pur_min))
   if (length(parts) > 0L)
     sprintf("%s\n(%s)", base, paste(parts, collapse = ", "))
   else

@@ -12,8 +12,9 @@ vignette: >
 
 ```{r knitr-opts, include = FALSE}
 knitr::opts_chunk$set(
-  collapse = TRUE, comment = "#>", results = "hold",
-  fig.align = "center", dpi = 120
+  collapse = TRUE, comment = "#>",
+  fig.width = 8, fig.height = 6, fig.align = "center", dpi = 110,
+  out.width = "100%"
 )
 ```
 
@@ -64,7 +65,7 @@ fit$pip[dnam_example$causal_snps]
 methylation curves on the post-remap grid. After `mf_post_smooth()`
 the curves are denoised and credible bands are drawn as ribbons.
 
-```{r plot-smoothed, fig.width = 6, fig.height = 5, fig.cap = "TI-smoothed methylation curves with 95% pointwise credible bands."}
+```{r plot-smoothed, fig.width = 6, fig.height = 5}
 fit_s <- mf_post_smooth(fit, method = "TI",
                         wavelet_filter = 1L,
                         wavelet_family = "DaubExPhase")

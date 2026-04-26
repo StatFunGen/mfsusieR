@@ -13,7 +13,8 @@ vignette: >
 ```{r knitr-opts, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE, comment = "#>",
-  fig.width = 7, fig.height = 5, fig.align = "center", dpi = 120
+  fig.width = 8, fig.height = 6, fig.align = "center", dpi = 110,
+  out.width = "100%"
 )
 ```
 
@@ -78,7 +79,7 @@ fit <- fsusie(Y, X, pos = positions, L = 15, L_greedy = 5, verbose = TRUE)
 the fine wavelet scales add visible jitter, and the fit returns
 no credible bands by default.
 
-```{r before, fig.cap = "Raw effect curves (no smoothing). Top: PIPs. Bottom: per-effect inverse-DWT curve."}
+```{r before}
 mfsusie_plot(fit)
 ```
 
@@ -91,7 +92,7 @@ fit_s <- mf_post_smooth(fit)
 The same plot call now uses the smoothed curves and adds 95% pointwise
 credible bands as transparent ribbons:
 
-```{r after, fig.cap = "After mf_post_smooth(): TIWT-smoothed curves with 95% pointwise credible bands."}
+```{r after}
 mfsusie_plot(fit_s)
 ```
 
@@ -116,13 +117,13 @@ from zero (band excludes 0).
   local false sign rate (`lfsr_curves`); `mfsusie_plot()` overlays
   it on a secondary axis with the threshold line.
 
-```{r tuning-scalewise, fig.cap = "scalewise with threshold_factor = 0.5 (less aggressive shrinkage)."}
+```{r tuning-scalewise}
 fit_light <- mf_post_smooth(fit, method = "scalewise",
                             threshold_factor = 0.5)
 mfsusie_plot(fit_light)
 ```
 
-```{r tuning-hmm, fig.cap = "HMM smoother. Dashed lines on the secondary axis are the per-position lfsr; the dotted reference line is at lfsr = 0.05."}
+```{r tuning-hmm}
 fit_hmm <- mf_post_smooth(fit, method = "HMM")
 mfsusie_plot(fit_hmm)
 ```
@@ -157,7 +158,7 @@ fit_m_s <- mf_post_smooth(fit_m, method = "TI",
                           wavelet_family = "DaubExPhase")
 ```
 
-```{r mfsusie-plot, fig.width = 8, fig.height = 6, fig.cap = "Multi-outcome fit, TI-smoothed. Top-left: PIPs across both outcomes. Other panels: per-outcome smoothed effect curves with 95% credible bands."}
+```{r mfsusie-plot, fig.width = 8, fig.height = 6}
 mfsusie_plot(fit_m_s)
 ```
 

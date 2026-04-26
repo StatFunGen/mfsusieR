@@ -13,7 +13,8 @@ vignette: >
 ```{r knitr-opts, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE, comment = "#>",
-  fig.width = 5, fig.height = 3, fig.align = "center", dpi = 120
+  fig.width = 8, fig.height = 6, fig.align = "center", dpi = 110,
+  out.width = "100%"
 )
 ```
 
@@ -30,11 +31,9 @@ while performing variable selection via the SuSiE approach (IBSS, variational EM
 of one outcome. The argument order is `(Y, X, pos, ...)` so the
 response comes first, as in `susieR::susie()`.
 
-## Bundled fixture
+## Example dataset
 
-FIXME: what does this section title even mean? internal slang agian! fix it
-
-The package ships `rnaseq_example`, a simulated cis-eQTL fixture:
+The package ships `rnaseq_example`, a simulated cis-eQTL dataset:
 200 SNPs over a real LD scaffold (`susieR::N3finemapping$X`),
 128 evenly-spaced exon-body positions, one causal SNP with a
 peaked Gaussian effect over ~30 positions.
@@ -48,7 +47,7 @@ str(rnaseq_example, max.level = 1)
 
 A few sample expression-coverage curves:
 
-```{r sample-curves, fig.cap = "Five randomly-chosen sample curves from `rnaseq_example$Y`."}
+```{r sample-curves, fig.height = 3.5}
 matplot(rnaseq_example$pos,
         t(rnaseq_example$Y[1:5, ]), type = "l", lty = 1,
         col = c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2"),
@@ -73,11 +72,9 @@ column: PIPs on top (CS-colored points) and per-effect curves on
 the bottom. Use `susie_plot(fit, y = "PIP")` (re-exported from
 susieR) when only the PIP panel is wanted.
 
-```{r mfsusie-plot, fig.cap = "PIP and per-effect curves. Top: PIPs colored by CS membership. Bottom: posterior effect curves on the position grid."}
+```{r mfsusie-plot}
 mfsusie_plot(fit)
 ```
-
-FIXME: no need for fig.cap. Also this is too narrow all the figures are too small -- title too large the actual plot too small. How to fix it? fix!
 
 Credible sets:
 
@@ -92,7 +89,7 @@ The default plot above shows the raw inverse-DWT curves from
 `coef(fit)`. After `mf_post_smooth()`, the same plot call shows
 the smoothed curve and a pointwise credible band:
 
-```{r post-smooth, fig.cap = "After mf_post_smooth(method = 'TI'): cycle-spinning translation-invariant denoising with 95% pointwise credible bands. Affected regions (band excludes zero) are marked with thick bars at the bottom."}
+```{r post-smooth}
 fit_s <- mf_post_smooth(fit, method = "TI",
                         wavelet_filter = 1L,
                         wavelet_family = "DaubExPhase")

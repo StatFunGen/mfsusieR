@@ -37,7 +37,7 @@ effects.
 \donttest{
 data(dnam_example)
 fit <- fsusie(dnam_example$Y, dnam_example$X,
-              pos = dnam_example$pos, L = 3, verbose = FALSE)
+              pos = dnam_example$pos, L = 15, L_greedy = 5, verbose = TRUE)
 fit_s <- mf_post_smooth(fit, method = "TI",
                         wavelet_filter = 1L,
                         wavelet_family = "DaubExPhase")

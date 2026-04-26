@@ -35,8 +35,8 @@ signs.
 \donttest{
 data(multiomic_example)
 fit <- mfsusie(multiomic_example$X, multiomic_example$Y_list,
-               pos = multiomic_example$pos_list, L = 3,
-               verbose = FALSE)
+               pos = multiomic_example$pos_list, L = 15, L_greedy = 5,
+               verbose = TRUE)
 fit_s <- mf_post_smooth(fit, method = "TI",
                         wavelet_filter = 1L,
                         wavelet_family = "DaubExPhase")
