@@ -9,7 +9,7 @@
 #
 # Fields are sized at construction; the IBSS loop mutates them
 # in-place per iteration. Finalize (`ibss_finalize.mf_individual`,
-# PR group 7) attaches the post-fit fields (`pip`, `cs`, `elbo`,
+# attaches the post-fit fields (`pip`, `cs`, `elbo`,
 # `niter`, `converged`, `residuals`).
 #
 # @references

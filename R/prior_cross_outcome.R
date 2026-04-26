@@ -1,10 +1,10 @@
-# Cross-outcome prior plug-in seam (mf-prior/spec.md).
+# Cross-outcome prior plug-in seam.
 #
 # The dispatch verb is `combine_outcome_lbfs` (S3 generic), not
 # `apply` (collides with apply). When non-NULL, the
 # cross_outcome_prior on `mfsusie()` modifies the per-outcome
 # log-Bayes factors before they are summed into a joint log-BF in
-# the SER step. The default in v1 is the trivial independent
+# the SER step. The default is the trivial independent
 # prior (sum of log-BFs unchanged). Future changes may ship
 # mash-style cross-outcome priors that implement the same S3
 # generic.

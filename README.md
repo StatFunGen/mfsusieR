@@ -1,6 +1,9 @@
 # mfsusieR
 
+[![CI](https://github.com/StatFunGen/mfsusieR/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/StatFunGen/mfsusieR/actions/workflows/ci.yml)
+[![Website](https://github.com/StatFunGen/mfsusieR/actions/workflows/dispatch_pkgdown_build.yml/badge.svg?branch=main)](https://statfungen.github.io/mfsusieR)
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
+[![GitHub release](https://img.shields.io/github/v/release/StatFunGen/mfsusieR?include_prereleases&sort=semver)](https://github.com/StatFunGen/mfsusieR/releases)
 
 The `mfsusieR` package implements the multi-modality Sum of Single
 Functions (mfSuSiE) model for joint fine-mapping of multiple

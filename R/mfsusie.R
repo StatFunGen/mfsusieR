@@ -10,7 +10,7 @@
 #   4. return the resulting `mfsusie` fit.
 #
 # The wavelet-specific work happens at step 1 (data prep) and step 4
-# (post-processors, in a separate PR group). The IBSS loop itself
+# (post-processors, separate API). The IBSS loop itself
 # is susieR's, end-to-end.
 
 #' Multi-functional, multi-outcome SuSiE
@@ -42,7 +42,7 @@
 #'   `pi_V[[m]]` has a per-scale row dimension or collapses across
 #'   scales.
 #' @param null_prior_weight numeric, weight on the null prior
-#'   component. Default 2 per the manuscript and design.md D5.
+#'   component. Default 2.
 #' @param cross_outcome_prior optional cross-outcome combiner
 #'   object. Defaults to the trivial independence combiner
 #'   (`cross_outcome_prior_independent()`).

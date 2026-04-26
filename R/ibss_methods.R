@@ -70,7 +70,7 @@ initialize_fitted.mf_individual <- function(data, mat_init, ...) {
 #' uses a list-of-vectors per-(scale, outcome) shape) and routes
 #' through the mfsusieR S3 methods for `initialize_susie_model`,
 #' `initialize_fitted`. Model_init / warm-start is deferred to a
-#' later PR group (v1 ignores `params$model_init`).
+#' not supported (param$model_init is ignored).
 #'
 #' @keywords internal
 #' @noRd
@@ -97,8 +97,8 @@ ibss_initialize.mf_individual <- function(data, params) {
 
 #' Per-iteration prior sanity check (no-op for `mf_individual`)
 #'
-#' susieR's `validate_prior.default` checks the scalar V[l] is
-#' non-negative; mfsusieR holds V[l] = 1 by design and validates
+#' susieR's `validate_prior.default` checks the scalar `V[l]` is
+#' non-negative; mfsusieR holds `V[l]` = 1 by design and validates
 #' the mixture-weight prior at construction time
 #' (`mf_prior_scale_mixture`). No per-iteration validation needed.
 #'
@@ -113,7 +113,7 @@ validate_prior.mf_individual <- function(data, params, model, ...) {
 #' IBSS iteration tracking (no-op by default)
 #'
 #' Tracking adds runtime overhead and large-state copies. mfsusieR
-#' v1 supports tracking only when `params$track_fit` is `TRUE`,
+#' Tracking is supported only when `params$track_fit` is `TRUE`,
 #' otherwise this is a no-op (matches the susieR pattern but with
 #' a smaller default footprint, since per-effect curves are
 #' large).
@@ -151,7 +151,7 @@ check_convergence.mf_individual <- function(data, params, model, elbo, iter) {
 
 # ---- trim_null_effects ----------------------------------------
 
-#' Drop effects with negligible posterior mass (no-op v1)
+#' Drop effects with negligible posterior mass (no-op)
 #'
 #' susieR's default zeros out effects with `V[l] < prior_tol`.
 #' mfsusieR holds `V[l] = 1` for all l (mixture prior absorbs the
@@ -230,7 +230,7 @@ get_intercept.mf_individual <- function(data, params, model, ...) {
     return(lapply(data$T_basis, function(T_m) rep(0, T_m)))
   }
   # mfsusieR centers Y per-outcome, per-column at construction.
-  # Intercept reconstruction handed to a future PR group; v1 returns 0.
+  # Intercept reconstruction returns 0.
   lapply(data$T_basis, function(T_m) rep(0, T_m))
 }
 
@@ -265,7 +265,7 @@ get_variable_names.mf_individual <- function(data, model, ...) {
   model
 }
 
-#' Univariate z-scores not exposed for `mf_individual` v1
+#' Univariate z-scores not exposed for `mf_individual`
 #' @keywords internal
 #' @noRd
 get_zscore.mf_individual <- function(data, params, model, ...) {
