@@ -127,3 +127,77 @@ test_that("mfsusie_plot() honors show_grid_dots and various lfsr thresholds", {
                              lfsr_threshold = 0.001))
   expect_silent(mfsusie_plot(fit_h, lwd = 2.5, add_legend = FALSE))
 })
+
+# --- Internal helpers ------------------------------------------
+
+test_that("mf_cs_colors honors n_cs = 0 and small palettes", {
+  expect_length(mf_cs_colors(0L), 0L)
+  expect_length(mf_cs_colors(1L), 1L)
+  pal <- mf_cs_colors(5L)
+  expect_length(pal, 5L)
+  expect_true(length(unique(pal)) >= 4L)
+})
+
+test_that(".affected_runs and .affected_mask handle non-empty bands", {
+  # A band where (lower > 0) OR (upper < 0) at a contiguous run.
+  band <- cbind(
+    c(-1,  0.1, 0.2, 0.3,  0,  -0.5, -0.4),
+    c( 0,  0.5, 0.6, 0.7,  0,  -0.1, -0.05))
+  runs <- mfsusieR:::.affected_runs(band)
+  expect_length(runs, 2L)
+  expect_equal(runs[[1L]], c(2L, 4L))
+  expect_equal(runs[[2L]], c(6L, 7L))
+
+  mask <- mfsusieR:::.affected_mask(band)
+  expect_length(mask, 7L)
+  expect_equal(which(mask), c(2L, 3L, 4L, 6L, 7L))
+})
+
+test_that(".pip_title formats coverage and purity when sets$cs is populated", {
+  fit <- build_three_outcome_fit()
+  title <- mfsusieR:::.pip_title(fit)
+  expect_true(grepl("coverage", title))
+  expect_true(grepl("min", title))
+})
+
+test_that(".resolve_facet picks 'stack' for K = 2 with disjoint affected masks", {
+  # Two CSes, smoothed with HMM produces credible bands; with
+  # non-overlapping signal positions across CSes the affected
+  # masks are disjoint and the resolver picks "stack". This
+  # exercises the K == 2 branch in `.resolve_facet`.
+  set.seed(1L)
+  n <- 80L; p <- 10L; T_m <- 64L
+  X <- matrix(rnorm(n * p), n, p)
+  beta <- matrix(0, p, T_m)
+  shape1 <- exp(-((seq_len(T_m) -  9L)^2) / (2 * 3^2))
+  shape2 <- exp(-((seq_len(T_m) - 56L)^2) / (2 * 3^2))
+  beta[2L, ] <- 1.6 * shape1
+  beta[6L, ] <- -1.6 * shape2
+  Y <- X %*% beta + matrix(rnorm(n * T_m, sd = 0.3), n)
+  fit <- fsusie(Y, X, pos = seq_len(T_m), L = 4, verbose = FALSE)
+  fit_h <- mf_post_smooth(fit, method = "HMM")
+
+  null_device()
+  # Plot with facet_cs = "auto"; the resolver uses bands +
+  # affected masks to choose layout.
+  expect_silent(mfsusie_plot(fit_h, facet_cs = "auto"))
+})
+
+# --- Scalar (T_m = 1) plotting --------------------------------
+
+test_that("mfsusie_plot draws the dot-plot panel on a scalar outcome", {
+  null_device()
+  set.seed(53L)
+  n <- 80L; p <- 8L
+  X    <- matrix(rnorm(n * p), n, p)
+  beta <- numeric(p); beta[2L] <- 1.0
+  Y_scalar <- as.vector(X %*% beta) + rnorm(n, sd = 0.3)
+  Y_func   <- X %*% (matrix(beta, p, 1) %*%
+                     matrix(exp(-((1:32 - 16)^2 / 8)), 1, 32L)) +
+              matrix(rnorm(n * 32, sd = 0.3), n)
+  fit <- mfsusie(X, list(matrix(Y_scalar, n, 1L), Y_func),
+                 L = 2, max_iter = 30, verbose = FALSE)
+  expect_silent(mfsusie_plot(fit))
+  expect_silent(mfsusie_plot(fit, m = 1L))   # scalar focus
+  expect_silent(mfsusie_plot(fit, m = 2L))
+})

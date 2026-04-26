@@ -43,11 +43,14 @@ set.seed(1)
 Both fits return raw inverse-DWT effect curves through `coef()`.
 For a smoothed position-space curve with a pointwise credible
 band (and, for the HMM smoother, a per-position lfsr curve),
-post-process with `mf_post_smooth()`: see
+post-process with `mf_post_smooth()`. Four methods are
+available — `"TI"` (the default; translation-invariant wavelet
+denoising via cycle spinning), `"scalewise"` (per-scale soft-
+thresholding), `"HMM"` (hidden Markov model with per-position
+lfsr), and `"smash"` (delegates to `smashr::smash.gaus`). See
 [`vignette("post_processing")`](post_processing.html) for the
-three available methods (`scalewise`, `TI`, `HMM`).
-
-FIXME: this part has to be improved it now has another additional method. And also the default is changed
+walk-through and the comparison workflow when several smoothers
+coexist on one fit.
 
 ## A small `fsusie()` example (single outcome, functional)
 
@@ -105,7 +108,30 @@ slot:
 mfsusie_plot(fit_m)
 ```
 
-FIXME: did not show predict and coef here. We should show what predict and coef look like and include a small plot for predict (as coef plot is included already in effect curves)
+`coef(fit_m)` returns a per-outcome list of `L x T_basis[m]`
+matrices on the original X scale: row `l` of element `m` is
+the inverse-DWT'd effect curve for effect `l` on outcome `m`.
+
+```{r coef-shape}
+cf <- coef(fit_m)
+length(cf)                             # one per outcome (M)
+dim(cf[[1L]])                          # L x T_basis[1]
+```
+
+`predict(fit_m, newx = X_new)` returns the fitted per-position
+response on a fresh genotype matrix:
+
+```{r predict-shape, fig.width = 7, fig.height = 4}
+X_new <- matrix(rnorm(20 * p), 20, p)
+pr    <- predict(fit_m, newx = X_new)
+length(pr); dim(pr[[1L]])              # n_new x T_basis[m]
+
+# Plot the predicted curve for the first outcome on the first
+# four held-out samples.
+matplot(t(pr[[1L]][seq_len(4L), ]), type = "l", lty = 1,
+        xlab = "position", ylab = "predicted Y",
+        main = "predict.mfsusie() on outcome 1")
+```
 
 ## Numerical equivalence with `susieR::susie`
 
