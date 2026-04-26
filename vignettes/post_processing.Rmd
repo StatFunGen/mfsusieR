@@ -1,11 +1,11 @@
 ---
-title: "Post-processing fsusie / mfsusie effect curves"
+title: "Smoothing effect curves and credible bands"
 author: "Gao Wang and contributors"
 output:
   rmarkdown::html_vignette:
     toc: true
 vignette: >
-  %\VignetteIndexEntry{Post-processing fsusie / mfsusie effect curves}
+  %\VignetteIndexEntry{Smoothing effect curves and credible bands}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---

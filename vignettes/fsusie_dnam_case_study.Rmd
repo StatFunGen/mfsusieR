@@ -1,11 +1,11 @@
 ---
-title: "DNA methylation QTL fine-mapping with fsusie()"
+title: "DNA methylation QTL fine-mapping"
 author: "Gao Wang, William Denault, Peter Carbonetto"
 output:
   rmarkdown::html_vignette:
     toc: true
 vignette: >
-  %\VignetteIndexEntry{DNA methylation QTL fine-mapping with fsusie()}
+  %\VignetteIndexEntry{DNA methylation QTL fine-mapping}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---

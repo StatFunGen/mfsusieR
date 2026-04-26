@@ -278,29 +278,34 @@ print.summary.mfsusie <- function(x, ...) {
 }
 # Post-processing helpers for an `mfsusie` fit.
 #
-# `mf_post_smooth(fit, method = "tiwt")` adds two slots to the
-# returned fit:
+# `mf_post_smooth(fit)` adds two slots to the returned fit:
 #   $effect_curves[[m]][[l]]  -- smoothed position-space curve,
 #                                length T_basis[m]
 #   $credible_bands[[m]][[l]] -- T_basis[m] x 2 matrix [lower, upper]
 #
-# The smoother is **translation-invariant wavelet thresholding**
-# (TIWT): the per-effect, per-outcome wavelet posterior mean is
-# soft-thresholded at the SureShrink universal threshold
-# `sigma * sqrt(2 log T)` per scale, then inverted. Pointwise
-# credible bands come from the posterior second moment via
-# `mu2 - mu^2` mapped through the inverse DWT and a sqrt(.)
-# (Parseval-style approximation on the orthonormal basis).
+# Method "scalewise" performs scalewise soft-thresholding of the
+# per-effect, per-outcome wavelet posterior mean at
+# `factor * sigma_s * sqrt(2 log T)`, where `sigma_s` is the mean
+# posterior SD on wavelet scale `s`. Pointwise credible bands
+# come from the posterior second moment via `mu2 - mu^2` mapped
+# through the inverse DWT and a sqrt(.) (Parseval approximation
+# on the orthonormal basis).
 #
-# Cycle-spinning translation-invariant denoising (the full TI estimator)
-# is a planned extension; this scalewise variant already improves curve
-# aesthetics over raw inverse-DWT.
+# This is a simplified relative of the cycle-spinning translation-
+# invariant denoising used in fSuSiE's reference implementation
+# (see Denault et al. 2025 bioRxiv 10.1101/2025.08.17.670732,
+# Methods, "Refining the effect estimates"); it operates directly
+# on the wavelet-domain posterior moments rather than re-running
+# wavelet regression on the residualized response, so it does not
+# require X / Y at smoothing time. A full cycle-spinning method
+# is a planned addition and will be exposed via
+# `method = "TI"` when added.
 
 #' Post-smooth a fit's per-effect curves and add credible bands
 #'
 #' @param fit a fit returned by `mfsusie()` or `fsusie()`.
-#' @param method character, smoother. Currently only `"tiwt"`
-#'   (translation-invariant wavelet thresholding) is supported.
+#' @param method character, smoother. Currently only
+#'   `"scalewise"` is implemented.
 #' @param level numeric in (0, 1), credible-band coverage.
 #'   Default 0.95 (-> +/- 1.96 * sd).
 #' @param threshold_factor numeric, multiplier on the
@@ -312,9 +317,12 @@ print.summary.mfsusie <- function(x, ...) {
 #'   `$credible_bands` populated. Scalar outcomes
 #'   (`T_basis[m] = 1`) are passed through unchanged (no smoothing
 #'   needed).
+#' @references
+#' Manuscript: Denault et al. (2025) Methods, "Refining the effect
+#' estimates" (bioRxiv 10.1101/2025.08.17.670732).
 #' @export
 mf_post_smooth <- function(fit,
-                           method           = c("tiwt"),
+                           method           = c("scalewise"),
                            level            = 0.95,
                            threshold_factor = 1) {
   if (!inherits(fit, "mfsusie")) {

@@ -1,11 +1,11 @@
 ---
-title: "Covariate adjustment and colocalization with fsusie()"
+title: "Adjusting for covariates and colocalization analysis"
 author: "Gao Wang and contributors"
 output:
   rmarkdown::html_vignette:
     toc: true
 vignette: >
-  %\VignetteIndexEntry{Covariate adjustment and colocalization with fsusie()}
+  %\VignetteIndexEntry{Adjusting for covariates and colocalization analysis}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---

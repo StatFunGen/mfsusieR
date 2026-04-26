@@ -1,11 +1,11 @@
 ---
-title: "Why functional fine-mapping (versus scalar SuSiE on summaries)"
+title: "Why functional fine-mapping"
 author: "Gao Wang and contributors"
 output:
   rmarkdown::html_vignette:
     toc: true
 vignette: >
-  %\VignetteIndexEntry{Why functional fine-mapping (versus scalar SuSiE on summaries)}
+  %\VignetteIndexEntry{Why functional fine-mapping}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
