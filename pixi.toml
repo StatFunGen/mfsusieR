@@ -63,6 +63,14 @@ r45 = {features = ["r45"]}
 "bioconductor-gviz" = "*"
 "bioconductor-genomicranges" = "*"
 "bioconductor-iranges" = "*"
+# Transitive Gviz / GenomeInfoDb data packages that bioconda
+# does not always pull in automatically; required when pkgdown
+# renders the GTEx vignette.
+"bioconductor-genomeinfodb" = "*"
+"bioconductor-genomeinfodbdata" = "*"
+"bioconductor-summarizedexperiment" = "*"
+"bioconductor-rtracklayer" = "*"
+"bioconductor-biomart" = "*"
 
 # `coloc` is used by the colocalization vignette's coloc.susie
 # example. Linux-64 only (depends on Bioconductor packages that
