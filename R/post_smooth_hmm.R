@@ -1,15 +1,9 @@
-# HMM-based wavelet-free post-smoother for mfsusie / fsusie fits.
+# HMM-based wavelet-free post-smoother for `mfsusie` / `fsusie`.
 #
 # `mf_fit_hmm()` is the forward-backward EM smoother on a discrete
-# grid of effect-size states, with hub-and-spoke transitions and
-# ashr refinement at each iteration. Faithful port of the
-# upstream `fit_hmm`, with three port improvements:
-#   * `compute_marginal_bhat_shat` (susieR) replaces a hand-rolled
-#     regression in the upstream caller.
-#   * `set_data` and `calc_loglik` are bare ashr exports
-#     (imported in `R/mfsusieR-package.R`); no `:::`.
-#   * `%!in%` is inlined as `!(x %in% y)` rather than a separate
-#     helper.
+# grid of effect-size states with hub-and-spoke transitions and
+# ashr refinement at each iteration. The univariate caller uses
+# `susieR::compute_marginal_bhat_shat` for marginal Bhat / Shat.
 
 #' Forward-backward EM smoother on a hub-and-spoke effect-size grid
 #'
@@ -165,33 +159,30 @@ mf_fit_hmm <- function(x, sd,
   K    <- length(idx_comp)
   P    <- P[idx_comp, idx_comp, drop = FALSE]
   P    <- P / rowSums(P)
-  # Port-source bug fix: subset `mu` to match the reduced state
-  # space, so that state k (k = 1..K) consistently corresponds to
-  # original grid index `idx_comp[k]`. The upstream `fsusieR::fit_hmm`
-  # subsets `prob` and `P` but not `mu`, so when `idx_comp` is not a
-  # contiguous prefix (e.g. middle states are filtered out) the EM
-  # loop's `mu_ash <- mu[k]` reads from positional, not selective
-  # indices, breaking the state-emission alignment required by the
-  # forward-backward equations (Rabiner 1989 §III.B). The fsusieR
-  # author identified and fixed this in 9f89333 ("*** FIX: subset
-  # mu to match the reduced state space ***") then accidentally
-  # regressed it in fc806a5 during a Baum-Welch restructure. See
-  # `inst/notes/refactor-exceptions.md` (HMM-mu-subset).
+  # State k (k = 1..K) corresponds to original grid index
+  # `idx_comp[k]`; subset `mu` so the EM emission `mu[k]` aligns
+  # with state k. See `inst/notes/refactor-exceptions.md`
+  # (HMM-mu-subset).
   mu   <- mu[idx_comp]
 
-  # Per-iteration emission: null state is dnorm at zero; non-null
-  # states use exp(calc_loglik(ash_obj[[k]], data_t)).
-  emit_iter <- function(t) {
-    data_t <- set_data(X[t], sd[t])
-    out <- numeric(K)
-    out[1L] <- dnorm(X[t], mean = 0, sd = sd[t])
-    if (K > 1L) for (k in 2L:K)
-      out[k] <- exp(calc_loglik(ash_obj[[k]], data_t))
+  # T_pos x K emission matrix: column 1 is the null dnorm at
+  # zero, columns 2..K are the per-state ash marginal densities
+  # via `calc_vloglik` (one S4 dispatch per state, vector input).
+  build_emit_iter <- function() {
+    out <- matrix(NA_real_, T_pos, K)
+    out[, 1L] <- dnorm(X, mean = 0, sd = sd)
+    if (K > 1L) {
+      data_all <- set_data(X, sd)
+      for (k in 2L:K)
+        out[, k] <- exp(calc_vloglik(ash_obj[[k]]$fitted_g, data_all))
+    }
     out
   }
 
   iter <- 1L
   while (iter < maxiter) {
+    emit_mat <- build_emit_iter()
+
     alpha_hat   <- matrix(NA_real_, T_pos, K)
     alpha_tilde <- matrix(NA_real_, T_pos, K)
     G_t         <- rep(NA_real_, T_pos)
@@ -199,13 +190,13 @@ mf_fit_hmm <- function(x, sd,
     pi_iter <- prob[1L, ]
     pi_iter[pi_iter < epsilon] <- epsilon
     pi_iter <- pi_iter / sum(pi_iter)
-    alpha_tilde[1L, ] <- pi_iter * emit_iter(1L)
+    alpha_tilde[1L, ] <- pi_iter * emit_mat[1L, ]
     G_t[1L] <- sum(alpha_tilde[1L, ])
     alpha_hat[1L, ] <- alpha_tilde[1L, ] / G_t[1L]
 
     for (t in seq_len(T_pos - 1L)) {
       m <- alpha_hat[t, ] %*% P
-      alpha_tilde[t + 1L, ] <- m * emit_iter(t + 1L)
+      alpha_tilde[t + 1L, ] <- m * emit_mat[t + 1L, ]
       G_t[t + 1L] <- sum(alpha_tilde[t + 1L, ])
       alpha_hat[t + 1L, ] <- alpha_tilde[t + 1L, ] / G_t[t + 1L]
     }
@@ -216,7 +207,7 @@ mf_fit_hmm <- function(x, sd,
     beta_hat[T_pos, ]   <- 1
     beta_tilde[T_pos, ] <- 1
     for (t in (T_pos - 1L):1L) {
-      e <- emit_iter(t + 1L)
+      e <- emit_mat[t + 1L, ]
       beta_tilde[t, ] <- rowSums(sweep(P, 2L, beta_hat[t + 1L, ] * e, "*"))
       C_t[t] <- max(beta_tilde[t, ])
       beta_hat[t, ] <- beta_tilde[t, ] / C_t[t]
@@ -233,13 +224,17 @@ mf_fit_hmm <- function(x, sd,
       x_post <- x_post + prob[, k] * ash_obj[[k]]$result$PosteriorMean
     }
 
-    # Baum-Welch transition update.
+    # Baum-Welch transition update. Re-emit against the freshly
+    # refit `ash_obj`: the xi accumulator depends on post-refit
+    # ash means / weights, not the pre-refit emissions used in
+    # forward / backward.
     ab   <- alpha_hat * beta_hat
     prob <- ab / rowSums(ab)
+    emit_mat <- build_emit_iter()
     xi   <- matrix(0, K, K)
     for (t in seq_len(T_pos - 1L)) {
       xi_t <- outer(alpha_hat[t, ],
-                    beta_hat[t + 1L, ] * emit_iter(t + 1L)) * P
+                    beta_hat[t + 1L, ] * emit_mat[t + 1L, ]) * P
       xi <- xi + xi_t / sum(xi_t)
     }
     if (K > 1L) {
