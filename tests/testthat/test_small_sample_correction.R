@@ -108,7 +108,12 @@ test_that("mixture_log_bf_per_scale_johnson matches fsusieR::log_BF with df", {
       Shat[, idx, drop = FALSE],
       sd_grid, pi_grid, V_scale = 1, df = df)
   }
-  expect_equal(ours, ref, tolerance = 1e-12)
+  # Machine precision. The actual gap is ~3.55e-15 absolute,
+  # ~2.08e-16 relative (1 ULP). The two implementations sum
+  # the same terms in slightly different order; floating-point
+  # non-associativity produces sub-ULP-relative deltas, which
+  # is bit-identical for all practical purposes.
+  expect_equal(ours, ref, tolerance = 1e-14)
 })
 
 # --- 5. Argument validation -------------------------------------

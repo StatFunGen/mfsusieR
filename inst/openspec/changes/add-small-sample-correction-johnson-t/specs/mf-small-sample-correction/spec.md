@@ -28,11 +28,11 @@ For a small fixed seed dataset, the explicit-`FALSE` and implicit-default fits a
 
 ### Requirement: Johnson-t kernel matches the upstream marginal at machine precision
 
-The mfsusieR Johnson-t kernel `mixture_log_bf_per_scale_johnson` summed across scales SHALL match `fsusieR::log_BF` with `df = n - 1` at `tolerance <= 1e-12`. This is the apple-to-apple parity contract for the Johnson-t branch (the upstream kernel is the same scaled-t mixture density).
+The mfsusieR Johnson-t kernel `mixture_log_bf_per_scale_johnson` summed across scales SHALL match `fsusieR::log_BF` with `df = n - 1` at machine precision. This is the apple-to-apple parity contract for the Johnson-t branch (the upstream kernel is the same scaled-t mixture density). The two implementations sum the same terms in slightly different order; floating-point non-associativity produces sub-ULP-relative differences that vanish as the summation order is fixed.
 
 #### Scenario: per-variable LBF parity
 
-For a fixed seed dataset with `n = 50`, `J = 15`, `T_m = 64`, mixture grid `sd = c(0, 0.5, 1.5)`, weights `pi = c(0.6, 0.2, 0.2)`, and `df = n - 1`, the per-variable LBFs from the two implementations agree at tolerance `<= 1e-12`.
+For a fixed seed dataset with `n = 50`, `J = 15`, `T_m = 64`, mixture grid `sd = c(0, 0.5, 1.5)`, weights `pi = c(0.6, 0.2, 0.2)`, and `df = n - 1`, the per-variable LBFs from the two implementations agree at `tolerance <= 1e-14` (max absolute deviation ~3.55e-15, max relative deviation ~2.08e-16, i.e. one ULP).
 
 ### Requirement: Johnson-t reduces null-variant PIP relative to Wakefield on small `n`
 
