@@ -287,3 +287,37 @@ entry SHALL be blocked.
     (matching the port-source divisor with the corrected ER2);
     `per_scale_modality` (default) divides `sum(ER2[idx_s])` by
     `n * |idx_s|` per scale.
+
+- fsusieR/R/computational_functions.R `fit_hmm` (HMM-mu-subset)
+  Behavior: after the pre-EM forward-backward, `idx_comp` selects
+    a subset of the K_full mixture states whose average posterior
+    occupancy clears `thresh`. Upstream subsets `prob[, idx_comp]`
+    and `P[idx_comp, idx_comp]`, but does NOT subset `mu`. Inside
+    the EM loop (`for (k in 2:K)`), the line `mu_ash <- mu[k]`
+    therefore reads the k-th value of the un-subset grid rather
+    than `mu[idx_comp[k]]`, breaking the state-emission alignment
+    required by the forward-backward equations whenever
+    `idx_comp` is not the contiguous prefix `1..K_full`.
+  Decision: fixed-in `R/post_smooth_hmm.R::mf_fit_hmm` by
+    appending `mu <- mu[idx_comp]` to the subset block, alongside
+    `prob[, idx_comp]` and `P[idx_comp, idx_comp]`. The returned
+    `mu` therefore has length K (= length(idx_comp)) rather than
+    K_full.
+  Reason: the upstream author identified this as a missing fix
+    in commit 9f89333 (2026-03-12 14:30) with explicit comment
+    `# *** FIX: subset mu to match the reduced state space ***`
+    and `# was missing in previous version`. Four hours later in
+    commit fc806a5 (2026-03-12 18:46, "Bump up version") the line
+    was deleted during a Baum-Welch restructure that preserved
+    the sibling subsettings on `prob` and `P`. There is no
+    algorithmic justification for the deletion (Rabiner 1989
+    §III.B, Cappé-Moulines-Rydén 2005 §6: state reindexing in an
+    HMM is consistent only if all state-indexed quantities are
+    reindexed together). Pattern A per refactor-discipline section
+    3: `tests/testthat/test_post_smooth_HMM.R` switches from
+    bit-identity to (a) bit-identity in the contiguous-prefix
+    regime, (b) assertion of correct emission alignment in a
+    constructed non-contiguous case, and (c) explicit numerical
+    documentation of the upstream divergence. fsusieR upstream
+    issue should be opened referencing 9f89333 and fc806a5.
+
