@@ -81,20 +81,35 @@ fit_short <- readRDS("fit_progress.rds")
 
 ## Mid-run restart from a saved partial fit
 
-A direct mid-run resume API (`s_init = m_prev`-style) is a planned
-extension. The per-iteration model state is stored on the susieR
-backbone via S3 dispatch; surfacing it as a public argument
-requires changes to the function signature and dispatch table but
-no new numerical methods.
+`mfsusie()` accepts a `model_init` argument carrying a previously
+returned fit. The IBSS loop seeds itself from the supplied
+`alpha`, `mu`, `mu2`, `V`, `pi_V`, `G_prior`, `sigma2`, and
+`fitted` rather than the cold-start zero state, so a job that
+hit a per-call wall-time cap can resume from where it left off.
 
-Until that extension lands, the recommended pattern is:
+```{r warm-restart, eval = FALSE}
+# First job: cap iterations and save the partial fit.
+fit_partial <- mfsusie(X, Y_list, L = 15, L_greedy = 5,
+                       max_iter = 4,
+                       prior_variance_scope = "per_outcome",
+                       verbose = TRUE)
+saveRDS(fit_partial, "fit_progress.rds")
 
-1. Set `max_iter` generously (`200` or higher).
-2. Submit the job with `verbose = TRUE` so iterations are logged.
-3. If the job hits wall time, inspect `fit$niter` and `tail(fit$elbo)`
-   to confirm the run made progress.
-4. Re-submit the same call with a larger `max_iter` and the same
-   seed; the run is deterministic and reaches the same final fit.
+# Later, on a new job: resume.
+fit_partial <- readRDS("fit_progress.rds")
+fit_full    <- mfsusie(X, Y_list, L = 15, L_greedy = 5,
+                       max_iter = 100,
+                       model_init = fit_partial,
+                       prior_variance_scope = "per_outcome",
+                       verbose = TRUE)
+```
+
+The resumed run typically converges in one or two additional
+iterations when the partial fit was already close to the fixed
+point. The supplied `model_init` must have the same `L` as the
+new call, or fewer (in which case the warm-loaded effects are
+expanded with zero-state slots up to the requested `L`, the
+same growth pattern used by `L_greedy` between rounds).
 
 For diagnostic monitoring inside a long run, consider:
 
