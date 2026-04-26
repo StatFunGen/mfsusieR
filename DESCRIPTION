@@ -37,6 +37,7 @@ Suggests:
     knitr,
     rmarkdown,
     reshape2,
+    coloc,
     Gviz,
     GenomicFeatures,
     GenomicRanges,

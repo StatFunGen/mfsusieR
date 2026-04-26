@@ -50,6 +50,10 @@ r45 = {features = ["r45"]}
 "bioconductor-genomicranges" = "*"
 "bioconductor-iranges" = "*"
 
+# `coloc` is used by the colocalization vignette's coloc.susie
+# example. Listed under Suggests in DESCRIPTION.
+"r-coloc" = "*"
+
 # Development tools
 "r-devtools" = "*"
 "r-covr" = "*"

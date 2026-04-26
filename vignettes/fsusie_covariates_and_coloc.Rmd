@@ -18,18 +18,25 @@ knitr::opts_chunk$set(
 )
 ```
 
-This vignette covers two adjacent workflows that wrap a single
-`fsusie()` fit: (i) regressing out covariates before fine-mapping, and
-(ii) colocalizing two functional outcomes via per-outcome fits and a
-shared posterior.
+This vignette covers two adjacent workflows: (i) regressing out
+covariates before fine-mapping with `fsusie()`, and (ii) running a
+formal colocalization analysis on a pair of fine-mapping fits using
+`coloc::coloc.susie()`. The colocalization recipe applies to **any
+pair of susie-class fits** in the SuSiE suite — `susieR::susie()`,
+`mfsusieR::fsusie()`, `mfsusieR::mfsusie()`, `mvsusieR::mvsusie()`,
+and `susieR::susie_rss()` — because each returns the
+`(class = "susie", $sets$cs_index, $lbf_variable)` triple that
+`coloc.susie()` reads. `susie_rss()` is particularly useful for
+GWAS summary-statistics fine-mapping fits.
 
-FIXME: you say for illutration this is fine we do fsusie but the same idea apply to multi-outcome with mfsusie() one can also do colocazation and such
-
-FIXME: point out that this works for any pair of susie objets includeing susie()/fsusie()/mfsusie()/mvsusie()/susie_rss() the last one particularly useful for GWAS fine-mapping reuslts using summary stats
+For illustration we use `fsusie()` (single-outcome functional
+fine-mapping); `mfsusie()` works the same way and is the natural
+choice when both fits cover multiple outcomes.
 
 ```{r setup, message = FALSE}
 library(mfsusieR)
 library(susieR)
+library(coloc)
 set.seed(1)
 ```
 
@@ -44,6 +51,7 @@ the residualised response. The conventional recipe is to project out
 data(N3finemapping)
 X <- N3finemapping$X[, seq_len(150)]
 n <- nrow(X); p <- ncol(X); T_m <- 64
+colnames(X) <- paste0("SNP", seq_len(p))
 
 Z <- cbind(1, scale(rnorm(n)), scale(rnorm(n)))   # intercept + 2 covariates
 gamma <- matrix(rnorm(ncol(Z) * T_m), nrow = ncol(Z))
@@ -68,16 +76,16 @@ Equivalent options when `Z` is large: regress `Y` on `Z` once with
 `stats::lm.fit` and pass the residual matrix; or include `Z` in `X`
 with `prior_weights` set to `0` on the covariate columns.
 
-## Colocalisation across two functional outcomes
+## Colocalization with `coloc::coloc.susie()`
 
-The standard recipe: fit `fsusie()` on each outcome separately, then
-combine the per-effect posterior probabilities of association across
-the two CSes into a coloc-style PP.H4 statistic. Because both fits
-return per-effect `alpha` matrices on the same `X`, the combination is
-a straightforward outer product.
+For each outcome we fit `fsusie()` separately, then pass both fits
+to `coloc::coloc.susie()`. The function reads the SuSiE-class
+slots (`$sets$cs_index` to identify retained effects, `$lbf_variable`
+for the per-effect log Bayes factors over variants) and returns
+the standard PP.H0..PP.H4 posterior table per pair of credible
+sets.
 
 ```{r coloc-data}
-p <- ncol(X)
 beta1 <- matrix(0, p, T_m); beta1[42, ] <- 1.2 * shape
 beta2 <- matrix(0, p, T_m); beta2[42, ] <- 0.9 * shape         # shared causal
 beta3 <- matrix(0, p, T_m); beta3[88, ] <- 0.9 * shape         # distinct
@@ -86,34 +94,57 @@ Y2 <- X %*% beta2 + matrix(rnorm(n * T_m, sd = 0.4), n)
 Y3 <- X %*% beta3 + matrix(rnorm(n * T_m, sd = 0.4), n)
 ```
 
-Fit both outcomes and a non-colocalizing third for comparison.
+Fit each outcome:
 
 ```{r coloc-fit}
 fit1 <- fsusie(Y1, X, pos = positions, L = 15, L_greedy = 5, verbose = TRUE)
 fit2 <- fsusie(Y2, X, pos = positions, L = 15, L_greedy = 5, verbose = TRUE)
 fit3 <- fsusie(Y3, X, pos = positions, L = 15, L_greedy = 5, verbose = TRUE)
-
-# Per-effect colocalization: outer product of alpha rows, summed
-# over effects, summed over the diagonal (same variable causal in both).
-coloc_pp <- function(a, b) {
-  L <- min(nrow(a), nrow(b))
-  sum(vapply(seq_len(L), function(l) sum(a[l, ] * b[l, ]), numeric(1)))
-}
-coloc_pp(fit1$alpha, fit2$alpha)   # high: shared causal
-coloc_pp(fit1$alpha, fit3$alpha)   # low: distinct causals
 ```
 
-FIXME: This is completely wrong! we need to make coloc a package installed to the vignette and we actually do coloc::coloc.susie approach!! make sure it works for the code if not we need to fix it up the codes but here we need real colozation not a cheap knockoff as yu did now! YOu much check the coloc documentation and do it.
+`coloc.susie()` expects `colnames(X)` to be present so it can label
+posteriors by variant. Both fits run on the same `X`, so the labels
+align by construction.
 
-For full coloc-style PP.H0..H4 with separate priors, plug the
-per-effect alpha matrices into the standard
-`coloc::coloc.bf_bf` / `coloc.susie` machinery; mfsusieR's `alpha` and
-`lbf_variable` slots have the shape `coloc` expects.
+```{r coloc-shared}
+res_shared <- coloc.susie(fit1, fit2)
+res_shared$summary
+```
+
+`PP.H4.abf` is close to 1 for the (`fit1`, `fit2`) pair: a single
+shared causal variant `SNP42` drives both outcomes.
+
+```{r coloc-distinct}
+res_distinct <- coloc.susie(fit1, fit3)
+res_distinct$summary
+```
+
+`PP.H3.abf` is close to 1 for (`fit1`, `fit3`): both outcomes have
+a causal in the locus, but the causal variants are different
+(`SNP42` vs `SNP88`).
+
+The same call works on `mfsusie()` fits, on `susieR::susie()` fits,
+on `mvsusieR::mvsusie()` fits, and on `susieR::susie_rss()` fits;
+the inputs `coloc.susie` reads (`class`, `$sets$cs_index`,
+`$lbf_variable`) are part of the SuSiE-class contract.
 
 ## Notes
 
-- `fsusie()` does not mutate `X` and `Y` in place; the residualisation
-  pattern above is the recommended idiom.
+- This vignette assumes the user already has a pair of
+  fine-mapping fits, possibly from different SuSiE-suite
+  packages, and wants to test for colocalization between them.
+  The natural alternative when subject-level data is available
+  for all outcomes is to run `mfsusie()` jointly across them; the
+  multi-outcome fit shares signal across modalities and identifies
+  per-outcome and shared credible sets in one pass without a
+  post-hoc combination step. `coloc.susie()` becomes essential
+  when one or more inputs are summary-statistics fits (e.g., a
+  GWAS `susie_rss()` fit colocalized against a molecular-QTL
+  `fsusie()` fit), where the underlying individual-level data is
+  not available.
+- Joint `mfsusie()` fine-mapping that takes summary statistics
+  from a GWAS as one of its outcomes (so it can colocalize and
+  fine-map jointly with molecular-QTL outcomes) is future work.
 - The colocalization snippet here is intentionally minimal. For
   multi-outcome colocalization across more than two outcomes, see
   [the multi-outcome intro](mfsusie_intro.html), which fits all
