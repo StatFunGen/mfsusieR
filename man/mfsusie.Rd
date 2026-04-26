@@ -34,7 +34,8 @@ mfsusie(
   quantile_norm = FALSE,
   control_mixsqp = NULL,
   mixsqp_null_penalty = 0.7,
-  model_init = NULL
+  model_init = NULL,
+  small_sample_correction = FALSE
 )
 }
 \arguments{
@@ -148,6 +149,17 @@ start zero state. The supplied fit must have the same \code{L}
 as the requested \code{L}; otherwise the call errors. Useful
 for resuming a long-running fit after a per-call iteration
 budget. Default \code{NULL} (cold start).}
+
+\item{small_sample_correction}{logical. When \code{TRUE}, replaces
+the per-variable Wakefield Normal marginal Bayes factor in
+the SER step with a Johnson 2005 scaled Student-t marginal
+with \code{df = n - 1} degrees of freedom. Useful for small
+sample sizes where the Wakefield approximation
+under-propagates residual-variance uncertainty into the
+per-variable BF, inflating PIPs at null variants. The
+correction acts on variable selection probabilities only;
+posterior moments given inclusion are unchanged. Default
+\code{FALSE}.}
 }
 \value{
 A list of class \code{c("mfsusie", "susie")} carrying:

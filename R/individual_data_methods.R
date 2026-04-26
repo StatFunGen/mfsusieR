@@ -158,6 +158,8 @@ mf_per_outcome_bhat_shat <- function(data, model, m) {
 #' @noRd
 loglik.mf_individual <- function(data, params, model, V, ser_stats, l = NULL, ...) {
   M <- data$M
+  use_johnson <- isTRUE(params$small_sample_correction)
+  df          <- params$small_sample_df
   outcome_lbfs <- vector("list", M)
   for (m in seq_len(M)) {
     Bhat_m <- ser_stats$betahat[[m]]
@@ -170,10 +172,17 @@ loglik.mf_individual <- function(data, params, model, V, ser_stats, l = NULL, ..
     for (s in seq_along(G_m)) {
       idx <- G_m[[s]]$idx
       g_s <- G_m[[s]]$fitted_g
-      lbf_m <- lbf_m + mixture_log_bf_per_scale(
-        Bhat_m[, idx, drop = FALSE],
-        Shat_m[, idx, drop = FALSE],
-        g_s$sd, g_s$pi, V_scale = V)
+      lbf_m <- lbf_m + if (use_johnson) {
+        mixture_log_bf_per_scale_johnson(
+          Bhat_m[, idx, drop = FALSE],
+          Shat_m[, idx, drop = FALSE],
+          g_s$sd, g_s$pi, V_scale = V, df = df)
+      } else {
+        mixture_log_bf_per_scale(
+          Bhat_m[, idx, drop = FALSE],
+          Shat_m[, idx, drop = FALSE],
+          g_s$sd, g_s$pi, V_scale = V)
+      }
     }
     outcome_lbfs[[m]] <- lbf_m
   }

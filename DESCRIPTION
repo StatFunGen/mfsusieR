@@ -29,6 +29,7 @@ Imports:
     mixsqp,
     ashr,
     matrixStats,
+    LaplacesDemon,
     stats
 LinkingTo:
     cpp11

@@ -423,3 +423,29 @@ entry SHALL be blocked.
     `prune_single_effects` from susieR for the mfsusieR
     list-of-list `mu` / `mu2` shape, appending zero-state
     effect slots up to the requested L.
+
+- mvf.susie.alpha/R/multfsusie.R::cor_small +
+  mvf.susie.alpha/R/computational_routine.R::log_BFu (df branch)
+  Behavior: Johnson 2005 scaled Student-t marginal Bayes factor
+    for the per-variable SER, used as a small-sample
+    correction to the Wakefield Normal marginal. df = n - 1
+    per outcome.
+  Decision: replaced-by-`mfsusie(small_sample_correction =
+    TRUE)` -> `R/posterior_mixture.R::mixture_log_bf_per_scale_johnson`.
+  Reason: the upstream `cor_small` argument name is opaque;
+    the renamed argument describes the purpose. The kernel is
+    ported R-only (no C++ change) and gates on
+    `requireNamespace("LaplacesDemon")` via DESCRIPTION
+    Imports. The fidelity test asserts per-variable LBFs from
+    the ported kernel summed across scales match
+    `fsusieR::log_BF(..., df = n - 1)` at tolerance <= 1e-12.
+
+  Alternative considered: porting susieR's NIG path
+    (`estimate_residual_method = "NIG"`). The Stage 4a audit
+    established that every NIG hook in susieR is shadowed by
+    an `mf_individual` S3 override, so plumb-through would
+    have no effect, and that a wavelet-mixture-prior NIG
+    marginal BF would be a separate research contribution
+    (mixture x NIG composition; no manuscript derivation
+    exists). Johnson-t is the implementable port that
+    addresses the same use case.
