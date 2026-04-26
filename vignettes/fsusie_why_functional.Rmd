@@ -114,7 +114,7 @@ residual variance) and the tuned (true outer-product prior,
 fixed identity residual variance). The default fails on this
 data; the tuned configuration recovers the correct credible
 set. The PIP-zero failure mode of the default mvSuSiE on this
-simulation is the subject of mvsusieR issue 61.
+simulation is the subject of [mvsusieR issue 61](https://github.com/stephenslab/mvsusieR/issues/61).
 
 ```{r mvsusie, eval = has_mvsusie, message = FALSE, warning = FALSE}
 library(mvsusieR)
