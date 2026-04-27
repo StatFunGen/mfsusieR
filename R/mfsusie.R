@@ -170,7 +170,7 @@ mfsusie <- function(X, Y,
                     low_count_filter          = 0,
                     quantile_norm             = FALSE,
                     control_mixsqp            = NULL,
-                    mixsqp_null_penalty       = 0.7,
+                    mixsqp_null_penalty       = 0.01,
                     model_init                = NULL,
                     small_sample_correction   = FALSE) {
   if (!is.logical(small_sample_correction) ||
