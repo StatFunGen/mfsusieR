@@ -95,7 +95,7 @@ mf_em_likelihood_per_scale <- function(bhat_slice, shat_slice, sd_grid,
 #' @keywords internal
 #' @noRd
 mf_em_m_step_per_scale <- function(L, zeta, idx_size,
-                                   mixsqp_null_penalty = 0.7,
+                                   mixsqp_null_penalty = 0.01,
                                    init_pi0_w     = 0.5,
                                    tol_null_prior = 0.001,
                                    control_mixsqp = NULL,
