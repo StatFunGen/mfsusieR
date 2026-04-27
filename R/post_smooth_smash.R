@@ -25,16 +25,19 @@
 
   effect_curves  <- vector("list", M)
   credible_bands <- vector("list", M)
+  lfsr_curves    <- vector("list", M)
 
   for (m in seq_len(M)) {
     T_m <- meta$T_basis[m]
     effect_curves[[m]]  <- vector("list", L)
     credible_bands[[m]] <- vector("list", L)
+    lfsr_curves[[m]]    <- vector("list", L)
     if (T_m == 1L) {
       # Scalar outcome: smash is a no-op; fall back to scalewise.
       tmp <- .post_smooth_scalewise(fit, level, threshold_factor = 1)
       effect_curves[[m]]  <- tmp$effect_curves[[m]]
       credible_bands[[m]] <- tmp$credible_bands[[m]]
+      lfsr_curves[[m]]    <- tmp$lfsr_curves[[m]]
       next
     }
 
@@ -47,11 +50,18 @@
       effect_curves[[m]][[l]]  <- out$effect_estimate
       credible_bands[[m]][[l]] <- cbind(out$cred_band[2L, ],
                                         out$cred_band[1L, ])
+      # Recover sd from the credible-band half-width: (upper -
+      # lower) / 2 = z_crit * sd, so sd = (upper - lower) /
+      # (2 * z_crit). Then lfsr = pnorm(-|mean| / sd).
+      sd_pos <- (out$cred_band[1L, ] - out$cred_band[2L, ]) /
+                (2 * z_crit)
+      lfsr_curves[[m]][[l]] <- .gaussian_lfsr(out$effect_estimate,
+                                              sd_pos)
     }
   }
   list(effect_curves  = effect_curves,
        credible_bands = credible_bands,
-       lfsr_curves    = NULL)
+       lfsr_curves    = lfsr_curves)
 }
 
 #' Per-position smash regression of a multi-position response
@@ -110,7 +120,7 @@ univariate_smash_regression <- function(Y, X, alpha = 0.05) {
   est <- as.numeric(res$Bhat[1L, ])
   sds <- as.numeric(res$Shat[1L, ])
 
-  # Defensive fix: drop NA / non-positive sds (matches upstream).
+  # Defensive fix: drop NA / non-positive sds.
   bad <- is.na(sds) | sds <= 0
   if (any(bad)) {
     est[bad] <- 0

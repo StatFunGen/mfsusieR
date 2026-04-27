@@ -60,12 +60,12 @@ mf_em_likelihood_per_scale <- function(bhat_slice, shat_slice, sd_grid,
 
 #' Run mixsqp at one (outcome, scale)
 #'
-#' For `is_ebmvfr = FALSE` (default; SuSiE / mfsusie path):
+#' For `is_ebmvfr = FALSE` (default; mfsusie path):
 #' builds the weight vector
 #' `w = (mixsqp_null_penalty * idx_size, zeta_repeated)`,
 #' prepended with the null-component penalty pseudo-observation.
 #'
-#' For `is_ebmvfr = TRUE` (EBmvFR-adjust path): omits the
+#' For `is_ebmvfr = TRUE` (covariate-adjustment path): omits the
 #' penalty prepend; the weight vector is just
 #' `w = rep(1, p * idx_size)` (each (j, t) observation
 #' counts equally) and the L matrix has no penalty row.
@@ -86,8 +86,8 @@ mf_em_likelihood_per_scale <- function(bhat_slice, shat_slice, sd_grid,
 #' @param tol_null_prior numeric, threshold below which non-null
 #'   mass collapses to zero.
 #' @param control_mixsqp optional named list of mixsqp control args.
-#' @param is_ebmvfr logical, run the EBmvFR-flavored M-step
-#'   (no penalty prepend, uniform weights). Default FALSE.
+#' @param is_ebmvfr logical, run the covariate-adjustment-flavored
+#'   M-step (no penalty prepend, uniform weights). Default FALSE.
 #' @return length-K numeric vector of mixture proportions summing to 1.
 #' @references
 #' Manuscript: methods/derivation.tex line 216
@@ -102,8 +102,9 @@ mf_em_m_step_per_scale <- function(L, zeta, idx_size,
                                    is_ebmvfr      = FALSE) {
   K <- ncol(L)
   w <- if (is_ebmvfr) {
-    # EBmvFR-flavored: zeta = rep(1/K_covariates, K_covariates),
-    # repeated `idx_size` times. No null-penalty prepend.
+    # Covariate-adjustment branch: zeta is uniform across the
+    # K covariate-effect cells, repeated `idx_size` times. No
+    # null-component penalty row.
     rep(zeta, idx_size)
   } else {
     c(mixsqp_null_penalty * idx_size, rep(zeta, idx_size))

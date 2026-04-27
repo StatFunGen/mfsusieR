@@ -25,8 +25,8 @@
 #'   `prior` (an `mf_prior_scale_mixture` object containing
 #'   `V_grid`, `pi`, `null_prior_weight`), and
 #'   `residual_variance` (initial sigma2; either a length-M list
-#'   of scalars for legacy mode or a length-M list of length-`S_m`
-#'   vectors for per-(scale, outcome) mode).
+#'   of scalars for the per-outcome mode or a length-M list of
+#'   length-`S_m` vectors for the per-(scale, outcome) mode).
 #' @param var_y per-outcome variance of the observed response
 #'   curves, used as a fallback when `params$residual_variance` is
 #'   NULL.

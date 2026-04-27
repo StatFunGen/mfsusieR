@@ -140,7 +140,7 @@ the null component is removed, and the per-(scale, outcome) variance
 structure collapses to a scalar, `mfsusie()` reduces **exactly** to
 `susieR::susie()` when we set it a fixed effects size prior.
 
-```{r c1-degeneracy}
+```{r susie-degeneracy}
 y_scalar <- as.numeric(X %*% beta + rnorm(n, sd = 0.4))
 y <- (y_scalar - mean(y_scalar)) / sd(y_scalar)
 
@@ -173,7 +173,7 @@ identical(fit_d$niter, fit_s$niter)
 
 The credible-set memberships are also identical:
 
-```{r c1-cs}
+```{r susie-degeneracy-cs}
 identical(lapply(fit_d$sets$cs, sort),
           lapply(fit_s$sets$cs, sort))
 ```

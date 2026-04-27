@@ -141,9 +141,8 @@ when you want the post-processed curves.
 `mf_post_smooth(method = ...)` supports four methods:
 
 - `"TI"` (default) — translation-invariant wavelet denoising via
-  cycle spinning. Bit-identical to
-  `fsusieR::univariate_TI_regression` on the orthonormal wavelet
-  path. Best when the per-position band is the visual focus.
+  cycle spinning. Best when the per-position band is the visual
+  focus.
 - `"scalewise"` — per-scale soft-thresholding of the
   wavelet posterior mean at
   `threshold_factor * sd_s * sqrt(2 log T)`, followed by inverse
@@ -154,10 +153,8 @@ when you want the post-processed curves.
   local false sign rate (`lfsr_curves`); `mfsusie_plot()`
   overlays it on a secondary axis with the threshold line.
 - `"smash"` — `smashr::smash.gaus` empirical-Bayes wavelet
-  shrinkage on the per-position regression estimate. Bit-
-  identical to `fsusieR::univariate_smash_regression` on the
-  same isolated response. Requires the `smashr` package
-  (Suggests).
+  shrinkage on the per-position regression estimate. Requires
+  the `smashr` package (Suggests).
 
 All four smoothers can coexist on the same fit. `mfsusie_plot()`
 picks one by priority (TI > smash > HMM > scalewise) and emits a

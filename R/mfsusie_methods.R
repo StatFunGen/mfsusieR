@@ -322,36 +322,55 @@ print.summary.mfsusie <- function(x, ...) {
 }
 # Post-processing of effect curves on an `mfsusie` fit.
 #
-# `mf_post_smooth(fit)` returns the fit with two new slots:
+# `mf_post_smooth(fit)` returns the fit with three new slots:
 #   $effect_curves[[m]][[l]]  : length-T_basis[m] smoothed curve
 #   $credible_bands[[m]][[l]] : T_basis[m] x 2 [lower, upper]
-# `method = "HMM"` additionally populates
 #   $lfsr_curves[[m]][[l]]    : length-T_basis[m] in [0, 1]
+#
+# `method = "HMM"` derives lfsr from its mixture posterior. All
+# other methods derive lfsr from the posterior (mean, sd) under
+# the Gaussian approximation:
+#   lfsr(t) = pnorm(-|mean(t)| / sd(t)).
 #
 # All methods operate on the fit alone: residuals via
 # `fit$residuals` and the per-effect lead-variable column via
 # `fit$lead_X`.
 
+# Internal: per-position local false sign rate from a Gaussian
+# posterior summary. Returns `pnorm(-|mean| / sd)`, with sd
+# floored at machine epsilon to avoid divide-by-zero.
+.gaussian_lfsr <- function(mean, sd) {
+  sd <- pmax(sd, .Machine$double.eps)
+  stats::pnorm(-abs(mean) / sd)
+}
+
 #' Post-smooth a fit's per-effect curves and add credible bands
 #'
-#' Three smoothing methods are dispatched by `method`:
+#' Four smoothing methods are dispatched by `method`:
 #'
 #' - `"scalewise"` -- per-scale soft-thresholding of the lead
 #'   variable's wavelet posterior mean. Fast, no iterations,
 #'   uses only the wavelet posterior moments. Suitable for quick
 #'   visual cleanup.
-#' - `"TI"` -- cycle-spinning translation-invariant denoising
-#'   (Coifman & Donoho 1995). For each effect, isolates the
-#'   per-effect residual response (in position space), regresses
-#'   onto the lead variable's column of X via the saved residual
-#'   + lead column, applies the stationary wavelet transform
-#'   row-by-row, scalewise `ashr::ash` shrinkage on wavelet
-#'   coefficients, and inverts via cycle-spinning average.
-#'   Produces tighter credible bands than scalewise; matches the
-#'   refinement step in the fSuSiE Methods.
+#' - `"TI"` (default) -- cycle-spinning translation-invariant
+#'   denoising (Coifman & Donoho 1995). For each effect, isolates
+#'   the per-effect residual response (in position space),
+#'   regresses onto the lead variable's column of X, applies the
+#'   stationary wavelet transform row-by-row, scalewise
+#'   `ashr::ash` shrinkage on wavelet coefficients, and inverts
+#'   via cycle-spinning average. Produces tighter credible bands
+#'   than scalewise.
 #' - `"HMM"` -- hidden Markov denoising on per-position regression
-#'   coefficients. Yields a posterior mean curve plus per-position
-#'   `lfsr_curves`.
+#'   coefficients. Yields a posterior mean curve plus a mixture-
+#'   posterior local false sign rate.
+#' - `"smash"` -- `smashr::smash.gaus` empirical-Bayes wavelet
+#'   shrinkage on the per-position regression estimate. Requires
+#'   the `smashr` package (Suggests).
+#'
+#' All four methods populate `lfsr_curves`. For TI, scalewise,
+#' and smash the lfsr is `pnorm(-|mean| / sd)` under the
+#' Gaussian-posterior approximation; for HMM it comes from the
+#' mixture posterior directly.
 #'
 #' All three operate on the fit alone: residuals are read from
 #' `fit$residuals` and the per-effect lead variable column from
@@ -370,9 +389,8 @@ print.summary.mfsusie <- function(x, ...) {
 #'   stationary-wavelet transform. Default `"DaubExPhase"`.
 #' @param halfK integer, half-grid size for the HMM `fit_hmm`
 #'   helper. Default 20.
-#' @return the input fit with `$effect_curves` and
-#'   `$credible_bands` populated. `$lfsr_curves` is also populated
-#'   when `method = "HMM"`. Scalar outcomes
+#' @return the input fit with `$effect_curves`, `$credible_bands`,
+#'   and `$lfsr_curves` populated. Scalar outcomes
 #'   (`T_basis[m] = 1`) skip the wavelet step (smoothing is a
 #'   no-op there).
 #' @export
@@ -480,11 +498,13 @@ mf_post_smooth <- function(fit,
 
   effect_curves  <- vector("list", M)
   credible_bands <- vector("list", M)
+  lfsr_curves    <- vector("list", M)
 
   for (m in seq_len(M)) {
     T_m <- meta$T_basis[m]
     effect_curves[[m]]  <- vector("list", L)
     credible_bands[[m]] <- vector("list", L)
+    lfsr_curves[[m]]    <- vector("list", L)
 
     for (l in seq_len(L)) {
       lead_l <- which.max(fit$alpha[l, ])
@@ -511,11 +531,12 @@ mf_post_smooth <- function(fit,
       mean_pos <- effect_curves[[m]][[l]]
       credible_bands[[m]][[l]] <- cbind(mean_pos - z_crit * sd_pos,
                                         mean_pos + z_crit * sd_pos)
+      lfsr_curves[[m]][[l]] <- .gaussian_lfsr(mean_pos, sd_pos)
     }
   }
   list(effect_curves  = effect_curves,
        credible_bands = credible_bands,
-       lfsr_curves    = NULL)
+       lfsr_curves    = lfsr_curves)
 }
 
 # ---- TI: cycle-spinning translation-invariant wavelet denoising ----
@@ -528,16 +549,19 @@ mf_post_smooth <- function(fit,
 
   effect_curves  <- vector("list", M)
   credible_bands <- vector("list", M)
+  lfsr_curves    <- vector("list", M)
 
   for (m in seq_len(M)) {
     T_m <- meta$T_basis[m]
     effect_curves[[m]]  <- vector("list", L)
     credible_bands[[m]] <- vector("list", L)
+    lfsr_curves[[m]]    <- vector("list", L)
     if (T_m == 1L) {
       # Scalar outcome: TI is a no-op; fall back to scalewise.
       tmp <- .post_smooth_scalewise(fit, level, threshold_factor = 1)
       effect_curves[[m]]  <- tmp$effect_curves[[m]]
       credible_bands[[m]] <- tmp$credible_bands[[m]]
+      lfsr_curves[[m]]    <- tmp$lfsr_curves[[m]]
       next
     }
 
@@ -556,14 +580,13 @@ mf_post_smooth <- function(fit,
       effect_curves[[m]][[l]]  <- out$effect_estimate
       credible_bands[[m]][[l]] <- cbind(out$cred_band[2L, ],   # low
                                         out$cred_band[1L, ])   # up
-      # Re-order to [lower, upper]:
-      credible_bands[[m]][[l]] <- credible_bands[[m]][[l]][,
-                                                          c(1L, 2L)]
+      lfsr_curves[[m]][[l]] <- .gaussian_lfsr(out$effect_estimate,
+                                              out$fitted_sd)
     }
   }
   list(effect_curves  = effect_curves,
        credible_bands = credible_bands,
-       lfsr_curves    = NULL)
+       lfsr_curves    = lfsr_curves)
 }
 
 # Reconstruct the position-space response by inverting
@@ -618,10 +641,10 @@ mf_post_smooth <- function(fit,
 .univariate_ti_regression <- function(Y_pos, x_lead,
                                       filter_number, family,
                                       z_crit) {
-  # Per-column SD normalisation matches the upstream pipeline:
-  # scale Y (per position) and X (one column) to unit variance,
-  # run wavelet regression on the scaled inputs, then unscale at
-  # the end by the recorded column SDs.
+  # Per-column SD normalisation: scale Y (per position) and X
+  # (one column) to unit variance, run wavelet regression on the
+  # scaled inputs, then unscale at the end by the recorded column
+  # SDs.
   Y_sc  <- col_scale(Y_pos, center = TRUE, scale = TRUE)
   csd_Y <- attr(Y_sc, "scaled:scale")
   x_mat <- col_scale(matrix(x_lead, ncol = 1L),
@@ -640,10 +663,7 @@ mf_post_smooth <- function(fit,
     wd(Y_sc[i, ], type = "station",
        filter.number = filter_number, family = family)$C))
 
-  # Univariate regression of each wavelet column on x_sc. Use
-  # susieR's `compute_marginal_bhat_shat` so we reuse the
-  # backbone regression helper rather than re-deriving X'Y/X'X
-  # locally.
+  # Univariate regression of each wavelet column on x_sc.
   reg_d  <- compute_marginal_bhat_shat(matrix(x_sc, ncol = 1L), Y_f)
   reg_c  <- compute_marginal_bhat_shat(matrix(x_sc, ncol = 1L), Y_c)
   bhat_d <- as.numeric(reg_d$Bhat)
@@ -680,9 +700,8 @@ mf_post_smooth <- function(fit,
                              filter = mywst$filter)
 
   # Exact pointwise variance via squared-filter wd / wst /
-  # av-basis pipeline. The variance basis uses the upstream
-  # default filter (10, DaubLeAsymm) regardless of the smoothing
-  # filter; matches the upstream univariate_TI_regression bit-for-bit.
+  # av-basis pipeline. The variance basis uses filter 10 /
+  # DaubLeAsymm regardless of the smoothing filter.
   var_wd <- wd_variance(rep(0, T_pos))
   var_wd$D <- wd_var
   fitted_var_sc <- av_basis_variance(wst_variance(var_wd))
@@ -721,7 +740,7 @@ mf_post_smooth <- function(fit,
       tmp <- .post_smooth_scalewise(fit, level, threshold_factor = 1)
       effect_curves[[m]]  <- tmp$effect_curves[[m]]
       credible_bands[[m]] <- tmp$credible_bands[[m]]
-      lfsr_curves[[m]]    <- replicate(L, NULL, simplify = FALSE)
+      lfsr_curves[[m]]    <- tmp$lfsr_curves[[m]]
       next
     }
 
@@ -734,10 +753,10 @@ mf_post_smooth <- function(fit,
         X     = matrix(x_lead, ncol = 1L),
         halfK = halfK)
       # Pointwise credible band via per-position posterior
-      # variance derived from the smoothed posterior. The
-      # upstream `univariate_HMM_regression` returns no band; we
-      # build one from the diagonal of `var(x_post)` by reusing
-      # the lfsr trick: lfsr -> tail probability -> SE.
+      # variance derived from the smoothed posterior. The HMM
+      # smoother itself returns no band; we build one from the
+      # diagonal of `var(x_post)` by reusing the lfsr trick:
+      # lfsr -> tail probability -> SE.
       eff <- out$effect_estimate
       effect_curves[[m]][[l]]  <- eff
       # No pointwise credible band for HMM: the natural

@@ -176,8 +176,8 @@ before the rank transform sees them.
 ## Small-sample correction
 
 `small_sample_correction = TRUE` replaces the per-variable
-Wakefield Normal marginal Bayes factor with the Johnson 2005
-scaled Student-t marginal. The two kernels differ only in the
+Wakefield Normal marginal Bayes factor with a scaled Student-t
+marginal at `df = n - 1`. The two kernels differ only in the
 density used in the per-component mixture:
 
 $$
@@ -186,24 +186,15 @@ $$
 $$
 
 $$
-\text{Johnson-t: } \mathrm{dst}\bigl(\hat{\beta}_j;\;
+\text{Student-t: } \mathrm{dst}\bigl(\hat{\beta}_j;\;
    \tau = (\sigma_k^2 + \hat{s}_j^2)^{-1},\; \nu = n - 1\bigr).
 $$
 
-The Student-t marginal arises from the Johnson 2005 JRSSB
-construction (an objective Bayes factor for a t test); for the
-multi-functional case, the same marginal is exposed in the
-legacy `mvf.susie.alpha::multfsusie(..., cor_small = TRUE)`
-and `fsusieR::susiF(..., cor_small = TRUE)` switches. For
-small `n` the Student-t marginal places more mass in the tails
-than the Normal, which dampens the per-variable Bayes factor at
-variants whose `\hat{\beta} / \hat{s}` is large by chance.
+For small `n` the Student-t marginal places more mass in the
+tails than the Normal, dampening the per-variable Bayes factor
+at variants whose $\hat{\beta} / \hat{s}$ is large by chance.
 Posterior moments given inclusion are unchanged; only the
 variable-selection probabilities are corrected.
-
-The mfsusieR Johnson-t kernel and the upstream
-`fsusieR::log_BF(..., df = n - 1)` reference agree at machine
-precision (one ULP) on the same inputs.
 
 ```{r usage-johnson, eval = FALSE}
 fit <- mfsusie(X, Y_list,

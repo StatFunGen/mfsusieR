@@ -125,12 +125,7 @@ col_scale <- function(x,
     if (scale)  attr(x, "scaled:scale")  <- csd
     # The `d` attribute is algebraically (n - 1) per column once
     # zero-variance columns have had their csd replaced with 1
-    # (which has happened above). The port source computes the
-    # same quantity via a two-step `(a + b - a) / b` expression
-    # that introduces ULP-level rounding noise; we compute the
-    # simplified form directly. The C2 fidelity test on the `d`
-    # attribute uses a relaxed tolerance (`1e-12`) to accept the
-    # resulting machine-epsilon difference.
+    # (handled above). Computed directly here.
     attr(x, "d") <- rep(nrow(x) - 1, ncol(x))
   }
   x
@@ -180,13 +175,10 @@ interpol_ks <- function(y, bp, gridn) {
 #' interpolated `Y` and the regular grid expressed in the original
 #' position units, ready for downstream use.
 #'
-#' Behaviour-preserving simplification of the port source's
-#' `interpol_mat` plus its separate position-rescaling step. The
-#' original chain rescaled the wavethresh `gridt` (in `[0, 1]`)
-#' to a `[0, length(grid)]` integer scale, then back to position
-#' units; we collapse the two rescalings into one linear
-#' interpolation that produces the same numbers in fewer passes
-#' over `pos`.
+#' Position rescaling is folded into a single linear
+#' interpolation pass: the wavethresh `gridt` (in `[0, 1]`) is
+#' mapped directly to position units rather than going through an
+#' intermediate `[0, length(grid)]` integer scale.
 #'
 #' @param Y numeric matrix `n x T`, one curve per row.
 #' @param pos numeric vector of length `T`, sampling positions.
