@@ -186,7 +186,7 @@
 #'     enabled.}
 #' }
 #'
-#' Each fit is stripped of `residuals`, `XtY`, `tracking`, and any
+#' Each fit is stripped of `Y_grid`, `X_eff`, `tracking`, and any
 #' raw `X`/`Y` matrices to keep the package size small and avoid
 #' shipping individual-level data.
 #'

@@ -10,7 +10,7 @@
 # Fields are sized at construction; the IBSS loop mutates them
 # in-place per iteration. Finalize (`ibss_finalize.mf_individual`,
 # attaches the post-fit fields (`pip`, `cs`, `elbo`,
-# `niter`, `converged`, `residuals`).
+# `niter`, `converged`).
 #
 # @references
 # Manuscript: methods/online_method.tex

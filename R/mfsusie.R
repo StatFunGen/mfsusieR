@@ -128,6 +128,14 @@
 #'   as the requested `L`; otherwise the call errors. Useful
 #'   for resuming a long-running fit after a per-call iteration
 #'   budget. Default `NULL` (cold start).
+#' @param attach_smoothing_inputs logical. When `TRUE` (default),
+#'   the fit carries `Y_grid` (post-remap position-space Y) and
+#'   `X_eff` (per-effect alpha-weighted aggregate of X) so that
+#'   `mf_post_smooth(fit)` runs without re-passing the data.
+#'   Set `FALSE` to drop these and call
+#'   `mf_post_smooth(fit, X = X, Y = Y, ...)` instead; useful
+#'   when sharing fits where the per-individual data should
+#'   not travel with the fit.
 #'
 #' @return A list of class `c("mfsusie", "susie")` carrying:
 #' \describe{
@@ -145,9 +153,13 @@
 #'   \item{`pip`}{length-p posterior inclusion probabilities.}
 #'   \item{`sets`}{credible sets via `susie_get_cs`.}
 #'   \item{`fitted`}{`list[M]` of running per-outcome fits in the
-#'     wavelet domain.}
-#'   \item{`residuals`}{`list[M]` per-outcome residuals, when
-#'     always populated.}
+#'     wavelet domain. Used by `model_init` to warm-start a
+#'     follow-up call.}
+#'   \item{`Y_grid`}{`list[M]`, the post-remap position-space
+#'     response on the padded grid. Attached when
+#'     `attach_smoothing_inputs = TRUE` (default).}
+#'   \item{`X_eff`}{`list[L]` of per-effect alpha-weighted X
+#'     aggregates. Attached when `attach_smoothing_inputs = TRUE`.}
 #' }
 #'
 #' @references
@@ -184,7 +196,8 @@ mfsusie <- function(X, Y,
                     control_mixsqp            = NULL,
                     mixsqp_null_penalty       = 0.1,
                     model_init                = NULL,
-                    small_sample_correction   = FALSE) {
+                    small_sample_correction   = FALSE,
+                    attach_smoothing_inputs   = TRUE) {
   if (!is.logical(small_sample_correction) ||
       length(small_sample_correction) != 1L ||
       is.na(small_sample_correction)) {
@@ -284,27 +297,25 @@ mfsusie <- function(X, Y,
   #    registered by `.onLoad`.
   fit <- susie_workhorse(data, params)
 
-  # 5. Attach per-outcome wavelet-domain residuals (D - fitted)
-  #    plus per-effect lead-variable column of X. Both feed
-  #    `mf_post_smooth()` (TI / HMM smoothers) without re-passing
-  #    (X, Y).
-  {
-    fit$residuals <- vector("list", data$M)
+  # 5. Attach the smoothing inputs unless the caller opted out.
+  #    `Y_grid[[m]]` is the post-remap, position-space Y on the
+  #    padded n x T_basis[m] grid (raw, no centring or scaling).
+  #    `X_eff[[l]]` is the alpha-weighted aggregate raw-X column
+  #    `X_raw %*% alpha[l, ]` and serves as the per-effect
+  #    regression predictor for `mf_post_smooth()`.
+  if (attach_smoothing_inputs) {
+    fit$Y_grid <- vector("list", data$M)
     for (m in seq_len(data$M)) {
-      fit$residuals[[m]] <- data$D[[m]] - fit$fitted[[m]]
+      fit$Y_grid[[m]] <- data$Y[[m]]
     }
     L <- nrow(fit$alpha)
-    fit$lead_X <- vector("list", L)
+    fit$X_eff <- vector("list", L)
     for (l in seq_len(L)) {
-      lead <- which.max(fit$alpha[l, ])
-      # Un-standardize so that lead_X carries the original X column
-      # SD. The post-smoother regresses iso_pos on lead_X and
-      # unscales by csd_Y / csd_X; if lead_X is already standardized
-      # to unit variance, csd_X collapses to 1 and the recovered
-      # effect comes back in per-unit-standardized-X units, off by
-      # a factor of sd(X_raw) from the per-unit-raw-X effect the
-      # vignettes compare against.
-      fit$lead_X[[l]] <- data$X[, lead] * data$csd[lead]
+      # data$X is centred + standardised; multiply by data$csd
+      # (X_scale) to get the raw-X column equivalent of the
+      # alpha-weighted aggregate.
+      fit$X_eff[[l]] <- as.numeric(
+        data$X %*% (fit$alpha[l, ] * data$csd))
     }
   }
 

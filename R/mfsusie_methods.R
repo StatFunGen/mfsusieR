@@ -72,32 +72,21 @@ mf_total_wavelet <- function(fit, m) {
 #'
 #' Projects the posterior coefficient curves through new covariate
 #' values to produce predicted response curves on the original Y
-#' scale, per outcome. By default the wavelet pipeline that built
-#' the fit (column scaling, padding, DWT) is inverted to yield
-#' curves on each outcome's original position grid `pos[[m]]`.
-#' When `smooth_method` is supplied, the post-smoothed per-effect
-#' curves at `object$smoothed[[smooth_method]]` are used instead;
-#' each effect contributes `(newx[, lead_l] - X_center[lead_l]) *
-#' effect_curve[l, t]` to the response, plus the per-position Y
-#' intercept.
+#' scale, per outcome. The wavelet pipeline that built the fit
+#' (column scaling, padding, DWT) is inverted to yield curves on
+#' each outcome's original position grid `pos[[m]]`.
 #'
 #' @param object an `mfsusie` fit returned by `mfsusie()`.
 #' @param newx numeric matrix `n_new x p` of new covariates on the
-#'   same scale as the training `X`. `NULL` returns the training
-#'   fitted values (equivalent to `fitted(object)`).
+#'   same scale as the training `X`. `NULL` (default) returns the
+#'   training fitted values (equivalent to `fitted(object)`).
 #' @param ... ignored.
 #' @return list of length `M`; each element a numeric matrix
 #'   `n_new x T_m` of predicted curves on the original position
 #'   grid for that outcome.
 #' @details Prediction uses the per-SNP alpha-weighted aggregate
 #'   coefficient `b[j, t] = sum_l alpha[l, j] * mu[l, j, t] /
-#'   csd_X[j]`, the same form as `susieR::predict.susie()`. Post-
-#'   smoothed per-effect curves (from `mf_post_smooth()`) are
-#'   visualization-only and are not used here, because they are
-#'   constructed by regressing the residualized response on the
-#'   lead variant of each effect; pairing that lead-variant slope
-#'   with the alpha-weighted-X predictor would be mathematically
-#'   inconsistent except under perfect alpha concentration.
+#'   csd_X[j]`, the same form as `susieR::predict.susie()`.
 #' @export
 predict.mfsusie <- function(object, newx = NULL, ...) {
   if (is.null(newx)) return(fitted.mfsusie(object))
@@ -203,15 +192,16 @@ coef.mfsusie <- function(object, smooth_method = NULL, ...) {
 
 #' Fitted response curves on the training X
 #'
-#' Projects the running per-outcome fit `fit$fitted[[m]]` (which
-#' lives in the wavelet domain) back to the original position grid
-#' via the inverse wavelet transform. Equivalent to
-#' `predict(object, newx = X_train)`.
+#' Projects the running per-outcome wavelet-domain fit
+#' `fit$fitted[[m]]` (left on the fit by the IBSS loop and reused
+#' by warm-starts) back to the original position grid via the
+#' inverse wavelet transform. No `X` needed: the running fit is
+#' the per-individual training prediction in wavelet form.
 #'
 #' @param object an `mfsusie` fit.
 #' @param ... ignored.
 #' @return list of length `M`; each element a numeric matrix
-#'   `n x T_m` of fitted curves.
+#'   `n x T_m` of fitted curves on the training X.
 #' @export
 fitted.mfsusie <- function(object, ...) {
   meta <- object$dwt_meta
@@ -345,9 +335,11 @@ print.summary.mfsusie <- function(x, ...) {
 # the Gaussian approximation:
 #   lfsr(t) = pnorm(-|mean(t)| / sd(t)).
 #
-# All methods operate on the fit alone: residuals via
-# `fit$residuals` and the per-effect lead-variable column via
-# `fit$lead_X`.
+# All methods operate on the fit alone when it carries the
+# smoothing inputs (`fit$Y_grid` and `fit$X_eff`, attached by
+# default at fit time). When the fit was built with
+# `attach_smoothing_inputs = FALSE`, `mf_post_smooth(fit, X, Y)`
+# attaches them on the fly from the supplied data.
 
 # Internal: per-position local false sign rate from a Gaussian
 # posterior summary. Returns `pnorm(-|mean| / sd)`, with sd
@@ -355,6 +347,38 @@ print.summary.mfsusie <- function(x, ...) {
 .gaussian_lfsr <- function(mean, sd) {
   sd <- pmax(sd, .Machine$double.eps)
   stats::pnorm(-abs(mean) / sd)
+}
+
+# Internal: rebuild and attach `Y_grid` and `X_eff` to a fit that
+# was created with `attach_smoothing_inputs = FALSE`. Mirrors the
+# attachment block at the end of `mfsusie()`.
+.attach_smoothing_inputs <- function(fit, X, Y) {
+  meta <- fit$dwt_meta
+  if (!is.matrix(X) || ncol(X) != ncol(fit$alpha)) {
+    stop("`X` must be the original n x p training genotype matrix.")
+  }
+  if (!is.list(Y) || length(Y) != meta$M) {
+    stop(sprintf("`Y` must be a length-%d list of response matrices.",
+                 meta$M))
+  }
+  fit$Y_grid <- vector("list", meta$M)
+  for (m in seq_len(meta$M)) {
+    Y_m <- as.matrix(Y[[m]])
+    if (ncol(Y_m) != meta$T_basis[m]) {
+      Y_m <- remap_data(Y_m, meta$pos[[m]], verbose = FALSE,
+                        max_scale = log2(meta$T_basis[m]))$Y
+    }
+    fit$Y_grid[[m]] <- Y_m
+  }
+  L <- nrow(fit$alpha)
+  fit$X_eff <- vector("list", L)
+  X_centered <- if (any(meta$X_center != 0))
+    sweep(X, 2, meta$X_center, "-") else X
+  for (l in seq_len(L)) {
+    # alpha-weighted aggregate of (raw) X columns
+    fit$X_eff[[l]] <- as.numeric(X_centered %*% fit$alpha[l, ])
+  }
+  fit
 }
 
 #' Post-smooth a fit's per-effect curves and add credible bands
@@ -368,7 +392,7 @@ print.summary.mfsusie <- function(x, ...) {
 #' - `"TI"` (default) -- cycle-spinning translation-invariant
 #'   denoising (Coifman & Donoho 1995). For each effect, isolates
 #'   the per-effect residual response (in position space),
-#'   regresses onto the lead variable's column of X, applies the
+#'   regresses onto the alpha-weighted X aggregate, applies the
 #'   stationary wavelet transform row-by-row, scalewise
 #'   `ashr::ash` shrinkage on wavelet coefficients, and inverts
 #'   via cycle-spinning average. Produces tighter credible bands
@@ -385,9 +409,12 @@ print.summary.mfsusie <- function(x, ...) {
 #' Gaussian-posterior approximation; for HMM it comes from the
 #' mixture posterior directly.
 #'
-#' All three operate on the fit alone: residuals are read from
-#' `fit$residuals` and the per-effect lead variable column from
-#' `fit$lead_X`, both populated by `mfsusie()` / `fsusie()`.
+#' By default the smoother reads `fit$Y_grid` (post-remap Y) and
+#' `fit$X_eff` (per-effect alpha-weighted X aggregate), both
+#' attached by `mfsusie()` when `attach_smoothing_inputs = TRUE`.
+#' When the fit was built with `attach_smoothing_inputs = FALSE`
+#' you can pass the original `X` and `Y` here and the smoother
+#' will compute and attach them on the fly.
 #'
 #' @param fit a fit returned by `mfsusie()` or `fsusie()`.
 #' @param method one of `"scalewise"`, `"TI"`, `"HMM"`.
@@ -402,6 +429,13 @@ print.summary.mfsusie <- function(x, ...) {
 #'   stationary-wavelet transform. Default `"DaubExPhase"`.
 #' @param halfK integer, half-grid size for the HMM `fit_hmm`
 #'   helper. Default 20.
+#' @param X optional numeric matrix `n x p`, the original genotype
+#'   matrix. Required when the fit was built with
+#'   `attach_smoothing_inputs = FALSE`; ignored otherwise.
+#' @param Y optional list of length `M` of numeric matrices, the
+#'   original per-outcome response matrices. Required when the
+#'   fit was built with `attach_smoothing_inputs = FALSE`; ignored
+#'   otherwise.
 #' @return the input fit with `$effect_curves`, `$credible_bands`,
 #'   and `$lfsr_curves` populated. Scalar outcomes
 #'   (`T_basis[m] = 1`) skip the wavelet step (smoothing is a
@@ -415,7 +449,8 @@ mf_post_smooth <- function(fit,
                            wavelet_filter   = 1L,
                            wavelet_family   = "DaubExPhase",
                            halfK            = 20L,
-                           overwrite_previous = FALSE) {
+                           overwrite_previous = FALSE,
+                           X = NULL, Y = NULL) {
   if (!inherits(fit, "mfsusie")) {
     stop("`fit` must be an `mfsusie` (or `fsusie`) fit object.")
   }
@@ -424,16 +459,21 @@ mf_post_smooth <- function(fit,
     stop("`level` must be in (0, 1).")
   }
 
-  # Method-aware precondition: only `scalewise` operates on the
-  # fit-internal wavelet posterior alone. The other three need
-  # the lead-variable residuals and the lead-variable column.
+  # `scalewise` operates on the wavelet posterior alone and needs
+  # neither Y_grid nor X_eff. The other smoothers need both. If
+  # they're missing on the fit, attach them from the supplied
+  # `X` / `Y`.
   if (method != "scalewise" &&
-      (is.null(fit$residuals) || is.null(fit$lead_X))) {
-    stop(sprintf(
-      "method = '%s' requires `fit$residuals` and `fit$lead_X`. ",
-      method),
-      "Refit `mfsusie()` with the defaults that retain those slots, ",
-      "or use method = 'scalewise'.")
+      (is.null(fit$Y_grid) || is.null(fit$X_eff))) {
+    if (is.null(X) || is.null(Y)) {
+      stop(sprintf(
+        paste0("method = '%s' needs the smoothing inputs ",
+               "(`fit$Y_grid`, `fit$X_eff`). The fit was built with ",
+               "`attach_smoothing_inputs = FALSE`; pass `X` and `Y` ",
+               "explicitly, or refit with the default."),
+        method))
+    }
+    fit <- .attach_smoothing_inputs(fit, X = X, Y = Y)
   }
   if (method == "smash" &&
       !requireNamespace("smashr", quietly = TRUE)) {
@@ -520,9 +560,13 @@ mf_post_smooth <- function(fit,
     lfsr_curves[[m]]    <- vector("list", L)
 
     for (l in seq_len(L)) {
-      lead_l <- which.max(fit$alpha[l, ])
-      mean_w <- fit$mu[[l]][[m]][lead_l, ]
-      var_w  <- pmax(fit$mu2[[l]][[m]][lead_l, ] - mean_w^2, 0)
+      # Alpha-weighted aggregate across SNPs (no lead-variant
+      # tie-break). Mean: E_q[b_l_t] = sum_j alpha[l, j] * mu[l, j, t].
+      # Second moment: E_q[b_l_t^2] = sum_j alpha[l, j] * mu2[l, j, t].
+      # Variance under the law of total variance.
+      mean_w <- as.numeric(fit$alpha[l, ] %*% fit$mu[[l]][[m]])
+      mu2_w  <- as.numeric(fit$alpha[l, ] %*% fit$mu2[[l]][[m]])
+      var_w  <- pmax(mu2_w - mean_w^2, 0)
 
       shrunk_w <- if (T_m == 1L) mean_w else
         .scalewise_soft_threshold(mean_w, sd = sqrt(var_w),
@@ -578,16 +622,14 @@ mf_post_smooth <- function(fit,
       next
     }
 
-    Y_pos <- .iso_response_pos(fit, m)   # n x T_basis[m]: residual + sum_l lead_l*mu_l_lead
+    Y_pos <- .iso_response_pos(fit, m)   # n x T_basis[m] (raw Y)
     for (l in seq_len(L)) {
-      lead_l <- which.max(fit$alpha[l, ])
-      mu_lead_w <- fit$mu[[l]][[m]][lead_l, ]
       # The "per-effect" position-space response: subtract every
-      # other effect's lead-variable contribution from Y_pos.
+      # other effect's alpha-weighted contribution from Y_pos.
       iso_pos <- Y_pos - .other_effects_pos(fit, m, exclude = l)
-      x_lead  <- fit$lead_X[[l]]
+      x_eff   <- fit$X_eff[[l]]
 
-      out <- .univariate_ti_regression(iso_pos, x_lead,
+      out <- .univariate_ti_regression(iso_pos, x_eff,
                                        wavelet_filter, wavelet_family,
                                        z_crit)
       effect_curves[[m]][[l]]  <- out$effect_estimate
@@ -602,56 +644,54 @@ mf_post_smooth <- function(fit,
        lfsr_curves    = lfsr_curves)
 }
 
-# Reconstruct the position-space response by inverting
-# `D = residuals + fitted` (wavelet domain).
+# Position-space response. Reads the post-remap `Y_grid[[m]]`
+# attached at fit time (n x T_basis, raw Y units, padded grid).
+# When `Y_grid` is absent (the user fit with
+# `attach_smoothing_inputs = FALSE`), `mf_post_smooth(fit, Y, ...)`
+# attaches it on the fly before reaching here.
 .iso_response_pos <- function(fit, m) {
-  meta <- fit$dwt_meta
-  # Wavelet-domain D = residuals + fitted.
-  D_w <- fit$residuals[[m]] + fit$fitted[[m]]
-  # Inverse-DWT row-by-row to get position-space Y.
-  inv <- mf_invert_dwt(D_packed      = D_w,
-                       column_center = meta$column_center[[m]],
-                       column_scale  = meta$column_scale[[m]],
-                       filter_number = meta$wavelet_filter,
-                       family        = meta$wavelet_family)
-  if (ncol(inv) > length(meta$pos[[m]])) {
-    inv <- inv[, seq_along(meta$pos[[m]]), drop = FALSE]
-  }
-  inv
+  Y_pos <- fit$Y_grid[[m]]
+  pos_m <- fit$dwt_meta$pos[[m]]
+  if (ncol(Y_pos) > length(pos_m))
+    Y_pos <- Y_pos[, seq_along(pos_m), drop = FALSE]
+  Y_pos
 }
 
-# Sum_{l != exclude} x_lead_l * inverse_DWT(mu_l[lead_l, ]).
-# Y_pos from `.iso_response_pos` lives in raw-Y units (csd_Y has
-# been undone by the inverse-DWT pipeline). To make the
-# `Y_pos - .other_effects_pos` subtraction meaningful, the
-# per-effect contribution must be on the same raw-Y scale: that
-# means multiplying the inverse-DWT of mu_w by the per-position
-# csd_Y. lead_X carries the raw-X column SD (set in mfsusie.R), so
-# `outer(lead_X, eff_pos_raw)` is directly in raw-(Y, X) units.
+# Sum_{l != exclude} X_eff[l] * (alpha-weighted inverse-DWT of mu_l)
+# in raw-Y / raw-X units. `X_eff[[l]] = X_raw %*% alpha[l, ]`
+# replaces the previous lead-variant column. The aggregate effect
+# curve for outcome m, effect l is the alpha-weighted sum of the
+# per-SNP wavelet posteriors `sum_j alpha[l, j] * mu[l, j, ·]`,
+# inverse-DWT'd, then multiplied by `csd_Y` (per-position) so the
+# result lives in raw-Y units.
 .other_effects_pos <- function(fit, m, exclude) {
   meta <- fit$dwt_meta
   L    <- nrow(fit$alpha)
   T_pos <- length(meta$pos[[m]])
   csd_m <- meta$column_scale[[m]]
-  out  <- matrix(0, nrow = length(fit$lead_X[[1]]), ncol = T_pos)
+  out  <- matrix(0, nrow = length(fit$X_eff[[1]]), ncol = T_pos)
   for (l in seq_len(L)) {
     if (l == exclude) next
-    lead_l <- which.max(fit$alpha[l, ])
-    mu_w   <- fit$mu[[l]][[m]][lead_l, ]
-    eff_pos <- .invert_packed_curve(matrix(mu_w, nrow = 1L), meta, m)
+    # Alpha-weighted aggregate per-position wavelet coefficient
+    # across SNPs. `mu[[l]][[m]]` is p x T_basis.
+    mu_w_agg <- as.numeric(fit$alpha[l, ] %*% fit$mu[[l]][[m]])
+    eff_pos  <- .invert_packed_curve(matrix(mu_w_agg, nrow = 1L),
+                                      meta, m)
     if (length(eff_pos) > T_pos) eff_pos <- eff_pos[seq_len(T_pos)]
     eff_pos_raw <- eff_pos * csd_m[seq_along(eff_pos)]
-    out <- out + outer(fit$lead_X[[l]], eff_pos_raw)
+    out <- out + outer(fit$X_eff[[l]], eff_pos_raw)
   }
   out
 }
 
 # Stationary-wavelet regression of one outcome's isolated
-# response on the lead variable, with scalewise ash shrinkage of
-# the wavelet coefficients and cycle-spinning average for the
-# point estimate. Returns `effect_estimate` (length T_pos) and
-# `cred_band` (2 x T_pos: row 1 "up", row 2 "low").
-.univariate_ti_regression <- function(Y_pos, x_lead,
+# response on a per-effect predictor (an alpha-weighted X
+# aggregate in production, or any single-column regressor), with
+# scalewise ash shrinkage of the wavelet coefficients and a
+# cycle-spinning average for the point estimate. Returns
+# `effect_estimate` (length T_pos) and `cred_band` (2 x T_pos:
+# row 1 "up", row 2 "low").
+.univariate_ti_regression <- function(Y_pos, x_eff,
                                       filter_number, family,
                                       z_crit) {
   # Per-column SD normalisation: scale Y (per position) and X
@@ -660,7 +700,7 @@ mf_post_smooth <- function(fit,
   # SDs.
   Y_sc  <- col_scale(Y_pos, center = TRUE, scale = TRUE)
   csd_Y <- attr(Y_sc, "scaled:scale")
-  x_mat <- col_scale(matrix(x_lead, ncol = 1L),
+  x_mat <- col_scale(matrix(x_eff, ncol = 1L),
                      center = TRUE, scale = TRUE)
   csd_X <- attr(x_mat, "scaled:scale")
   x_sc  <- as.numeric(x_mat)
@@ -760,10 +800,10 @@ mf_post_smooth <- function(fit,
     Y_pos <- .iso_response_pos(fit, m)
     for (l in seq_len(L)) {
       iso_pos <- Y_pos - .other_effects_pos(fit, m, exclude = l)
-      x_lead  <- fit$lead_X[[l]]
+      x_eff   <- fit$X_eff[[l]]
       out <- mf_univariate_hmm_regression(
         Y     = iso_pos,
-        X     = matrix(x_lead, ncol = 1L),
+        X     = matrix(x_eff, ncol = 1L),
         halfK = halfK)
       # Pointwise credible band via per-position posterior
       # variance derived from the smoothed posterior. The HMM

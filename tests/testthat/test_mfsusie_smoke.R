@@ -95,21 +95,28 @@ test_that("mfsusie() fit fields contain no NaN / NA in alpha, mu, mu2, pip, elbo
   expect_false(any(is.na(fit$elbo)))
 })
 
-# ---- residuals + lead_X are populated on every fit ---------------
+# ---- Y_grid + X_eff are attached by default --------------------
 
-test_that("mfsusie() always attaches per-outcome residuals and per-effect lead_X", {
+test_that("mfsusie() attaches Y_grid + X_eff by default and can opt out", {
   toy <- make_toy_smoke()
   fit <- mfsusie(toy$X, toy$Y, L = 5, max_iter = 30, verbose = FALSE)
-  expect_true(!is.null(fit$residuals))
-  expect_identical(length(fit$residuals), length(toy$Y))
-  for (m in seq_along(fit$residuals)) {
-    expect_true(is.matrix(fit$residuals[[m]]))
-    expect_identical(nrow(fit$residuals[[m]]), nrow(toy$X))
+  expect_true(!is.null(fit$Y_grid))
+  expect_identical(length(fit$Y_grid), length(toy$Y))
+  for (m in seq_along(fit$Y_grid)) {
+    expect_true(is.matrix(fit$Y_grid[[m]]))
+    expect_identical(nrow(fit$Y_grid[[m]]), nrow(toy$X))
   }
-  expect_identical(length(fit$lead_X), nrow(fit$alpha))
-  for (l in seq_along(fit$lead_X)) {
-    expect_identical(length(fit$lead_X[[l]]), nrow(toy$X))
+  expect_identical(length(fit$X_eff), nrow(fit$alpha))
+  for (l in seq_along(fit$X_eff)) {
+    expect_identical(length(fit$X_eff[[l]]), nrow(toy$X))
   }
+
+  # Opt-out drops both fields.
+  fit_lite <- mfsusie(toy$X, toy$Y, L = 5, max_iter = 30,
+                      attach_smoothing_inputs = FALSE,
+                      verbose = FALSE)
+  expect_null(fit_lite$Y_grid)
+  expect_null(fit_lite$X_eff)
 })
 
 # ---- M = 1 single-modality functional path --------------------

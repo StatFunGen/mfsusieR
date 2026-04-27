@@ -28,23 +28,24 @@ test_that("mf_post_smooth errors when level is out of (0, 1)", {
   expect_error(mf_post_smooth(fit, level = 1), "`level`")
 })
 
-test_that("mf_post_smooth errors when residuals slot is missing for non-scalewise methods", {
+test_that("mf_post_smooth errors when smoothing inputs are missing for non-scalewise methods", {
   fit <- build_small_fit()
-  fit_no_resid <- fit
-  fit_no_resid$residuals <- NULL
+  fit_no_inputs <- fit
+  fit_no_inputs$Y_grid <- NULL
+  fit_no_inputs$X_eff  <- NULL
   for (method in c("TI", "HMM", "smash")) {
     if (method == "smash" && !requireNamespace("smashr", quietly = TRUE)) next
-    expect_error(mf_post_smooth(fit_no_resid, method = method),
-                 "requires `fit\\$residuals`")
+    expect_error(mf_post_smooth(fit_no_inputs, method = method),
+                 "smoothing inputs")
   }
 })
 
-test_that("mf_post_smooth(scalewise) succeeds without the residuals slot", {
+test_that("mf_post_smooth(scalewise) succeeds without the smoothing inputs", {
   fit <- build_small_fit()
-  fit_no_resid <- fit
-  fit_no_resid$residuals <- NULL
-  fit_no_resid$lead_X    <- NULL
-  out <- mf_post_smooth(fit_no_resid, method = "scalewise")
+  fit_no_inputs <- fit
+  fit_no_inputs$Y_grid <- NULL
+  fit_no_inputs$X_eff  <- NULL
+  out <- mf_post_smooth(fit_no_inputs, method = "scalewise")
   expect_true(!is.null(out$smoothed$scalewise$effect_curves))
   expect_true(!is.null(out$smoothed$scalewise$credible_bands))
 })

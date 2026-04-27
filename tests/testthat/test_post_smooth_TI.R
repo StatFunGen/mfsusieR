@@ -17,8 +17,18 @@ test_that("mf_post_smooth(method = 'TI') matches univariate_TI_regression bit-fo
   Y    <- X %*% (matrix(beta, p, 1) %*% matrix(shape, 1, T_m)) +
             matrix(rnorm(n * T_m, sd = 0.3), n)
 
-  # mfsusieR side: fit + smooth.
-  fit  <- fsusie(Y, X, L = 1, max_iter = 30, verbose = FALSE)
+  # mfsusieR side: fit + smooth. Production mfsusieR uses
+  # `X_eff = X %*% alpha` (alpha-weighted aggregate); upstream
+  # `univariate_TI_regression` uses the lead variant. Swap
+  # `fit$X_eff` to the lead column so the bit-identity comparison
+  # against the upstream routine still holds. Test hack only;
+  # production code keeps the alpha-weighted form.
+  fit <- fsusie(Y, X, L = 1, max_iter = 30, verbose = FALSE)
+  L <- nrow(fit$alpha)
+  fit$X_eff <- lapply(seq_len(L), function(l) {
+    lead_l <- which.max(fit$alpha[l, ])
+    X[, lead_l]
+  })
   fit_s <- mf_post_smooth(fit, method = "TI",
                           wavelet_filter = 1L,
                           wavelet_family = "DaubExPhase")
@@ -27,19 +37,12 @@ test_that("mf_post_smooth(method = 'TI') matches univariate_TI_regression bit-fo
   # the same way the smoother does, then run the upstream
   # univariate routine on it for the lead variable.
   l <- 1L; m <- 1L
-  meta <- fit$dwt_meta
-  D_w  <- fit$residuals[[m]] + fit$fitted[[m]]
-  Y_pos <- mfsusieR:::mf_invert_dwt(
-    D_packed      = D_w,
-    column_center = meta$column_center[[m]],
-    column_scale  = meta$column_scale[[m]],
-    filter_number = meta$wavelet_filter,
-    family        = meta$wavelet_family
-  )
-  if (ncol(Y_pos) > length(meta$pos[[m]])) {
-    Y_pos <- Y_pos[, seq_along(meta$pos[[m]]), drop = FALSE]
+  Y_pos  <- fit$Y_grid[[m]]
+  pos_m  <- fit$dwt_meta$pos[[m]]
+  if (ncol(Y_pos) > length(pos_m)) {
+    Y_pos <- Y_pos[, seq_along(pos_m), drop = FALSE]
   }
-  x_lead <- fit$lead_X[[l]]
+  x_lead <- fit$X_eff[[l]]
 
   ref <- fsusieR:::univariate_TI_regression(
     Y = Y_pos, X = matrix(x_lead, ncol = 1L),

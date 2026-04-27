@@ -12,7 +12,9 @@ mf_post_smooth(
   wavelet_filter = 1L,
   wavelet_family = "DaubExPhase",
   halfK = 20L,
-  overwrite_previous = FALSE
+  overwrite_previous = FALSE,
+  X = NULL,
+  Y = NULL
 )
 }
 \arguments{
@@ -35,6 +37,15 @@ stationary-wavelet transform. Default \code{"DaubExPhase"}.}
 
 \item{halfK}{integer, half-grid size for the HMM \code{fit_hmm}
 helper. Default 20.}
+
+\item{X}{optional numeric matrix \verb{n x p}, the original genotype
+matrix. Required when the fit was built with
+\code{attach_smoothing_inputs = FALSE}; ignored otherwise.}
+
+\item{Y}{optional list of length \code{M} of numeric matrices, the
+original per-outcome response matrices. Required when the
+fit was built with \code{attach_smoothing_inputs = FALSE}; ignored
+otherwise.}
 }
 \value{
 the input fit with \verb{$effect_curves}, \verb{$credible_bands},
@@ -54,7 +65,7 @@ visual cleanup.
 \item \code{"TI"} (default) -- cycle-spinning translation-invariant
 denoising (Coifman & Donoho 1995). For each effect, isolates
 the per-effect residual response (in position space),
-regresses onto the lead variable's column of X, applies the
+regresses onto the alpha-weighted X aggregate, applies the
 stationary wavelet transform row-by-row, scalewise
 \code{ashr::ash} shrinkage on wavelet coefficients, and inverts
 via cycle-spinning average. Produces tighter credible bands
@@ -72,7 +83,10 @@ and smash the lfsr is \verb{pnorm(-|mean| / sd)} under the
 Gaussian-posterior approximation; for HMM it comes from the
 mixture posterior directly.
 
-All three operate on the fit alone: residuals are read from
-\code{fit$residuals} and the per-effect lead variable column from
-\code{fit$lead_X}, both populated by \code{mfsusie()} / \code{fsusie()}.
+By default the smoother reads \code{fit$Y_grid} (post-remap Y) and
+\code{fit$X_eff} (per-effect alpha-weighted X aggregate), both
+attached by \code{mfsusie()} when \code{attach_smoothing_inputs = TRUE}.
+When the fit was built with \code{attach_smoothing_inputs = FALSE}
+you can pass the original \code{X} and \code{Y} here and the smoother
+will compute and attach them on the fly.
 }

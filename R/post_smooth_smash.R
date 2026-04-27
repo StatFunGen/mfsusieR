@@ -3,11 +3,11 @@
 #
 # Per-effect, per-outcome:
 #   1. Per-effect, per-outcome, isolate the position-space
-#      response by subtracting the contribution of every other
-#      effect's lead variable.
+#      response by subtracting the alpha-weighted contribution
+#      of every other effect.
 #   2. Compute the per-position OLS estimate `(Bhat, Shat)` of
-#      that response on the lead variable, after column-scaling
-#      both sides.
+#      that response on the per-effect alpha-weighted X
+#      aggregate, after column-scaling both sides.
 #   3. Pass `(Bhat, Shat)` to `smashr::smash.gaus(post.var = TRUE)`.
 #   4. Undo the column scaling and assemble the position-space
 #      effect estimate and credible band.
@@ -44,9 +44,9 @@
     Y_pos <- .iso_response_pos(fit, m)
     for (l in seq_len(L)) {
       iso_pos <- Y_pos - .other_effects_pos(fit, m, exclude = l)
-      x_lead  <- fit$lead_X[[l]]
+      x_eff   <- fit$X_eff[[l]]
 
-      out <- univariate_smash_regression(iso_pos, x_lead, alpha)
+      out <- univariate_smash_regression(iso_pos, x_eff, alpha)
       effect_curves[[m]][[l]]  <- out$effect_estimate
       credible_bands[[m]][[l]] <- cbind(out$cred_band[2L, ],
                                         out$cred_band[1L, ])
