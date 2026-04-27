@@ -72,9 +72,14 @@ mf_total_wavelet <- function(fit, m) {
 #'
 #' Projects the posterior coefficient curves through new covariate
 #' values to produce predicted response curves on the original Y
-#' scale, per outcome. The wavelet pipeline that built the fit
-#' (column scaling, padding, DWT) is inverted to yield curves on
-#' each outcome's original position grid `pos[[m]]`.
+#' scale, per outcome. By default the wavelet pipeline that built
+#' the fit (column scaling, padding, DWT) is inverted to yield
+#' curves on each outcome's original position grid `pos[[m]]`.
+#' When `smooth_method` is supplied, the post-smoothed per-effect
+#' curves at `object$smoothed[[smooth_method]]` are used instead;
+#' each effect contributes `(newx[, lead_l] - X_center[lead_l]) *
+#' effect_curve[l, t]` to the response, plus the per-position Y
+#' intercept.
 #'
 #' @param object an `mfsusie` fit returned by `mfsusie()`.
 #' @param newx numeric matrix `n_new x p` of new covariates on the
@@ -84,6 +89,15 @@ mf_total_wavelet <- function(fit, m) {
 #' @return list of length `M`; each element a numeric matrix
 #'   `n_new x T_m` of predicted curves on the original position
 #'   grid for that outcome.
+#' @details Prediction uses the per-SNP alpha-weighted aggregate
+#'   coefficient `b[j, t] = sum_l alpha[l, j] * mu[l, j, t] /
+#'   csd_X[j]`, the same form as `susieR::predict.susie()`. Post-
+#'   smoothed per-effect curves (from `mf_post_smooth()`) are
+#'   visualization-only and are not used here, because they are
+#'   constructed by regressing the residualized response on the
+#'   lead variant of each effect; pairing that lead-variant slope
+#'   with the alpha-weighted-X predictor would be mathematically
+#'   inconsistent except under perfect alpha concentration.
 #' @export
 predict.mfsusie <- function(object, newx = NULL, ...) {
   if (is.null(newx)) return(fitted.mfsusie(object))
@@ -95,14 +109,13 @@ predict.mfsusie <- function(object, newx = NULL, ...) {
   }
 
   meta <- object$dwt_meta
-  # Apply the same X centering / scaling used at fit time.
+  M    <- meta$M
+  out  <- vector("list", M)
+
   newx_std <- sweep(newx, 2, meta$X_center, "-")
   if (any(meta$X_scale != 1)) {
     newx_std <- sweep(newx_std, 2, meta$X_scale, "/")
   }
-
-  M   <- meta$M
-  out <- vector("list", M)
   for (m in seq_len(M)) {
     coef_wavelet <- mf_total_wavelet(object, m)        # p x T_basis
     pred_wavelet <- newx_std %*% coef_wavelet           # n_new x T_basis
