@@ -23,29 +23,29 @@ build_cov_sim <- function(seed = 1L, n = 100L, T_m = 64L, K = 3L) {
 
 test_that("mf_residualize_ols residuals are orthogonal to Z", {
   sim <- build_cov_sim()
-  out <- mf_residualize_ols(sim$Y, sim$Z)
+  out <- mfsusieR:::mf_residualize_ols(sim$Y, sim$Z)
   ortho <- max(abs(crossprod(sim$Z, out$Y_adjusted)))
   expect_lt(ortho, 1e-10)
 })
 
 test_that("mf_residualize_ols is idempotent", {
   sim  <- build_cov_sim()
-  out1 <- mf_residualize_ols(sim$Y, sim$Z)
-  out2 <- mf_residualize_ols(out1$Y_adjusted, sim$Z)
+  out1 <- mfsusieR:::mf_residualize_ols(sim$Y, sim$Z)
+  out2 <- mfsusieR:::mf_residualize_ols(out1$Y_adjusted, sim$Z)
   expect_equal(out2$Y_adjusted, out1$Y_adjusted, tolerance = 1e-10)
 })
 
 test_that("mf_residualize_ols X_adjusted is orthogonal to Z", {
   sim <- build_cov_sim()
   X   <- matrix(rnorm(sim$n * 5L), sim$n, 5L)
-  out <- mf_residualize_ols(sim$Y, sim$Z, X = X)
+  out <- mfsusieR:::mf_residualize_ols(sim$Y, sim$Z, X = X)
   expect_lt(max(abs(crossprod(sim$Z, out$X_adjusted))), 1e-10)
 })
 
 test_that("dispatcher routes method = 'ols' to mf_residualize_ols", {
   sim <- build_cov_sim()
   a <- mf_adjust_for_covariates(sim$Y, sim$Z, method = "ols")
-  b <- mf_residualize_ols(sim$Y, sim$Z)
+  b <- mfsusieR:::mf_residualize_ols(sim$Y, sim$Z)
   expect_equal(a$Y_adjusted, b$Y_adjusted, tolerance = 0)
   expect_equal(a$method, "ols")
 })
@@ -73,7 +73,7 @@ test_that("wavelet_eb reduces to small residuals when Z explains Y", {
     mf_adjust_for_covariates(Y_clean, sim$Z, method = "wavelet_eb"))
   # Most of the variance is removed; not exact because wavelet-EB
   # adds shrinkage. Compare to OLS as an upper bound on RSS.
-  ols <- mf_residualize_ols(Y_clean, sim$Z)
+  ols <- mfsusieR:::mf_residualize_ols(Y_clean, sim$Z)
   expect_lt(sd(out$Y_adjusted), 5 * sd(ols$Y_adjusted) + 1e-3)
 })
 

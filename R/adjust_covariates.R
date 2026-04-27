@@ -150,13 +150,15 @@ mf_adjust_for_covariates <- function(Y, Z, X = NULL,
 #'
 #' Closed-form `Y_adjusted = (I - Z (Z'Z)^{-1} Z') Y`. Fast and
 #' shrinkage-free; the no-shrinkage limit of
-#' `mf_residualize_wavelet_eb()`.
+#' `mf_residualize_wavelet_eb()`. Internal helper; users should
+#' call `mf_adjust_for_covariates(method = "ols")`.
 #'
 #' @inheritParams mf_adjust_for_covariates
 #' @return Named list with `Y_adjusted`, `X_adjusted`,
 #'   `fitted_func`, `method`. `niter` and `converged` are absent
 #'   (the operation is closed-form).
-#' @export
+#' @keywords internal
+#' @noRd
 mf_residualize_ols <- function(Y, Z, X = NULL) {
   ZtZ_inv_Zt <- solve(crossprod(Z), t(Z))   # K x n
   fitted_func <- ZtZ_inv_Zt %*% Y           # K x T
@@ -175,11 +177,14 @@ mf_residualize_ols <- function(Y, Z, X = NULL) {
 #' Inner workhorse for `method = "wavelet_eb"`. Implements the
 #' per-coefficient empirical-Bayes regression of a functional
 #' response `Y` on a covariate matrix `Z` (optionally controlling
-#' for `X` via the Frisch-Waugh-Lovell construction).
+#' for `X` via the Frisch-Waugh-Lovell construction). Internal
+#' helper; users should call
+#' `mf_adjust_for_covariates(method = "wavelet_eb")`.
 #'
 #' @inheritParams mf_adjust_for_covariates
 #' @return Same named-list shape as `mf_adjust_for_covariates()`.
-#' @export
+#' @keywords internal
+#' @noRd
 mf_residualize_wavelet_eb <- function(Y, Z, X = NULL,
                                       wavelet_filter_number = 10L,
                                       wavelet_family        = "DaubLeAsymm",
