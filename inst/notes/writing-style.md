@@ -45,6 +45,44 @@ artifact, regardless of context:
 - Tier-2 phrases require earned emphasis: "notably",
   "importantly", "remarkably", "novel"
 
+### Internal-jargon ban
+
+The following internal references SHALL NOT appear in user-facing
+artifacts (vignettes, `R/` roxygen, `R/` inline comments, NEWS,
+README, plot titles, spec files). They are valid in
+`inst/notes/`, `inst/openspec/`, `tests/testthat/` headers,
+and session notes only.
+
+- "upstream" (and "upstream-equivalent", "matches upstream",
+  "upstream defaults", etc.) when referring to port sources.
+  Describe the behaviour directly; do not contrast against an
+  unnamed external reference.
+- "port source", "port-source", "port source's"
+- Names of port-source packages and their internal symbols:
+  `mvf.susie.alpha`, `multfsusie`, `EBmvFR`, `cor_small`,
+  `fsusieR::univariate_TI_regression`,
+  `fsusieR::univariate_HMM_regression`,
+  `fsusieR::univariate_smash_regression`,
+  `fsusieR::log_BF`, `fsusieR::cal_Bhat_Shat`, etc. Mentioning
+  `susieR::susie()` or `susieR::compute_marginal_bhat_shat`
+  is fine (susieR is a public runtime dependency).
+- Contract IDs `C1`, `C2`, `C3` (the apple-to-apple equivalence
+  contracts).
+- "PR group", "PR group N" labels and any "(PR group ...)"
+  parentheticals.
+- "legacy mode", "legacy variance mode", "legacy output" when
+  referring to the original behaviour pre-port. State the
+  current mode by its public name.
+- "fidelity contract", "degeneracy contract", "binary tolerance
+  philosophy" — these are doctrine terms.
+- "Pattern A", "Pattern B", "kept-upstream-bug",
+  "port-source-bug fix" — refactor-discipline doctrine terms.
+
+When user-facing prose needs to explain why a particular
+formula or default was chosen, describe the mathematics or the
+empirical behaviour directly. The reasoning lives in the
+manuscript or in `inst/notes/` for internal readers.
+
 ## Acceptable replacements
 
 | Banned | Use instead |

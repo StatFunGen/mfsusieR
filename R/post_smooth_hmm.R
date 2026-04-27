@@ -12,8 +12,8 @@
 #'   same length as `x`.
 #' @param halfK integer, half of the grid size. The full grid is
 #'   `2 * halfK - 1` after symmetric mirroring around zero.
-#' @param mult numeric, exponent on the position-wise grid spacing
-#'   (default 3 in the upstream).
+#' @param mult numeric, exponent on the position-wise grid
+#'   spacing. Default 3.
 #' @param thresh numeric, posterior-mass cutoff for keeping a
 #'   non-null state in the second EM iteration.
 #' @param prefilter logical; if `TRUE`, drop grid states with
@@ -268,9 +268,10 @@ mf_fit_hmm <- function(x, sd,
 #' Univariate HMM regression of a position-space response on one
 #' covariate column
 #'
-#' Used by `mf_post_smooth(method = "HMM")`. Equivalent to the
-#' upstream `univariate_HMM_regression`, with `cal_Bhat_Shat`
-#' replaced by `compute_marginal_bhat_shat`.
+#' Used by `mf_post_smooth(method = "HMM")`. Per-position
+#' marginal regression via `compute_marginal_bhat_shat()` followed
+#' by HMM-mixture shrinkage; returns the position-space effect,
+#' the local false sign rate, and the underlying log-BF.
 #' @keywords internal
 #' @noRd
 mf_univariate_hmm_regression <- function(Y, X, halfK = 20L) {

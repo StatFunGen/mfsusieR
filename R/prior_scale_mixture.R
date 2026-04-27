@@ -5,7 +5,8 @@
 #
 #   1. User supplies `prior_variance_grid` -- use it directly,
 #      distribute mixture weights with `null_prior_weight`. No ash
-#      fit. The susieR-degeneracy contract C1 takes this path.
+#      fit. Setting `length(grid) == 1` reproduces the
+#      single-Gaussian semantics of `susieR::susie()`.
 #   2. `prior_variance_grid = NULL` -- per outcome, call
 #      `compute_marginal_bhat_shat(X, data$D[[m]])` and
 #      `ash` to fit the K-vector grid, then assemble.
@@ -33,15 +34,14 @@ distribute_mixture_weights <- function(K, null_prior_weight) {
   c(null_pi, rep((1 - null_pi) / K, K))
 }
 
-#' Per-outcome data-driven prior init via susieR helper + ash
+#' Per-outcome data-driven prior init
 #'
 #' Calls `compute_marginal_bhat_shat(X, Y_m)` to obtain
 #' Bhat / Shat, draws a sample, and fits `ash` to obtain
-#' the K-vector grid of mixture variances. The seed sequence
-#' (`set.seed(1)`) and sample-size caps (5000 for
-#' `mixture_normal`, 50000 for `mixture_normal_per_scale`) are
-#' set to satisfy the C2 fidelity contract at machine precision;
-#' 
+#' the K-vector grid of mixture variances. The internal
+#' `set.seed(1)` and sample-size caps (5000 for
+#' `mixture_normal`, 50000 for `mixture_normal_per_scale`) make
+#' the prior grid deterministic for a given input.
 #'
 #' @param Y_m numeric matrix `n x T_basis[m]` of wavelet
 #'   coefficients for outcome m.
@@ -122,8 +122,9 @@ init_scale_mixture_prior_default <- function(Y_m,
 #' @param data an `mf_individual` object.
 #' @param prior_variance_grid optional length-K vector of mixture
 #'   variances (`sigma_k^2`). When supplied, the data-driven ash
-#'   fit is skipped and the grid is used directly. Used by the
-#'   susieR-degeneracy contract C1 with `length(grid) == 1`.
+#'   fit is skipped and the grid is used directly. Setting
+#'   `length(grid) == 1` collapses the mixture to a single
+#'   Gaussian (matches `susieR::susie()` semantics).
 #' @param prior_variance_scope `"per_scale"` (default,
 #'   stores prior per scale per outcome) or `"per_outcome"`
 #'   (collapses the scale dimension).

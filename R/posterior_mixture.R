@@ -106,8 +106,7 @@ mixture_log_bf_per_scale_johnson <- function(bhat_slice,
   per_cell <- matrix(log(tt) - log_dens_null,
                      nrow = dims[1L], ncol = dims[2L])
 
-  # Match the upstream kernel: per-(variable) summed across the
-  # |idx_s| columns, returning a length-p vector.
+  # Per-variable summed across the |idx_s| columns: length-p vector.
   rowSums(per_cell)
 }
 

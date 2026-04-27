@@ -156,10 +156,25 @@ mf_cs_colors <- function(n_cs) {
   }
 }
 
-# Internal helpers shared by `.draw_effect_band` and
-# `.draw_effect_errorbar`.
+# =====================================================================
+# Effect-panel cell drawer
+# =====================================================================
+#
+# A single `(outcome, cs_subset)` panel is rendered into the
+# current device cell by `.draw_effect_panel`. It does not own
+# the layout: the caller decides whether the cell is one of M*K
+# stacked rows, the lower half of a 2-row PIP+effect column, or
+# a tile in an M-outcome grid.
+#
+# Two effect styles share the cell layout:
+#   - "band":     ribbon polygon + line for each CS posterior mean
+#   - "errorbar": vertical capped bar + filled point per position
+# Everything else (axes, h=0 reference, optional affected-region
+# bars, optional lfsr right-axis overlay, optional truth dots,
+# legend) is identical, factored into the helpers below.
 
-# y-axis range that fits curves, bands, optional truth, plus 0.
+# y-axis range that fits all curves, bands, optional truth dots,
+# and 0.
 .effect_yrange <- function(curves, bands, truth_per_cs = NULL) {
   has_truth <- !is.null(truth_per_cs) &&
     any(!vapply(truth_per_cs, is.null, logical(1)))
@@ -168,7 +183,7 @@ mf_cs_colors <- function(n_cs) {
         0, na.rm = TRUE)
 }
 
-# Overlay per-CS truth values as dark-grey dots.
+# Per-CS truth values as dark-grey dots.
 .overlay_truth_dots <- function(pos, truth_per_cs) {
   if (is.null(truth_per_cs)) return(invisible(NULL))
   for (i in seq_along(truth_per_cs)) {
@@ -180,8 +195,52 @@ mf_cs_colors <- function(n_cs) {
   invisible(NULL)
 }
 
-# CS legend (with optional "truth" row at the top). `style` is
-# "band" (line in legend) or "errorbar" (filled point).
+# Bottom-of-panel affected-region bars (band style).
+.overlay_affected_bars <- function(pos, bands, pal, yrange) {
+  bar_y    <- yrange[1L]
+  bar_step <- 0.03 * diff(yrange)
+  for (i in seq_along(bands)) {
+    runs <- .affected_runs(bands[[i]])
+    if (length(runs) == 0L) next
+    y_i <- bar_y + (i - 1L) * bar_step
+    for (rg in runs) {
+      segments(pos[rg[1L]], y_i, pos[rg[2L]], y_i,
+               col = pal[i], lwd = 4.5, lend = "butt")
+    }
+  }
+}
+
+# Affected-region dots on the zero line (errorbar style).
+.overlay_affected_dots <- function(pos, bands) {
+  for (i in seq_along(bands)) {
+    mask <- .affected_mask(bands[[i]])
+    if (length(mask) == 0L || !any(mask)) next
+    points(pos[mask], rep(0, sum(mask)),
+           col = "black", pch = 20L, cex = 1.2)
+  }
+}
+
+# Right-axis lfsr overlay (band style only).
+.overlay_lfsr_axis <- function(pos, lfsrs, pal, lfsr_threshold) {
+  op2 <- par(new = TRUE); on.exit(par(op2), add = TRUE)
+  plot(NA, xlim = range(pos), ylim = c(0, 1),
+       axes = FALSE, xlab = "", ylab = "")
+  axis(4, at = c(0, lfsr_threshold, 0.5, 1),
+       labels = c("0", sprintf("%.2g", lfsr_threshold), "0.5", "1"),
+       las = 1)
+  mtext("lfsr", side = 4, line = 2.4)
+  abline(h = lfsr_threshold, lty = 2, col = "firebrick", lwd = 1.2)
+  label_x <- pos[1L] + 0.02 * diff(range(pos))
+  text(label_x, lfsr_threshold,
+       labels = sprintf("lfsr = %.2g", lfsr_threshold),
+       col = "firebrick", cex = 0.75, pos = 3)
+  for (i in seq_along(lfsrs)) {
+    if (is.null(lfsrs[[i]])) next
+    lines(pos, lfsrs[[i]], col = pal[i], lwd = 1.4, lty = 2)
+  }
+}
+
+# CS legend with optional "truth" header row.
 .effect_cs_legend <- function(cs_subset, pal, has_truth, lwd, style) {
   K <- length(cs_subset)
   lab <- paste0("CS", seq_len(K))
@@ -202,80 +261,87 @@ mf_cs_colors <- function(n_cs) {
          lty = ltys, pch = pchs, bty = "n", cex = 0.75)
 }
 
-# Internal: draw the band-style overlay of all `cs_subset` CSes
-# on the current device cell. `truth_per_cs`, when non-NULL, is a
-# length-`length(cs_subset)` list of length-T_m vectors (or NULLs);
-# truth values are overlaid as dark-grey dots and added to the
-# legend.
-.draw_effect_band <- function(fit, m, cs_subset, pos, pal, lwd, smoothed,
-                              show_grid_dots, show_affected_region,
-                              show_lfsr_curve, lfsr_threshold,
-                              add_legend, main, xlab, xaxt,
-                              truth_per_cs = NULL) {
-  curves <- lapply(cs_subset, function(l) .effect_curve(fit, l, m, smoothed))
-  bands  <- lapply(cs_subset, function(l) .credible_band(fit, l, m, smoothed))
-  lfsrs  <- lapply(cs_subset, function(l) .lfsr_curve(fit, l, m, smoothed))
-  has_lfsr  <- show_lfsr_curve && any(!vapply(lfsrs, is.null, logical(1)))
-  has_truth <- !is.null(truth_per_cs) &&
-    any(!vapply(truth_per_cs, is.null, logical(1)))
-
-  yrange <- .effect_yrange(curves, bands, truth_per_cs)
-  plot(NA, xlim = range(pos), ylim = yrange,
-       xlab = xlab, ylab = "effect", main = main, las = 1, xaxt = xaxt,
-       cex.main = 1.05, font.main = 2L)
-  abline(h = 0, lty = 2, col = "grey60")
-
-  for (i in seq_along(cs_subset)) {
+# Body draw for the band style: ribbon polygons + mean curves.
+.draw_effect_body_band <- function(pos, curves, bands, pal, lwd,
+                                   show_grid_dots) {
+  for (i in seq_along(curves)) {
     band <- bands[[i]]
     if (is.null(band)) next
     polygon(c(pos, rev(pos)),
             c(band[, 1L], rev(band[, 2L])),
             col = adjustcolor(pal[i], alpha.f = 0.25), border = NA)
   }
-  for (i in seq_along(cs_subset)) {
+  for (i in seq_along(curves)) {
     lines(pos, curves[[i]], col = pal[i], lwd = lwd)
     if (show_grid_dots) {
       points(pos, curves[[i]], col = pal[i], pch = 21L,
              bg = "white", cex = 0.85, lwd = 1.4)
     }
   }
+}
 
-  if (show_affected_region) {
-    bar_y    <- yrange[1L]
-    bar_step <- 0.03 * diff(yrange)
-    for (i in seq_along(cs_subset)) {
-      runs <- .affected_runs(bands[[i]])
-      if (length(runs) == 0L) next
-      y_i <- bar_y + (i - 1L) * bar_step
-      for (rg in runs) {
-        segments(pos[rg[1L]], y_i, pos[rg[2L]], y_i,
-                 col = pal[i], lwd = 4.5, lend = "butt")
-      }
+# Body draw for the errorbar style: capped vertical bars +
+# filled points per position.
+.draw_effect_body_errorbar <- function(pos, curves, bands, pal) {
+  cap_len <- min(0.04, 0.3 / max(length(pos), 1L))
+  for (i in seq_along(curves)) {
+    band    <- bands[[i]]
+    if (!is.null(band)) {
+      suppressWarnings(
+        arrows(pos, band[, 1L], pos, band[, 2L],
+               col = pal[i], lwd = 1.4,
+               length = cap_len, angle = 90, code = 3L))
     }
+    points(pos, curves[[i]], col = pal[i], pch = 16L, cex = 1.0)
+  }
+}
+
+# Single-cell effect panel. `effect_style` selects the body
+# drawer; everything else (frame, lfsr, truth, legend) is shared.
+.draw_effect_panel <- function(fit, m, cs_subset, effect_style,
+                                pos, pal, lwd, smoothed,
+                                show_grid_dots, show_affected_region,
+                                show_lfsr_curve, lfsr_threshold,
+                                add_legend, main,
+                                xlab = "outcome position", xaxt = "s",
+                                truth_per_cs = NULL) {
+  curves <- lapply(cs_subset, function(l) .effect_curve(fit, l, m, smoothed))
+  bands  <- lapply(cs_subset, function(l) .credible_band(fit, l, m, smoothed))
+  lfsrs  <- lapply(cs_subset, function(l) .lfsr_curve(fit, l, m, smoothed))
+
+  if (effect_style == "errorbar" &&
+      all(vapply(bands, is.null, logical(1)))) {
+    stop("`effect_style = \"errorbar\"` requires post-smoothed ",
+         "credible bands. Call `mf_post_smooth()` first.")
   }
 
-  if (has_lfsr) {
-    op2 <- par(new = TRUE)
-    on.exit(par(op2), add = TRUE)
-    plot(NA, xlim = range(pos), ylim = c(0, 1),
-         axes = FALSE, xlab = "", ylab = "")
-    axis(4, at = c(0, lfsr_threshold, 0.5, 1),
-         labels = c("0", sprintf("%.2g", lfsr_threshold), "0.5", "1"),
-         las = 1, cex.axis = 0.7, col = "grey50",
-         col.axis = "grey30")
-    mtext("lfsr", side = 4, line = 2, cex = 0.7, col = "grey30")
-    abline(h = lfsr_threshold, lty = 3, col = "grey50")
-    for (i in seq_along(cs_subset)) {
-      if (is.null(lfsrs[[i]])) next
-      lines(pos, lfsrs[[i]], col = pal[i], lwd = 1.4, lty = 2)
-    }
+  has_lfsr  <- effect_style == "band" && show_lfsr_curve &&
+    any(!vapply(lfsrs, is.null, logical(1)))
+  has_truth <- !is.null(truth_per_cs) &&
+    any(!vapply(truth_per_cs, is.null, logical(1)))
+
+  yrange <- .effect_yrange(curves, bands, truth_per_cs)
+  plot(NA, xlim = range(pos), ylim = yrange,
+       xlab = xlab, ylab = "effect", main = main, las = 1,
+       xaxt = xaxt, cex.main = 1.05, font.main = 2L)
+  abline(h = 0, lty = 2, col = "grey60")
+
+  if (effect_style == "band") {
+    .draw_effect_body_band(pos, curves, bands, pal, lwd, show_grid_dots)
+    if (show_affected_region) .overlay_affected_bars(pos, bands, pal, yrange)
+  } else {
+    .draw_effect_body_errorbar(pos, curves, bands, pal)
+    if (show_affected_region) .overlay_affected_dots(pos, bands)
   }
 
+  if (has_lfsr) .overlay_lfsr_axis(pos, lfsrs, pal, lfsr_threshold)
   .overlay_truth_dots(pos, truth_per_cs)
 
   if (add_legend) {
     if (length(cs_subset) > 1L || has_truth) {
-      .effect_cs_legend(cs_subset, pal, has_truth, lwd, style = "band")
+      .effect_cs_legend(cs_subset, pal, has_truth,
+                        lwd = if (effect_style == "band") lwd else NA_real_,
+                        style = effect_style)
     }
     if (has_lfsr) {
       legend("topleft",
@@ -284,89 +350,6 @@ mf_cs_colors <- function(n_cs) {
              col = "grey30", bty = "n", cex = 0.7,
              seg.len = 2.0)
     }
-  }
-}
-
-# Internal: draw the errorbar-style of all `cs_subset` CSes on the
-# current device cell. Errors when no credible bands are available.
-.draw_effect_errorbar <- function(fit, m, cs_subset, pos, pal, smoothed,
-                                  show_affected_region,
-                                  add_legend, main, xlab, xaxt,
-                                  truth_per_cs = NULL) {
-  curves <- lapply(cs_subset, function(l) .effect_curve(fit, l, m, smoothed))
-  bands  <- lapply(cs_subset, function(l) .credible_band(fit, l, m, smoothed))
-
-  if (all(vapply(bands, is.null, logical(1)))) {
-    stop("`effect_style = \"errorbar\"` requires post-smoothed ",
-         "credible bands. Call `mf_post_smooth()` first.")
-  }
-
-  has_truth <- !is.null(truth_per_cs) &&
-    any(!vapply(truth_per_cs, is.null, logical(1)))
-  yrange <- .effect_yrange(curves, bands, truth_per_cs)
-  plot(NA, xlim = range(pos), ylim = yrange,
-       xlab = xlab, ylab = "effect", main = main, las = 1,
-       xaxt = xaxt, cex.main = 1.05, font.main = 2L)
-  abline(h = 0, lty = 2, col = "grey60")
-
-  for (i in seq_along(cs_subset)) {
-    band <- bands[[i]]
-    curve_i <- curves[[i]]
-    if (!is.null(band)) {
-      # Capped errorbar: a tiny perpendicular dash at each
-      # band endpoint via `arrows()` with `angle = 90` and
-      # `code = 3` (caps on both ends). Length is small
-      # relative to the panel width so caps don't crowd.
-      cap_len <- min(0.04, 0.3 / max(length(pos), 1L))
-      suppressWarnings(
-        arrows(pos, band[, 1L], pos, band[, 2L],
-               col = pal[i], lwd = 1.4,
-               length = cap_len, angle = 90, code = 3L))
-    }
-    points(pos, curve_i, col = pal[i], pch = 16L, cex = 1.0)
-  }
-
-  if (show_affected_region) {
-    for (i in seq_along(cs_subset)) {
-      mask <- .affected_mask(bands[[i]])
-      if (length(mask) == 0L || !any(mask)) next
-      points(pos[mask], rep(0, sum(mask)),
-             col = "black", pch = 20L, cex = 1.2)
-    }
-  }
-
-  .overlay_truth_dots(pos, truth_per_cs)
-
-  if (add_legend && (length(cs_subset) > 1L || has_truth)) {
-    .effect_cs_legend(cs_subset, pal, has_truth, lwd = NA_real_,
-                      style = "errorbar")
-  }
-}
-
-# Internal: dispatch by effect_style. Operates on the current
-# device cell.
-.draw_effect_panel <- function(fit, m, cs_subset, effect_style,
-                                pos, pal, lwd, smoothed,
-                                show_grid_dots, show_affected_region,
-                                show_lfsr_curve, lfsr_threshold,
-                                add_legend, main,
-                                xlab = "outcome position", xaxt = "s",
-                                truth_per_cs = NULL) {
-  if (effect_style == "errorbar") {
-    .draw_effect_errorbar(fit, m, cs_subset, pos, pal, smoothed,
-                          show_affected_region = show_affected_region,
-                          add_legend = add_legend,
-                          main = main, xlab = xlab, xaxt = xaxt,
-                          truth_per_cs = truth_per_cs)
-  } else {
-    .draw_effect_band(fit, m, cs_subset, pos, pal, lwd, smoothed,
-                      show_grid_dots = show_grid_dots,
-                      show_affected_region = show_affected_region,
-                      show_lfsr_curve = show_lfsr_curve,
-                      lfsr_threshold = lfsr_threshold,
-                      add_legend = add_legend,
-                      main = main, xlab = xlab, xaxt = xaxt,
-                      truth_per_cs = truth_per_cs)
   }
 }
 
@@ -657,13 +640,22 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
     return(invisible(NULL))
   }
 
+  # Spacing policy: in any layout that combines a PIP cell with
+  # effect cells, the PIP cell is allocated 1.5x the height of a
+  # single effect cell. The PIP cell carries more axis content
+  # (the variable axis, the CS legend, the threshold line) than
+  # an effect cell and looks visibly squeezed at equal weight,
+  # especially when the effect region is split into K stacked
+  # CS panels.
+  pip_weight <- 1.5
+
   # M = 1: PIP on top, effect region below. Effect region is
   # one overlay cell or K stacked cells per the facet resolver.
   if (M == 1L) {
     facet_res       <- resolve_facet_for(1L)
     n_effect_panels <- if (facet_res == "stack" && K >= 2L) K else 1L
     layout(matrix(seq_len(1L + n_effect_panels), ncol = 1L),
-           heights = c(1.0, rep(1.0, n_effect_panels)))
+           heights = c(pip_weight, rep(1.0, n_effect_panels)))
     on.exit(layout(1L), add = TRUE)
     op <- par(mar = c(4, 4, 2.5, 4))
     on.exit(par(op), add = TRUE)
@@ -685,7 +677,7 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
   if (facet_cs == "stack" && K >= 2L) {
     n_cells <- 1L + M * K
     layout(matrix(seq_len(n_cells), ncol = 1L),
-           heights = c(1.0, rep(1.0, M * K)))
+           heights = c(pip_weight, rep(1.0, M * K)))
     on.exit(layout(1L), add = TRUE)
     op <- par(mar = c(4, 4, 2.5, 4))
     on.exit(par(op), add = TRUE)
@@ -765,16 +757,11 @@ plot.mfsusie <- function(x, ...) {
     }
   }
 
-  # Leave a strip of empty y-space above the topmost CS row
-  # for the size legend, plus a strip below the bottom row for
-  # the color legend. Both strips are skipped when the legend
-  # is suppressed.
-  ylim_pad <- if (isTRUE(add_legend)) c(0.5 - 0.6, K + 0.5 + 0.6)
-              else c(0.5, K + 0.5)
   plot(NA, xlim = range(pos),
-       ylim = ylim_pad,
+       ylim = c(0.5, K + 0.5),
        xlab = "outcome position", ylab = "credible set",
-       yaxt = "n", main = main, las = 1, cex.main = 0.95)
+       yaxt = "n", main = main, las = 1, cex.main = 1.05,
+       font.main = 2L)
   axis(2, at = seq_len(K), labels = paste0("CS", seq_len(K)),
        las = 1)
   abline(h = seq_len(K), lty = 3, col = "grey85")
@@ -811,28 +798,33 @@ plot.mfsusie <- function(x, ...) {
   }
 
   if (add_legend) {
-    # Two-axis legend: dot size scale and color rule. Place
-    # the size key at the top-left and the color key at
-    # bottom-right; this keeps both clear of CS bubbles when
-    # the data fills the panel width.
+    # Both legends sit OUTSIDE the panel, in the right-margin
+    # strip the caller has reserved. `xpd = NA` lets `legend()`
+    # draw beyond the plot region.
+    op_xpd <- par(xpd = NA); on.exit(par(op_xpd), add = TRUE)
+    usr <- par("usr")
+    x_right <- usr[2L] + 0.02 * (usr[2L] - usr[1L])
+
+    # Size legend (top): black, since the visual signal is the
+    # dot diameter, not the colour.
     size_breaks <- c(1.3, round(cex_max / 2, 1), cex_max)
-    legend("topleft",
+    legend(x = x_right, y = usr[4L],
            legend = sprintf("-log10(lfsr) = %g", size_breaks),
            pch = 1L, pt.cex = size_breaks, pt.lwd = 2.0,
-           col = "grey30", bty = "n", cex = 0.75,
-           y.intersp = 1.4,
-           inset = c(0.02, 0.02))
+           col = "black", bty = "n", cex = 0.75,
+           y.intersp = 1.4)
+
+    # Colour legend (bottom): two coloured dots, fixed size.
     color_label <- if (!is.null(truth_mask) &&
                        any(!vapply(truth_mask, is.null, logical(1L))))
       c("truly affected", "not affected")
     else
       c(sprintf("lfsr <= %g", lfsr_threshold),
         sprintf("lfsr > %g",  lfsr_threshold))
-    legend("bottomright",
+    legend(x = x_right, y = usr[3L] + 0.30 * (usr[4L] - usr[3L]),
            legend = color_label,
            pch = 1L, pt.cex = 1.8, pt.lwd = 2.0,
-           col = c(pal[1L], "grey60"), bty = "n", cex = 0.75,
-           inset = c(0.02, 0.02))
+           col = c(pal[1L], "grey60"), bty = "n", cex = 0.75)
   }
 }
 
@@ -913,8 +905,12 @@ mfsusie_plot_lfsr <- function(fit,
   }
   per_outcome_truth <- normalize_truth(truth, M)
 
+  # Right-margin strip holds the size + colour legend. Width
+  # 12 lines covers the longest "-log10(lfsr) = ##" label.
+  right_mar <- if (isTRUE(add_legend)) 12 else 2
+
   if (M == 1L) {
-    op <- par(mar = c(4, 5, 2.5, 2))
+    op <- par(mar = c(4, 5, 2.5, right_mar))
     on.exit(par(op), add = TRUE)
     .draw_lfsr_bubble(fit, m = 1L,
                       lfsr_threshold = lfsr_threshold,
@@ -927,7 +923,7 @@ mfsusie_plot_lfsr <- function(fit,
 
   cols <- ceiling(sqrt(M))
   rows <- ceiling(M / cols)
-  op <- par(mfrow = c(rows, cols), mar = c(4, 5, 2.5, 2))
+  op <- par(mfrow = c(rows, cols), mar = c(4, 5, 2.5, right_mar))
   on.exit(par(op), add = TRUE)
   for (mi in seq_len(M)) {
     .draw_lfsr_bubble(fit, m = mi,

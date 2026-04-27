@@ -71,8 +71,8 @@
 #'   update of the mixture weights `pi_V[[m]]` per
 #'   (outcome, scale) using the `mixsqp` solver. `"none"` holds
 #'   the prior fixed at the initial `prior_variance_grid` /
-#'   `null_prior_weight`; required by the C1 (susieR) degeneracy
-#'   contract.
+#'   `null_prior_weight`; useful when collapsing `mfsusie()` to
+#'   `susieR::susie()` for sanity checks.
 #' @param verbose logical.
 #' @param track_fit logical, retain a per-iteration tracking list on
 #'   the fit. Default `FALSE`.

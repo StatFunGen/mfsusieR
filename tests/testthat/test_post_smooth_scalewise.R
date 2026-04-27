@@ -28,7 +28,10 @@ test_that("mf_post_smooth(method = 'scalewise') populates effect_curves and cred
   expect_length(payload$effect_curves[[1L]], 1L)  # L = 1
   expect_length(payload$effect_curves[[1L]][[1L]], T_m)
   expect_equal(dim(payload$credible_bands[[1L]][[1L]]), c(T_m, 2L))
-  expect_null(payload$lfsr_curves)
+  # All smoothers populate lfsr_curves under the unified API.
+  expect_length(payload$lfsr_curves[[1L]][[1L]], T_m)
+  expect_true(all(payload$lfsr_curves[[1L]][[1L]] >= 0 &
+                  payload$lfsr_curves[[1L]][[1L]] <= 1))
 
   # Credible band envelopes the effect curve.
   band  <- payload$credible_bands[[1L]][[1L]]

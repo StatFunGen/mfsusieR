@@ -122,9 +122,7 @@ mf_per_outcome_bhat_shat <- function(data, model, m) {
   shat2_m <- outer(1 / pw, sigma2_per_pos)
 
   # Low-count mask: the IBSS treats flagged columns as
-  # uninformative (Bhat = 0, Shat = 1). Matches the upstream
-  # functional fine-mapping convention applied at every IBSS
-  # iteration.
+  # uninformative (Bhat = 0, Shat = 1) at every iteration.
   lowc <- data$lowc_idx[[m]]
   if (length(lowc) > 0L) {
     bhat_m [, lowc] <- 0

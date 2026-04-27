@@ -5,9 +5,7 @@
 # fine-mapping. Two methods:
 #
 #   - "wavelet_eb" (default): wavelet-domain empirical-Bayes
-#     regression with a per-scale mixture-of-normals prior. Bit-
-#     identical to the upstream EBmvFR(adjust = TRUE) algorithm at
-#     upstream defaults.
+#     regression with a per-scale mixture-of-normals prior.
 #   - "ols": closed-form Frisch-Waugh-Lovell residualization,
 #     `(I - Z (Z'Z)^{-1} Z') Y`. The no-shrinkage limit of the
 #     wavelet-EB path.
@@ -175,9 +173,9 @@ mf_residualize_ols <- function(Y, Z, X = NULL) {
 #' Wavelet-domain empirical-Bayes covariate residualization
 #'
 #' Inner workhorse for `method = "wavelet_eb"`. Implements the
-#' per-coefficient EB regression at upstream-equivalent defaults so
-#' the result bit-matches the upstream EBmvFR(adjust = TRUE)
-#' pipeline.
+#' per-coefficient empirical-Bayes regression of a functional
+#' response `Y` on a covariate matrix `Z` (optionally controlling
+#' for `X` via the Frisch-Waugh-Lovell construction).
 #'
 #' @inheritParams mf_adjust_for_covariates
 #' @return Same named-list shape as `mf_adjust_for_covariates()`.
@@ -205,7 +203,7 @@ mf_residualize_wavelet_eb <- function(Y, Z, X = NULL,
   Y_org <- Y
   X_org <- X
 
-  # Step 1: center+scale Z, center Y. Match upstream's colScale.
+  # Step 1: center+scale Z, center Y.
   Z_scaled <- col_scale(Z, scale = TRUE)
   csd_Z    <- attr(Z_scaled, "scaled:scale")
   Y_cent   <- col_scale(Y, scale = FALSE)
@@ -248,7 +246,7 @@ mf_residualize_wavelet_eb <- function(Y, Z, X = NULL,
   fitted_wc2 <- matrix(0, K, T_pad)
   MLE_wc     <- matrix(0, K, T_pad)
   MLE_wc2    <- matrix(0, K, T_pad)
-  sigma2     <- mean(apply(Y_cent, 2, var))   # initial; per upstream
+  sigma2     <- mean(apply(Y_cent, 2, var))   # initial guess
 
   pi_hist <- list(.flatten_pi_per_scale(G_prior, indx_lst))
 
@@ -294,11 +292,12 @@ mf_residualize_wavelet_eb <- function(Y, Z, X = NULL,
       fitted_wc2[j, ] <- ps^2
     }
 
-    # 5b: residual variance update. Pattern B kept-upstream-bug
-    # formula (missing predictor_weights factor; see
-    # inst/notes/refactor-exceptions.md). sigma2 is dead-end in
-    # the loop (cal_Bhat_Shat ignores resid_var) so the bug only
-    # affects the stored sigma2 field, not Y_adjusted.
+    # 5b: residual variance update. The formula is intentionally
+    # an approximation here (sigma2 is downstream-inert because
+    # `compute_marginal_bhat_shat` ignores it); see
+    # `inst/notes/refactor-exceptions.md` for the full discussion.
+    # The stored sigma2 field is informational only and does not
+    # affect `Y_adjusted`.
     # Posterior-expected squared-error decomposition under the
     # factorized variational posterior:
     #   E[||Y - X*beta||^2]
