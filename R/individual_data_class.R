@@ -24,9 +24,6 @@
 #' @param wavelet_family character, see `wd`.
 #' @param standardize logical, scale `X` columns to unit variance.
 #' @param intercept logical, center `X` columns to mean zero.
-#' @param save_residuals logical, currently no-op. The per-outcome
-#'   `residuals` slot is always allocated (required by
-#'   `mf_post_smooth()`).
 #' @param verbose logical, forwarded to `mf_dwt`'s remap step.
 #' @return list of class `c("mf_individual", "individual")`.
 #' @references
@@ -42,7 +39,6 @@ create_mf_individual <- function(X,
                                  wavelet_family        = "DaubLeAsymm",
                                  standardize           = TRUE,
                                  intercept             = TRUE,
-                                 save_residuals        = TRUE,
                                  low_count_filter      = 0,
                                  quantile_norm         = FALSE,
                                  verbose               = FALSE) {
@@ -173,7 +169,6 @@ create_mf_individual <- function(X,
     n            = n,
     p            = p,
     M            = M,
-    residuals    = if (save_residuals) vector("list", M) else NULL,
     intercept    = intercept,
     standardize  = standardize,
     wavelet_meta = list(

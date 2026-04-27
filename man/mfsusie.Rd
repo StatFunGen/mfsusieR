@@ -35,7 +35,8 @@ mfsusie(
   control_mixsqp = NULL,
   mixsqp_null_penalty = 0.1,
   model_init = NULL,
-  small_sample_correction = FALSE
+  small_sample_correction = FALSE,
+  attach_smoothing_inputs = TRUE
 )
 }
 \arguments{
@@ -172,6 +173,15 @@ per-variable BF, inflating PIPs at null variants. The
 correction acts on variable selection probabilities only;
 posterior moments given inclusion are unchanged. Default
 \code{FALSE}.}
+
+\item{attach_smoothing_inputs}{logical. When \code{TRUE} (default),
+the fit carries \code{Y_grid} (post-remap position-space Y) and
+\code{X_eff} (per-effect alpha-weighted aggregate of X) so that
+\code{mf_post_smooth(fit)} runs without re-passing the data.
+Set \code{FALSE} to drop these and call
+\code{mf_post_smooth(fit, X = X, Y = Y, ...)} instead; useful
+when sharing fits where the per-individual data should
+not travel with the fit.}
 }
 \value{
 A list of class \code{c("mfsusie", "susie")} carrying:
@@ -190,9 +200,13 @@ length-\code{S_m} per-(scale, outcome) residual variances.}
 \item{\code{pip}}{length-p posterior inclusion probabilities.}
 \item{\code{sets}}{credible sets via \code{susie_get_cs}.}
 \item{\code{fitted}}{\code{list[M]} of running per-outcome fits in the
-wavelet domain.}
-\item{\code{residuals}}{\code{list[M]} per-outcome residuals, when
-always populated.}
+wavelet domain. Used by \code{model_init} to warm-start a
+follow-up call.}
+\item{\code{Y_grid}}{\code{list[M]}, the post-remap position-space
+response on the padded grid. Attached when
+\code{attach_smoothing_inputs = TRUE} (default).}
+\item{\code{X_eff}}{\code{list[L]} of per-effect alpha-weighted X
+aggregates. Attached when \code{attach_smoothing_inputs = TRUE}.}
 }
 }
 \description{

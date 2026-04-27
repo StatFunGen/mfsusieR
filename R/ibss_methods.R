@@ -261,7 +261,13 @@ trim_null_effects.mf_individual <- function(data, params, model) {
 #' @keywords internal
 #' @noRd
 cleanup_model.mf_individual <- function(data, params, model, ...) {
-  model$residuals          <- if (is.null(data$residuals)) NULL else model$residuals
+  # IBSS scratch fields stripped from the user-facing fit.
+  # `model$fitted` (wavelet-domain running fit) is KEPT: it is
+  # consumed by `ibss_initialize.mf_individual` via
+  # `params$model_init$fitted` to warm-start a follow-up fit
+  # without recomputing one IBSS sweep. Removing it costs an
+  # extra iteration on every warm-start call.
+  model$residuals          <- NULL
   model$fitted_without_l   <- NULL
   model$raw_residuals      <- NULL
   model$residual_variance  <- NULL

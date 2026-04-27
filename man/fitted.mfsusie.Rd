@@ -13,11 +13,12 @@
 }
 \value{
 list of length \code{M}; each element a numeric matrix
-\verb{n x T_m} of fitted curves.
+\verb{n x T_m} of fitted curves on the training X.
 }
 \description{
-Projects the running per-outcome fit \code{fit$fitted[[m]]} (which
-lives in the wavelet domain) back to the original position grid
-via the inverse wavelet transform. Equivalent to
-\code{predict(object, newx = X_train)}.
+Projects the running per-outcome wavelet-domain fit
+\code{fit$fitted[[m]]} (left on the fit by the IBSS loop and reused
+by warm-starts) back to the original position grid via the
+inverse wavelet transform. No \code{X} needed: the running fit is
+the per-individual training prediction in wavelet form.
 }

@@ -231,15 +231,23 @@ test_that("intercept = FALSE skips X centering", {
   expect_equal(obj$wavelet_meta$X_center, rep(0, ncol(X)), tolerance = 0)
 })
 
-# ---- Residual storage opt-in / opt-out --------------------------------
+# ---- Data-object slot list ---------------------------------------------
 
-test_that("residuals slot is always allocated per outcome", {
+test_that("data object exposes the canonical fit-time slots", {
   X <- make_X(20, 8)
   Y <- make_Y_functional(20, c(64L, 128L))
   obj <- mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE)
 
-  expect_type(obj$residuals, "list")
-  expect_identical(length(obj$residuals), 2L)
+  # Required slots used downstream by the IBSS dispatch and the
+  # post-fit attach step.
+  for (slot in c("X", "Y", "D", "scale_index", "T_basis", "csd",
+                 "xtx_diag", "n", "p", "M", "wavelet_meta")) {
+    expect_true(slot %in% names(obj),
+                info = sprintf("missing slot: %s", slot))
+  }
+  # `residuals` was a no-op slot historically; it should no longer
+  # be present.
+  expect_false("residuals" %in% names(obj))
 })
 
 # ---- DWT cache contents agree with mf_dwt ------------------------------

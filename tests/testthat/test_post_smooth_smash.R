@@ -69,8 +69,8 @@ test_that("method = 'smash' errors cleanly when smashr is not available", {
   set.seed(7L)
   fit <- list()
   class(fit) <- c("mfsusie", "susie")
-  fit$residuals <- list()
-  fit$lead_X    <- list()
+  fit$Y_grid <- list()
+  fit$X_eff  <- list()
   if (requireNamespace("smashr", quietly = TRUE)) {
     skip("smashr is installed; cannot exercise the missing-dep error.")
   }

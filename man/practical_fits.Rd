@@ -20,7 +20,7 @@ Normal marginal Bayes factor).}
 enabled.}
 }
 
-Each fit is stripped of \code{residuals}, \code{XtY}, \code{tracking}, and any
+Each fit is stripped of \code{Y_grid}, \code{X_eff}, \code{tracking}, and any
 raw \code{X}/\code{Y} matrices to keep the package size small and avoid
 shipping individual-level data.
 }
