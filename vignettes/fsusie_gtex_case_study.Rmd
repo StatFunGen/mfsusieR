@@ -69,9 +69,7 @@ TI-smoothed per-CS effect curves with 95% credible bands plus
 affected-region bars at the bottom of the effect panel.
 
 ```{r plot-smoothed}
-fit_s <- mf_post_smooth(fit, method = "TI",
-                        wavelet_filter = 1L,
-                        wavelet_family = "DaubExPhase")
+fit_s <- mf_post_smooth(fit, method = "TI")
 mfsusie_plot(fit_s)
 ```
 

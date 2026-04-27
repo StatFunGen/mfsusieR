@@ -20,8 +20,19 @@ knitr::opts_chunk$set(
 
 Joint multi-outcome fits over many ATAC-seq conditions, dense
 position grids, or large `p` (number of predictors) can run beyond
-the wall time of a typical cluster job. This vignette covers
-practical patterns for handling those cases.
+the wall time of a typical cluster job. Genome-wide scans
+compound the problem: most loci carry no fine-mapping signal,
+yet a uniform iteration budget spends the same effort on them as
+on the loci that actually need it.
+
+The pattern this vignette covers is a two-pass scan:
+
+1. **First pass**: run every locus with a low `max_iter` budget
+   (e.g. 5). Most non-signal loci converge immediately and need
+   no further attention; the rest emerge as candidates.
+2. **Second pass**: re-fit the candidates with a larger budget,
+   warm-started from the partial fit so the IBSS loop does not
+   restart from cold and just polishes the partial state.
 
 ```{r setup, message = FALSE}
 library(mfsusieR)
@@ -29,113 +40,233 @@ library(susieR)
 set.seed(1)
 ```
 
-## Diagnose convergence before increasing the budget
+## Setup: one signal locus and one null locus
 
-The fit object records the per-iteration ELBO trajectory, the
-iteration count, and a converged flag. If the ELBO is still rising
-when `niter == max_iter`, the run terminated by budget.
-
-```{r run-short}
+```{r data}
 data(N3finemapping)
 X <- N3finemapping$X[, seq_len(120)]
 n <- nrow(X); p <- ncol(X)
 T_func <- c(32L, 32L)
-beta1 <- numeric(p); beta1[c(37, 88)] <- c(1, -0.6)
 
-Y_list <- lapply(T_func, function(T_m) {
-  X %*% matrix(rep(beta1, T_m), nrow = p) +
+# Locus A: real cis-signal at SNPs 37 and 88.
+beta_signal <- numeric(p); beta_signal[c(37L, 88L)] <- c(1, -0.6)
+Y_signal <- lapply(T_func, function(T_m) {
+  X %*% matrix(rep(beta_signal, T_m), nrow = p) +
     matrix(rnorm(n * T_m, sd = 0.4), nrow = n)
 })
 
-fit_short <- mfsusie(X, Y_list, L = 15, L_greedy = 5, max_iter = 5,
-                     prior_variance_scope = "per_outcome",
-                     verbose = TRUE)
-fit_short$niter
-fit_short$converged
-tail(fit_short$elbo, 5)
+# Locus B: no signal (independent noise).
+Y_null <- lapply(T_func, function(T_m)
+  matrix(rnorm(n * T_m, sd = 0.4), nrow = n))
 ```
 
-If `converged` is `FALSE` and the ELBO is still climbing in the last
-few iterations, the fix is more iterations.
+## First pass: short budget, screen everything
 
-```{r run-full}
-fit_full <- mfsusie(X, Y_list, L = 15, L_greedy = 5, max_iter = 100,
-                    prior_variance_scope = "per_outcome",
-                    verbose = TRUE)
-fit_full$niter
-fit_full$converged
+`max_iter = 5` is enough for null loci to settle and for signal
+loci to expose themselves through `converged = FALSE` plus an
+ELBO that is still rising. We use `track_fit = TRUE` only to
+inspect the trajectory; in production it is optional.
+
+```{r first-pass}
+fit_signal_short <- mfsusie(X, Y_signal, L = 15, L_greedy = 5,
+                            max_iter = 5,
+                            prior_variance_scope = "per_outcome",
+                            verbose = FALSE)
+fit_null_short   <- mfsusie(X, Y_null,   L = 15, L_greedy = 5,
+                            max_iter = 5,
+                            prior_variance_scope = "per_outcome",
+                            verbose = FALSE)
+
+c(signal = fit_signal_short$niter,    null = fit_null_short$niter)
+c(signal = fit_signal_short$converged, null = fit_null_short$converged)
+length(fit_signal_short$sets$cs)
+length(fit_null_short$sets$cs)
 ```
 
-## Save and restore an in-progress fit
+The null locus converges in a couple of iterations and produces
+no credible sets. The signal locus reports `converged = FALSE`
+at the budget — its ELBO is still rising — and is the candidate
+to follow up on.
 
-Save the fit object after each cluster job. Re-running with the
-identical seed and full iteration budget reproduces the same
-trajectory deterministically; mfsusie's IBSS dispatch is purely
-deterministic given the same `(X, Y, L, prior, seed)`.
+## Triage: drop converged-no-signal, queue non-converged-with-signal
+
+```{r triage}
+loci <- list(signal = fit_signal_short, null = fit_null_short)
+followup <- vapply(loci, function(f) {
+  !isTRUE(f$converged) || length(f$sets$cs) > 0L
+}, logical(1L))
+followup
+```
+
+Only the signal locus is queued for the second pass. A
+production scan would loop this triage over all loci and emit
+the followup queue.
+
+## Second pass: warm-start from the partial fit
+
+`model_init` accepts a previously returned mfsusie fit. The IBSS
+loop seeds `alpha`, `mu`, `mu2`, `V`, `pi_V`, `G_prior`,
+`sigma2`, and `fitted` from the supplied object instead of the
+cold zero state. The follow-up then converges in a small number
+of additional iterations rather than the cold-start total.
+
+```{r warm-followup}
+fit_signal_warm <- mfsusie(X, Y_signal, L = 15, L_greedy = 5,
+                           max_iter = 100,
+                           model_init = fit_signal_short,
+                           prior_variance_scope = "per_outcome",
+                           verbose = FALSE)
+fit_signal_warm$niter
+fit_signal_warm$converged
+```
+
+Compare to a cold-start run of the same locus at full budget:
+
+```{r cold-baseline}
+fit_signal_cold <- mfsusie(X, Y_signal, L = 15, L_greedy = 5,
+                           max_iter = 100,
+                           prior_variance_scope = "per_outcome",
+                           verbose = FALSE)
+fit_signal_cold$niter
+```
+
+The cold run converges at iteration `fit_signal_cold$niter`; the
+warm follow-up adds only the increment between the partial budget
+and convergence, so wall time scales with the residual gap rather
+than with the full budget.
+
+## Save and restore
+
+Save the fit object between jobs. Re-running mfsusie with the
+identical `(X, Y, L, prior, seed)` reproduces the same trajectory
+deterministically.
 
 ```{r save-restore, eval = FALSE}
-saveRDS(fit_short, "fit_progress.rds")
+saveRDS(fit_signal_short, "fit_partial.rds")
 # ...later, on a new job...
-fit_short <- readRDS("fit_progress.rds")
-```
-
-## Mid-run restart from a saved partial fit
-
-`mfsusie()` accepts a `model_init` argument carrying a previously
-returned fit. The IBSS loop seeds itself from the supplied
-`alpha`, `mu`, `mu2`, `V`, `pi_V`, `G_prior`, `sigma2`, and
-`fitted` rather than the cold-start zero state, so a job that
-hit a per-call wall-time cap can resume from where it left off.
-
-```{r warm-restart, eval = FALSE}
-# First job: cap iterations and save the partial fit.
-fit_partial <- mfsusie(X, Y_list, L = 15, L_greedy = 5,
-                       max_iter = 4,
-                       prior_variance_scope = "per_outcome",
-                       verbose = TRUE)
-saveRDS(fit_partial, "fit_progress.rds")
-
-# Later, on a new job: resume.
-fit_partial <- readRDS("fit_progress.rds")
-fit_full    <- mfsusie(X, Y_list, L = 15, L_greedy = 5,
+fit_partial <- readRDS("fit_partial.rds")
+fit_full    <- mfsusie(X, Y_signal, L = 15, L_greedy = 5,
                        max_iter = 100,
                        model_init = fit_partial,
-                       prior_variance_scope = "per_outcome",
-                       verbose = TRUE)
+                       prior_variance_scope = "per_outcome")
 ```
 
-The resumed run typically converges in one or two additional
-iterations when the partial fit was already close to the fixed
-point. The supplied `model_init` must have the same `L` as the
-new call, or fewer (in which case the warm-loaded effects are
-expanded with zero-state slots up to the requested `L`, the
-same growth pattern used by `L_greedy` between rounds).
+The supplied `model_init` must have the same `L` as the new call,
+or fewer (in which case the warm-loaded effects are expanded with
+zero-state slots up to the requested `L`, the same growth pattern
+used by `L_greedy` between rounds).
 
-For diagnostic monitoring inside a long run, consider:
+## Verify the warm-start matches the cold-start fit
 
-```{r monitor, eval = FALSE}
-fit <- mfsusie(X, Y_list, L = 15, L_greedy = 5,
-               max_iter = 100, tol = 1e-3,
-               prior_variance_scope = "per_outcome",
-               verbose = TRUE,                # logs per-iter ELBO
-               track_fit = TRUE)              # records full trajectory
+Two checks: the fitted posteriors should agree, and the warm
+trajectory should land on the same ELBO as the cold trajectory.
+
+```{r warm-cold-equality}
+# Posterior agreement: PIPs, credible sets, final ELBO.
+max_pip_diff <- max(abs(fit_signal_warm$pip - fit_signal_cold$pip))
+elbo_diff    <- abs(tail(fit_signal_warm$elbo, 1L) -
+                    tail(fit_signal_cold$elbo, 1L))
+cs_warm <- vapply(fit_signal_warm$sets$cs,
+                  function(idx) idx[which.max(fit_signal_warm$pip[idx])],
+                  integer(1L))
+cs_cold <- vapply(fit_signal_cold$sets$cs,
+                  function(idx) idx[which.max(fit_signal_cold$pip[idx])],
+                  integer(1L))
+data.frame(
+  max_pip_diff   = max_pip_diff,
+  elbo_diff      = elbo_diff,
+  cs_warm_leads  = paste(sort(cs_warm), collapse = ","),
+  cs_cold_leads  = paste(sort(cs_cold), collapse = ",")
+)
 ```
 
-`track_fit = TRUE` keeps the per-iteration model snapshots inside
-`fit$trace`, which is useful for debugging slow convergence at the
-cost of memory.
+The PIPs match within numerical noise, the final ELBOs agree,
+and the credible-set lead variants are identical. The
+warm-started run reaches the same fixed point.
 
-## When the bottleneck is `T_basis` rather than iterations
+```{r elbo-trajectory, fig.height = 4}
+# Overlay the ELBO trajectories. The warm trajectory continues
+# from where the partial fit left off (iteration `n_partial + 1`).
+n_partial <- fit_signal_short$niter
+elbo_cold <- fit_signal_cold$elbo
+elbo_warm <- c(fit_signal_short$elbo, fit_signal_warm$elbo[-1L])
 
-A fit on a single outcome with `T_m = 4096` can be slow at the
-wavelet step regardless of iteration count. Two levers:
+xrng <- c(1, max(length(elbo_cold), length(elbo_warm)))
+yrng <- range(c(elbo_cold, elbo_warm), na.rm = TRUE)
+plot(seq_along(elbo_cold), elbo_cold, type = "b", pch = 19L,
+     col = "grey30", lwd = 2, xlim = xrng, ylim = yrng,
+     xlab = "iteration", ylab = "ELBO",
+     main = "Cold-start vs warm-start trajectories",
+     cex.main = 1.05, font.main = 2L)
+lines(seq_along(elbo_warm), elbo_warm, type = "b", pch = 17L,
+      col = "firebrick", lwd = 2)
+abline(v = n_partial + 0.5, lty = 3, col = "grey50")
+legend("bottomright",
+       legend = c("cold start (full run)",
+                  paste0("warm continuation (partial+",
+                         fit_signal_warm$niter, " iters)"),
+                  "partial-fit boundary"),
+       col = c("grey30", "firebrick", "grey50"),
+       lwd = c(2, 2, 1), lty = c(1, 1, 3),
+       pch = c(19, 17, NA), bty = "n", cex = 0.8)
+```
 
-- `max_padded_log2` caps the wavelet grid size. The default is `10`
-  (i.e., `T_basis <= 1024`). Drop it for a sanity check.
-- Drop `coverage` from `0.95` to a coarser `0.9` to reduce the size
-  of credible-set search.
+Both trajectories converge to the same ELBO. The dashed line
+marks where the first-pass partial fit ended; the warm
+continuation needs only a small increment past that point.
 
-For very large `T_m`, post-hoc smoothing helpers (smash, TI, HMM)
-are exposed through a separate `mf_post_smooth()` API rather than
-folded into the IBSS loop. The core fit returns the wavelet-space
-posterior; the smoothing module is a follow-up PR.
+## Diagnostic tracing inside a long run
+
+For loci that resist convergence, `track_fit = TRUE` keeps a
+per-iteration snapshot list at `fit$trace`. Each entry records
+`alpha` (the per-effect SNP posterior, `L x p`), `sigma2` (the
+per-outcome residual variance), `pi_V` (the mixture weights),
+and the iteration's ELBO.
+
+```{r track-fit, fig.height = 4.5, fig.width = 8}
+fit_traced <- mfsusie(X, Y_signal, L = 15, L_greedy = 5,
+                      max_iter = 20, tol = 1e-3,
+                      prior_variance_scope = "per_outcome",
+                      verbose = FALSE, track_fit = TRUE)
+length(fit_traced$trace)
+str(fit_traced$trace[[1L]], max.level = 1L)
+
+# How quickly does the per-iteration posterior at each true
+# causal SNP settle?
+true_snps <- c(37L, 88L)
+alpha_path <- vapply(seq_along(fit_traced$trace), function(it) {
+  alpha_it <- fit_traced$trace[[it]]$alpha   # L x p
+  vapply(true_snps, function(j) max(alpha_it[, j]),
+         numeric(1L))
+}, numeric(2L))
+rownames(alpha_path) <- paste0("SNP ", true_snps)
+
+par(mfrow = c(1L, 2L), mar = c(4, 4, 2.5, 1))
+plot(seq_len(ncol(alpha_path)), alpha_path["SNP 37", ],
+     type = "b", pch = 19L, col = "#1f78b4", lwd = 2,
+     ylim = c(0, 1),
+     xlab = "iteration",
+     ylab = "max alpha at SNP 37 across effects",
+     main = "Posterior trajectory at SNP 37",
+     cex.main = 1.05, font.main = 2L)
+abline(h = 1, lty = 3, col = "grey50")
+
+plot(seq_len(ncol(alpha_path)), alpha_path["SNP 88", ],
+     type = "b", pch = 19L, col = "#33a02c", lwd = 2,
+     ylim = c(0, 1),
+     xlab = "iteration",
+     ylab = "max alpha at SNP 88 across effects",
+     main = "Posterior trajectory at SNP 88",
+     cex.main = 1.05, font.main = 2L)
+abline(h = 1, lty = 3, col = "grey50")
+par(mfrow = c(1L, 1L))
+```
+
+`fit$trace` makes it possible to see *which* effect lands on
+*which* SNP at each iteration. When the IBSS loop is slow to
+converge, looking at the alpha trajectories at candidate SNPs
+exposes whether the loop is oscillating between competing
+configurations or simply tightening posterior mass on a
+single one. `track_fit = TRUE` is memory-heavy on real data
+(each snapshot copies `alpha`, `sigma2`, `pi_V`); reserve it
+for diagnostic runs rather than the genome-wide screen pass.

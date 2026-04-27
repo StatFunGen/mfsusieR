@@ -217,9 +217,7 @@ Y_list <- list(
 )
 
 fit_m   <- mfsusie(X, Y_list, L = 15, L_greedy = 5, verbose = TRUE)
-fit_m_s <- mf_post_smooth(fit_m, method = "TI",
-                          wavelet_filter = 1L,
-                          wavelet_family = "DaubExPhase")
+fit_m_s <- mf_post_smooth(fit_m, method = "TI")
 ```
 
 ```{r mfsusie-plot, fig.width = 8, fig.height = 6}

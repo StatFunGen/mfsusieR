@@ -46,8 +46,8 @@ shapes and signs differ. Genotypes use the
 
 ```{r load-data}
 data(multiomic_example)
-Y_list <- multiomic_example$Y_list[c("dnam", "rna")]
-pos_list <- multiomic_example$pos_list[c("dnam", "rna")]
+Y_list   <- multiomic_example$Y_list[c("DNAm", "RNA-seq")]
+pos_list <- multiomic_example$pos_list[c("DNAm", "RNA-seq")]
 sapply(Y_list, ncol)     # T_m per outcome
 multiomic_example$causal_snps
 ```
@@ -72,11 +72,17 @@ outcome with TI-smoothed curves, 95% credible bands, and
 affected-region bars at the bottom of each panel.
 
 ```{r mfsusie-plot, fig.width = 8, fig.height = 5}
-fit_s <- mf_post_smooth(fit, method = "TI",
-                        wavelet_filter = 1L,
-                        wavelet_family = "DaubExPhase")
-mfsusie_plot(fit_s)
+fit_s <- mf_post_smooth(fit, method = "TI")
+mfsusie_plot(fit_s, facet_cs = "stack")
 ```
+
+When the fit has both `M > 1` outcomes and several credible
+sets, `facet_cs = "stack"` lays out one effect panel per
+`(outcome, CS)` pair stacked vertically below the PIP panel,
+which keeps the per-CS curves at full width. The default
+`facet_cs = "auto"` falls back to a per-outcome overlay grid
+when `M > 1`; switch to `"stack"` when you want a separated
+view per CS.
 
 ```{r cs}
 fit$sets$cs
@@ -121,17 +127,14 @@ Both flags route through `mf_adjust_for_covariates()` as well.
 See `vignette("practical_data_applications")` for an applied
 walk-through on a multi-region ATAC-seq example dataset.
 
-## When to reach for mfsusie over fsusie
+## When to reach for mfSuSiE over fSuSiE+COLOC
 
 Use `mfsusie()` when:
 
 - A variable plausibly affects multiple distinct phenotypes (different
   tissues, different molecular layers).
 - The phenotypes have heterogeneous shapes (some scalar, some
-  functional, some at different sampling resolutions). mfsusie does
+  functional, some at different sampling resolutions). mfSuSiE does
   not require a shared `T`.
 - You want a single credible set list combining all the evidence,
   rather than ad-hoc colocalization across separate fsusie fits.
-
-Use `fsusie()` when there is exactly one response (functional or
-scalar) and no reason to model joint effects across outcomes.
