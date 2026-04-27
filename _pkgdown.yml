@@ -75,7 +75,7 @@ articles:
     contents:
       - getting_started
 
-  - title: "Single-outcome fine-mapping"
+  - title: "Single-context functional regression fine-mapping using fSuSiE"
     desc: >
       Fine-mapping a single response. One Y, one set of predictor variables.
     contents:
@@ -86,7 +86,7 @@ articles:
       - fsusie_gtex_case_study
       - fsusie_why_functional
 
-  - title: "Multi-outcome fine-mapping"
+  - title: "Multi-context functional regression fine-mapping using mfSuSiE"
     desc: >
       Joint fine-mapping across multiple functional and scalar
       responses. List of Y, shared variable selection.
