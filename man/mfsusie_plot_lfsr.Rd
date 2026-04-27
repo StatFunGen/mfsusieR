@@ -11,6 +11,7 @@ mfsusie_plot_lfsr(
   cex_max = 6,
   add_legend = TRUE,
   smooth_method = NULL,
+  save = NULL,
   ...
 )
 }
@@ -31,6 +32,12 @@ boolean vector or list-of-CS-vectors.}
 
 \item{cex_max}{numeric, upper clamp on \code{-log10(lfsr)} for
 the dot size. Default \code{6}.}
+
+\item{save}{optional file path. When non-NULL the bubble grid
+is written to the file at a size proportional to the number
+of outcomes and credible sets. The graphics device is
+selected from the file extension: \code{.pdf}, \code{.png},
+\code{.jpg}/\code{.jpeg}, or \code{.svg}.}
 
 \item{...}{reserved.}
 }

@@ -18,6 +18,7 @@ mfsusie_plot(
   add_legend = TRUE,
   truth = NULL,
   smooth_method = NULL,
+  save = NULL,
   ...
 )
 }
@@ -65,6 +66,12 @@ For \code{M > 1}: a length-\code{M} list, each entry one of those two
 shapes (or \code{NULL} to skip an outcome). Truth values are
 overlaid as dark-grey dots and added to the legend. Default
 \code{NULL} (no overlay).}
+
+\item{save}{optional file path. When non-NULL the plot is
+written to the file at the dimensions returned by
+\code{mfsusie_plot_dimensions()}. The graphics device is selected
+from the file extension: \code{.pdf}, \code{.png}, \code{.jpg}/\code{.jpeg}, or
+\code{.svg}. Default \code{NULL} (draw to the current device).}
 
 \item{...}{reserved.}
 }

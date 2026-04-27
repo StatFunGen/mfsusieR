@@ -1,11 +1,11 @@
 ---
-title: "Practical patterns for long-running fits"
+title: "Two-pass scans with warm-start follow-up"
 author: "Gao Wang, Anjing Liu and William Denault"
 output:
   rmarkdown::html_vignette:
     toc: true
 vignette: >
-  %\VignetteIndexEntry{Practical patterns for long-running fits}
+  %\VignetteIndexEntry{Two-pass scans with warm-start follow-up}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
