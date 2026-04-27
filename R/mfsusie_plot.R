@@ -928,45 +928,53 @@ mfsusie_plot_dimensions <- function(fit, m = NULL,
       col_i <- ifelse(sig, pal[i], "grey60")
     }
 
-    # Cap and clamp dot size: -log10(lfsr_i), clipped to
-    # [0, cex_max] and shifted to a small minimum so even
-    # uninformative positions render.
     raw <- -log10(pmax(lfsr_i, .Machine$double.eps))
-    raw <- pmin(raw, cex_max)
-    raw <- pmax(raw, 0.2)
     points(pos, rep(i, T_m), pch = 1L,
-           cex = raw, col = col_i, lwd = 2.0)
+           cex = .lfsr_cex(raw, cex_max), col = col_i, lwd = 2.0)
   }
 
   if (add_legend) {
-    # Both legends sit OUTSIDE the panel, in the right-margin
-    # strip the caller has reserved. `xpd = NA` lets `legend()`
-    # draw beyond the plot region.
+    # Both legends sit horizontally just under the title, above
+    # the panel proper. `xpd = NA` lets `legend()` draw beyond
+    # the plot region into the reserved top margin.
     op_xpd <- par(xpd = NA); on.exit(par(op_xpd), add = TRUE)
     usr <- par("usr")
-    x_right <- usr[2L] + 0.02 * (usr[2L] - usr[1L])
+    x_left  <- usr[1L]
+    x_mid   <- usr[1L] + 0.55 * (usr[2L] - usr[1L])
+    y_above <- usr[4L] + 0.06 * (usr[4L] - usr[3L])
 
-    # Size legend (top): black, since the visual signal is the
-    # dot diameter, not the colour.
     size_breaks <- c(1.3, round(cex_max / 2, 1), cex_max)
-    legend(x = x_right, y = usr[4L],
+    legend(x = x_left, y = y_above,
            legend = sprintf("-log10(lfsr) = %g", size_breaks),
-           pch = 1L, pt.cex = size_breaks, pt.lwd = 2.0,
-           col = "black", bty = "n", cex = 0.75,
-           y.intersp = 1.4)
+           pch = 1L, pt.cex = .lfsr_cex(size_breaks, cex_max),
+           pt.lwd = 2.0, col = "black", bty = "n", cex = 0.75,
+           horiz = TRUE)
 
-    # Colour legend (bottom): two coloured dots, fixed size.
     color_label <- if (!is.null(truth_mask) &&
                        any(!vapply(truth_mask, is.null, logical(1L))))
       c("truly affected", "not affected")
     else
       c(sprintf("lfsr <= %g", lfsr_threshold),
         sprintf("lfsr > %g",  lfsr_threshold))
-    legend(x = x_right, y = usr[3L] + 0.30 * (usr[4L] - usr[3L]),
+    legend(x = x_mid, y = y_above,
            legend = color_label,
-           pch = 1L, pt.cex = 1.8, pt.lwd = 2.0,
-           col = c(pal[1L], "grey60"), bty = "n", cex = 0.75)
+           pch = 1L, pt.cex = 1.4, pt.lwd = 2.0,
+           col = c(pal[1L], "grey60"), bty = "n", cex = 0.75,
+           horiz = TRUE)
   }
+}
+
+# Map -log10(lfsr) values to a tame visual cex range. The raw
+# `-log10(lfsr)` runs from 0 to >> 1, and using it directly as
+# `cex` produces dots that dominate the panel at high
+# significance and disappear near the threshold. Linearly map
+# `[0, cex_max]` to `[0.7, 2.5]` so the legend and panel both
+# stay readable.
+.lfsr_cex <- function(raw, cex_max,
+                      cex_range = c(0.7, 2.5)) {
+  raw_c <- pmin(pmax(raw, 0), cex_max)
+  cex_range[1L] +
+    (cex_range[2L] - cex_range[1L]) * raw_c / cex_max
 }
 
 #' Per-CS local false sign rate bubble grid
@@ -1036,14 +1044,15 @@ mfsusie_plot_lfsr <- function(fit,
   K <- length(fit$sets$cs %||% list())
 
   # Optional file output: open a sized device and close it on
-  # exit. Width scales with the number of grid columns plus the
-  # legend strip; height scales with number of CS rows + outcome
-  # tile rows.
+  # exit. Width scales with the number of grid columns; height
+  # scales with the per-CS bubble rows plus title + legend
+  # strip when the legend is enabled.
   if (!is.null(save)) {
     cols    <- ceiling(sqrt(M))
     rows    <- ceiling(M / cols)
-    width   <- 4 * cols + (if (isTRUE(add_legend)) 2.5 else 0)
-    height  <- max(3, 0.6 * max(K, 1L) * rows + 1)
+    width   <- max(6, 4 * cols)
+    height  <- max(3, 0.6 * max(K, 1L) * rows +
+                    (if (isTRUE(add_legend)) 2 else 1))
     .open_save_device(save, list(width = width, height = height))
     on.exit(grDevices::dev.off(), add = TRUE)
   }
@@ -1066,12 +1075,13 @@ mfsusie_plot_lfsr <- function(fit,
   }
   per_outcome_truth <- normalize_truth(truth, M)
 
-  # Right-margin strip holds the size + colour legend. Width
-  # 12 lines covers the longest "-log10(lfsr) = ##" label.
-  right_mar <- if (isTRUE(add_legend)) 12 else 2
+  # Top-margin strip holds the size + colour legend (under the
+  # title). The panel mar reserves an extra ~3 lines on top
+  # when the legend is enabled.
+  top_mar <- if (isTRUE(add_legend)) 5.5 else 2.5
 
   if (M == 1L) {
-    op <- par(mar = c(4, 5, 2.5, right_mar))
+    op <- par(mar = c(4, 5, top_mar, 2))
     on.exit(par(op), add = TRUE)
     .draw_lfsr_bubble(fit, m = 1L,
                       lfsr_threshold = lfsr_threshold,
@@ -1084,7 +1094,7 @@ mfsusie_plot_lfsr <- function(fit,
 
   cols <- ceiling(sqrt(M))
   rows <- ceiling(M / cols)
-  op <- par(mfrow = c(rows, cols), mar = c(4, 5, 2.5, right_mar))
+  op <- par(mfrow = c(rows, cols), mar = c(4, 5, top_mar, 2))
   on.exit(par(op), add = TRUE)
   for (mi in seq_len(M)) {
     .draw_lfsr_bubble(fit, m = mi,

@@ -9,8 +9,8 @@ mfsusie_plot_dimensions(
   m = NULL,
   facet_cs = c("auto", "stack", "overlay"),
   smooth_method = NULL,
-  min_pip_height = 1.6,
-  min_cell_height = 1.5,
+  min_pip_height = 2.2,
+  min_cell_height = 2,
   width = 8
 )
 }
