@@ -334,8 +334,13 @@ mf_cs_colors <- function(n_cs) {
     if (show_affected_region) .overlay_affected_dots(pos, bands)
   }
 
-  if (has_lfsr) .overlay_lfsr_axis(pos, lfsrs, pal, lfsr_threshold)
+  # Truth dots use effect-axis coordinates and must be drawn
+  # BEFORE the lfsr overlay, which switches the panel's
+  # plot.window to (0, 1) y-coordinates for the right axis.
+  # Anything plotted after `.overlay_lfsr_axis` would inherit
+  # those (0, 1) coords and be misplaced.
   .overlay_truth_dots(pos, truth_per_cs)
+  if (has_lfsr) .overlay_lfsr_axis(pos, lfsrs, pal, lfsr_threshold)
 
   if (add_legend) {
     if (length(cs_subset) > 1L || has_truth) {
