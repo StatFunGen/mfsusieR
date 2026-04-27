@@ -276,3 +276,11 @@ configurations or simply tightening posterior mass on a
 single one. `track_fit = TRUE` is memory-heavy on real data
 (each snapshot copies `alpha`, `sigma2`, `pi_V`); reserve it
 for diagnostic runs rather than the genome-wide screen pass.
+## Session info
+
+This is the version of R and the packages that were used to generate
+these results.
+
+```{r session-info}
+sessionInfo()
+```

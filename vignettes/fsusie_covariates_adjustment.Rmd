@@ -158,7 +158,11 @@ fit_adj$sets$cs
 fit_adj$pip[c(pos1, pos2)]
 ```
 
-```{r plot-fit-adj}
+```{r plot-fit-adj-dims}
+plot_dims <- mfsusie_plot_dimensions(fit_adj)
+```
+
+```{r plot-fit-adj, fig.width = plot_dims$width, fig.height = plot_dims$height}
 mfsusie_plot(fit_adj)
 ```
 
@@ -269,3 +273,12 @@ For colocalization across two functional fits, see
 [the colocalization vignette](fsusie_colocalization.html). For
 post-fit smoothing of effect curves, see
 [the post-processing vignette](post_processing.html).
+
+## Session info
+
+This is the version of R and the packages that were used to generate
+these results.
+
+```{r session-info}
+sessionInfo()
+```

@@ -127,3 +127,12 @@ res_distinct$summary
   which fits all outcomes jointly and avoids the post-hoc
   combine. The disadvantage is that it would subject to mfSuSiE modelling
   assumptions and not as modular as integrating SuSiE Suite fits.
+
+## Session info
+
+This is the version of R and the packages that were used to generate
+these results.
+
+```{r session-info}
+sessionInfo()
+```

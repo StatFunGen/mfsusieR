@@ -68,9 +68,14 @@ credible sets.
 TI-smoothed per-CS effect curves with 95% credible bands plus
 affected-region bars at the bottom of the effect panel.
 
-```{r plot-smoothed}
+```{r plot-smoothed-dims}
 fit_s <- mf_post_smooth(fit, method = "TI")
-mfsusie_plot(fit_s)
+plot_dims <- mfsusie_plot_dimensions(fit_s, facet_cs = "stack")
+plot_dims
+```
+
+```{r plot-smoothed, fig.width = plot_dims$width, fig.height = plot_dims$height}
+mfsusie_plot(fit_s, facet_cs = "stack")
 ```
 
 The three CS effect curves capture three separate gene-body
@@ -202,3 +207,12 @@ fit_scalar$pip[gtex_example$causal_snps]
 
 Per-position effects are not recoverable from the scalar fit;
 they are the natural output of `fsusie()`.
+
+## Session info
+
+This is the version of R and the packages that were used to generate
+these results.
+
+```{r session-info}
+sessionInfo()
+```

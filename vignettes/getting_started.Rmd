@@ -73,7 +73,11 @@ length(fit_f$sets$cs)
 ...)` with no numerical difference.
 `mfsusie_plot()` works on the result either way:
 
-```{r fsusie-plot, fig.width = 6, fig.height = 5}
+```{r fsusie-plot-dims}
+plot_dims_f <- mfsusie_plot_dimensions(fit_f)
+```
+
+```{r fsusie-plot, fig.width = plot_dims_f$width, fig.height = plot_dims_f$height}
 mfsusie_plot(fit_f)
 ```
 
@@ -104,7 +108,11 @@ transform to position space transparently. `mfsusie_plot()` tiles
 one effect-curve panel per outcome with the PIPs in the top-left
 slot:
 
-```{r mfsusie-plot-getting-started, fig.width = 8, fig.height = 6}
+```{r mfsusie-plot-getting-started-dims}
+plot_dims_m <- mfsusie_plot_dimensions(fit_m)
+```
+
+```{r mfsusie-plot-getting-started, fig.width = plot_dims_m$width, fig.height = plot_dims_m$height}
 mfsusie_plot(fit_m)
 ```
 
@@ -191,3 +199,12 @@ and is expect to produce the same result mathematically under degenerated-case l
 - Multi-outcome applications:
   [Multi-outcome intro](mfsusie_intro.html),
   [long-running fits](mfsusie_long_running_fits.html).
+
+## Session info
+
+This is the version of R and the packages that were used to generate
+these results.
+
+```{r session-info}
+sessionInfo()
+```

@@ -216,7 +216,11 @@ fit$pip[dnam_example$causal_snps]
 fit_h <- mf_post_smooth(fit, method = "HMM")
 ```
 
-```{r mfsusie-plot}
+```{r mfsusie-plot-dims}
+plot_dims_h <- mfsusie_plot_dimensions(fit_h)
+```
+
+```{r mfsusie-plot, fig.width = plot_dims_h$width, fig.height = plot_dims_h$height}
 mfsusie_plot(fit_h)
 ```
 
@@ -241,13 +245,17 @@ The simulated `truth_mask` is indexed by causal SNP (SNPs 1,
 match. The mapping below pulls the right truth mask for each
 CS by matching its lead variant to the causal SNPs:
 
-```{r lfsr-bubble, fig.height = 3, fig.width = 7}
+```{r lfsr-bubble-dims}
 truth_per_cs <- lapply(fit_h$sets$cs, function(cs_vars) {
   hit <- intersect(cs_vars, dnam_example$causal_snps)
   if (length(hit) == 0L) return(rep(FALSE, T_m))
   k <- match(hit[1L], dnam_example$causal_snps)
   dnam_example$truth_mask[[k]]
 })
+lfsr_dims <- mfsusie_plot_lfsr_dimensions(fit_h)
+```
+
+```{r lfsr-bubble, fig.width = lfsr_dims$width, fig.height = lfsr_dims$height}
 mfsusie_plot_lfsr(fit_h, truth = truth_per_cs)
 ```
 
@@ -267,7 +275,11 @@ fit_TI <- mf_post_smooth(fit, method = "TI")
 range(fit_h$pip - fit_TI$pip)
 ```
 
-```{r mfsusie-plot-errorbar, fig.height = 6, fig.width = 7}
+```{r mfsusie-plot-errorbar-dims}
+plot_dims_ti <- mfsusie_plot_dimensions(fit_TI, facet_cs = "stack")
+```
+
+```{r mfsusie-plot-errorbar, fig.width = plot_dims_ti$width, fig.height = plot_dims_ti$height}
 mfsusie_plot(fit_TI, effect_style = "errorbar", facet_cs = "stack")
 ```
 
