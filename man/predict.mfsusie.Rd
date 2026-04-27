@@ -23,7 +23,21 @@ grid for that outcome.
 \description{
 Projects the posterior coefficient curves through new covariate
 values to produce predicted response curves on the original Y
-scale, per outcome. The wavelet pipeline that built the fit
-(column scaling, padding, DWT) is inverted to yield curves on
-each outcome's original position grid \code{pos[[m]]}.
+scale, per outcome. By default the wavelet pipeline that built
+the fit (column scaling, padding, DWT) is inverted to yield
+curves on each outcome's original position grid \code{pos[[m]]}.
+When \code{smooth_method} is supplied, the post-smoothed per-effect
+curves at \code{object$smoothed[[smooth_method]]} are used instead;
+each effect contributes \code{(newx[, lead_l] - X_center[lead_l]) * effect_curve[l, t]} to the response, plus the per-position Y
+intercept.
+}
+\details{
+Prediction uses the per-SNP alpha-weighted aggregate
+coefficient \verb{b[j, t] = sum_l alpha[l, j] * mu[l, j, t] / csd_X[j]}, the same form as \code{susieR::predict.susie()}. Post-
+smoothed per-effect curves (from \code{mf_post_smooth()}) are
+visualization-only and are not used here, because they are
+constructed by regressing the residualized response on the
+lead variant of each effect; pairing that lead-variant slope
+with the alpha-weighted-X predictor would be mathematically
+inconsistent except under perfect alpha concentration.
 }
