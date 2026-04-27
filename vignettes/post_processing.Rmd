@@ -90,7 +90,11 @@ fit <- fsusie(Y, X, pos = positions, L = 15, L_greedy = 5, verbose = TRUE)
 but fine wavelet scales contribute high-frequency noise, and the
 fit returns no credible bands by default.
 
-```{r before}
+```{r before-dims}
+plot_dims_b <- mfsusie_plot_dimensions(fit)
+```
+
+```{r before, fig.width = plot_dims_b$width, fig.height = plot_dims_b$height}
 mfsusie_plot(fit)
 ```
 
@@ -104,7 +108,11 @@ names(fit_s$smoothed)                   # which smoothings are on the fit
 The same plot call now reads `fit_s$smoothed$TI` and adds 95%
 pointwise credible bands as transparent ribbons:
 
-```{r after}
+```{r after-dims}
+plot_dims_a <- mfsusie_plot_dimensions(fit_s)
+```
+
+```{r after, fig.width = plot_dims_a$width, fig.height = plot_dims_a$height}
 mfsusie_plot(fit_s)
 ```
 
@@ -161,29 +169,46 @@ picks one by priority (TI > smash > HMM > scalewise) and emits a
 hint listing the others; pass `smooth_method = "<name>"` to plot
 a specific one.
 
-```{r tuning-scalewise}
+```{r tuning-scalewise-dims}
 fit_scalewise <- mf_post_smooth(fit, method = "scalewise",
                                 threshold_factor = 0.5)
+plot_dims_sc <- mfsusie_plot_dimensions(fit_scalewise,
+                                        smooth_method = "scalewise")
+```
+
+```{r tuning-scalewise, fig.width = plot_dims_sc$width, fig.height = plot_dims_sc$height}
 mfsusie_plot(fit_scalewise, smooth_method = "scalewise")
 ```
 
-```{r tuning-hmm}
+```{r tuning-hmm-dims}
 fit_hmm <- mf_post_smooth(fit, method = "HMM")
+plot_dims_hm <- mfsusie_plot_dimensions(fit_hmm)
+```
+
+```{r tuning-hmm, fig.width = plot_dims_hm$width, fig.height = plot_dims_hm$height}
 mfsusie_plot(fit_hmm)   # picks HMM (the only smoother on the fit)
 ```
 
 ```{r tuning-smash, eval = requireNamespace("smashr", quietly = TRUE)}
 fit_smash <- mf_post_smooth(fit, method = "smash")
+plot_dims_sm <- mfsusie_plot_dimensions(fit_smash)
+```
+
+```{r tuning-smash-show, eval = requireNamespace("smashr", quietly = TRUE), fig.width = plot_dims_sm$width, fig.height = plot_dims_sm$height}
 mfsusie_plot(fit_smash)
 ```
 
 When several smoothers are stacked, plotting picks the
 highest-priority one and lists the others as a hint:
 
-```{r tuning-stacked}
+```{r tuning-stacked-dims}
 fit_multi <- mf_post_smooth(fit, method = "TI")
 fit_multi <- mf_post_smooth(fit_multi, method = "HMM")
 fit_multi <- mf_post_smooth(fit_multi, method = "scalewise")
+plot_dims_ml <- mfsusie_plot_dimensions(fit_multi)
+```
+
+```{r tuning-stacked, fig.width = plot_dims_ml$width, fig.height = plot_dims_ml$height}
 mfsusie_plot(fit_multi)                              # picks TI; hint prints
 mfsusie_plot(fit_multi, smooth_method = "HMM")       # plot HMM directly
 ```
@@ -217,7 +242,11 @@ fit_m   <- mfsusie(X, Y_list, L = 15, L_greedy = 5, verbose = TRUE)
 fit_m_s <- mf_post_smooth(fit_m, method = "TI")
 ```
 
-```{r mfsusie-plot, fig.width = 8, fig.height = 6}
+```{r mfsusie-plot-dims}
+plot_dims_ms <- mfsusie_plot_dimensions(fit_m_s)
+```
+
+```{r mfsusie-plot, fig.width = plot_dims_ms$width, fig.height = plot_dims_ms$height}
 mfsusie_plot(fit_m_s)
 ```
 
@@ -249,3 +278,12 @@ position-space curve plus a pointwise credible band:
   shrinkage on the per-position regression estimate of the
   effect against the lead variable. The credible band uses
   `smash`'s `post.var = TRUE` posterior variance.
+
+## Session info
+
+This is the version of R and the packages that were used to generate
+these results.
+
+```{r session-info}
+sessionInfo()
+```

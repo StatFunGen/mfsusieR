@@ -853,6 +853,39 @@ mfsusie_plot_dimensions <- function(fit, m = NULL,
   list(width = width, height = height, n_cells = n_cells)
 }
 
+#' Recommended figure dimensions for `mfsusie_plot_lfsr()`
+#'
+#' Returns a `(width, height)` (in inches) sized to the per-CS
+#' bubble grid so each bubble row has enough vertical space and
+#' each outcome panel has enough horizontal space. Mirrors
+#' `mfsusie_plot_dimensions()` for the lfsr companion plot. Use
+#' the result for `fig.width` / `fig.height` in a knitr chunk so
+#' the legend and bubbles do not collide.
+#'
+#' @param fit an `mfsusie` / `fsusie()` fit object that has been
+#'   post-processed with `mf_post_smooth(method = "HMM")`.
+#' @param add_legend logical, whether the lfsr legend strip is
+#'   shown (matches the corresponding `mfsusie_plot_lfsr()` arg).
+#'   Default `TRUE`.
+#' @return a list with components `width`, `height` (numeric, in
+#'   inches), `cols`, `rows` (integer, the M-grid layout used).
+#' @export
+mfsusie_plot_lfsr_dimensions <- function(fit, add_legend = TRUE) {
+  if (!inherits(fit, "mfsusie")) {
+    stop("`fit` must be an `mfsusie` (or `fsusie`) fit object.")
+  }
+  M    <- length(fit$dwt_meta$T_basis)
+  K    <- length(fit$sets$cs %||% list())
+  cols <- ceiling(sqrt(M))
+  rows <- ceiling(M / cols)
+  width  <- max(6, 4 * cols)
+  # Extra header strip when legend is on: title (~1 line) +
+  # legend row (~1 line) + spacing -> ~2.5 in.
+  height <- max(3, 0.6 * max(K, 1L) * rows +
+                  (if (isTRUE(add_legend)) 2.5 else 1))
+  list(width = width, height = height, cols = cols, rows = rows)
+}
+
 # =====================================================================
 # Per-CS lfsr bubble grid
 # =====================================================================
@@ -901,8 +934,12 @@ mfsusie_plot_dimensions <- function(fit, m = NULL,
   plot(NA, xlim = range(pos),
        ylim = c(0.5, K + 0.5),
        xlab = "outcome position", ylab = "credible set",
-       yaxt = "n", main = main, las = 1, cex.main = 1.05,
-       font.main = 2L)
+       yaxt = "n", main = "", las = 1)
+  # Title sits above the legend strip so neither overlaps the
+  # plot box. `mtext` uses margin-line coordinates: line = 4 is
+  # the top of the reserved top margin, line = 1.2 is the strip
+  # between the panel and the title used by the legend rows.
+  mtext(main, side = 3L, line = 4.0, cex = 1.05, font = 2L)
   axis(2, at = seq_len(K), labels = paste0("CS", seq_len(K)),
        las = 1)
   abline(h = seq_len(K), lty = 3, col = "grey85")
@@ -934,14 +971,20 @@ mfsusie_plot_dimensions <- function(fit, m = NULL,
   }
 
   if (add_legend) {
-    # Both legends sit horizontally just under the title, above
-    # the panel proper. `xpd = NA` lets `legend()` draw beyond
-    # the plot region into the reserved top margin.
+    # Both legends sit horizontally just below the title and
+    # ABOVE the plot box, in the reserved top margin. `xpd = NA`
+    # lets `legend()` draw beyond the panel; positioning uses
+    # `par("cxy")` (character size in user coordinates) so the
+    # offset is measured in margin lines, not panel fractions.
     op_xpd <- par(xpd = NA); on.exit(par(op_xpd), add = TRUE)
     usr <- par("usr")
+    cxy <- par("cxy")
     x_left  <- usr[1L]
     x_mid   <- usr[1L] + 0.55 * (usr[2L] - usr[1L])
-    y_above <- usr[4L] + 0.06 * (usr[4L] - usr[3L])
+    # Bottom of the legend rests ~1.4 char-heights above the
+    # top of the panel; the title sits ~2.6 char-heights above
+    # that (at line = 4.0).
+    y_above <- usr[4L] + 1.4 * cxy[2L]
 
     size_breaks <- c(1.3, round(cex_max / 2, 1), cex_max)
     legend(x = x_left, y = y_above,
@@ -1044,16 +1087,10 @@ mfsusie_plot_lfsr <- function(fit,
   K <- length(fit$sets$cs %||% list())
 
   # Optional file output: open a sized device and close it on
-  # exit. Width scales with the number of grid columns; height
-  # scales with the per-CS bubble rows plus title + legend
-  # strip when the legend is enabled.
+  # exit. Sizing computed by `mfsusie_plot_lfsr_dimensions()`.
   if (!is.null(save)) {
-    cols    <- ceiling(sqrt(M))
-    rows    <- ceiling(M / cols)
-    width   <- max(6, 4 * cols)
-    height  <- max(3, 0.6 * max(K, 1L) * rows +
-                    (if (isTRUE(add_legend)) 2 else 1))
-    .open_save_device(save, list(width = width, height = height))
+    .open_save_device(save,
+                      mfsusie_plot_lfsr_dimensions(fit, add_legend))
     on.exit(grDevices::dev.off(), add = TRUE)
   }
 
@@ -1078,7 +1115,12 @@ mfsusie_plot_lfsr <- function(fit,
   # Top-margin strip holds the size + colour legend (under the
   # title). The panel mar reserves an extra ~3 lines on top
   # when the legend is enabled.
-  top_mar <- if (isTRUE(add_legend)) 5.5 else 2.5
+  # Top-margin lines: when the legend strip is shown, reserve
+  # enough room for (a) the title at line 4.0, (b) the legend
+  # row at ~1.4 char-heights above the panel, plus a small pad.
+  # When no legend, the title sits at line 1 and only ~2.5 lines
+  # of margin are needed.
+  top_mar <- if (isTRUE(add_legend)) 6.5 else 2.5
 
   if (M == 1L) {
     op <- par(mar = c(4, 5, top_mar, 2))

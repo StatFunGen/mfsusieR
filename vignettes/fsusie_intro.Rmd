@@ -103,7 +103,12 @@ fits: PIPs on top, per-CS effect curves on the bottom. With
 `facet_cs = "auto"` (the default) two CSes whose affected
 regions are disjoint are stacked into separate rows.
 
-```{r plot-fit}
+```{r plot-fit-dims}
+plot_dims_raw <- mfsusie_plot_dimensions(fit)
+plot_dims_raw
+```
+
+```{r plot-fit, fig.width = plot_dims_raw$width, fig.height = plot_dims_raw$height}
 mfsusie_plot(fit)
 ```
 
@@ -113,8 +118,13 @@ After post-smoothing with the default method (`"TI"`), the
 curves are denoised and pointwise 95% credible bands are
 available.
 
-```{r plot-smoothed}
+```{r plot-smoothed-dims}
 fit_s <- mf_post_smooth(fit)
+plot_dims_s <- mfsusie_plot_dimensions(fit_s)
+plot_dims_s
+```
+
+```{r plot-smoothed, fig.width = plot_dims_s$width, fig.height = plot_dims_s$height}
 mfsusie_plot(fit_s)
 ```
 
@@ -126,7 +136,11 @@ comparison.
 The errorbar style draws a per-position dot at the posterior
 mean and a vertical bar to the credible band.
 
-```{r plot-errorbar}
+```{r plot-errorbar-dims}
+plot_dims_eb <- mfsusie_plot_dimensions(fit_s, facet_cs = "stack")
+```
+
+```{r plot-errorbar, fig.width = plot_dims_eb$width, fig.height = plot_dims_eb$height}
 mfsusie_plot(fit_s, effect_style = "errorbar", facet_cs = "stack")
 ```
 
@@ -200,8 +214,12 @@ fit_uneven$sets$cs
 fit_uneven$pip[coverage_example$causal_snps]
 ```
 
-```{r plot-uneven}
+```{r plot-uneven-dims}
 fit_uneven_s <- mf_post_smooth(fit_uneven)
+plot_dims_u <- mfsusie_plot_dimensions(fit_uneven_s)
+```
+
+```{r plot-uneven, fig.width = plot_dims_u$width, fig.height = plot_dims_u$height}
 mfsusie_plot(fit_uneven_s)
 ```
 
@@ -287,3 +305,12 @@ multiple smoothers can coexist on the same fit; see
 `vignette("post_processing")` for the comparison workflow.
 `mfsusie_plot()` picks a smoother by priority `TI > smash >
 HMM > scalewise` when more than one is present.
+
+## Session info
+
+This is the version of R and the packages that were used to generate
+these results.
+
+```{r session-info}
+sessionInfo()
+```

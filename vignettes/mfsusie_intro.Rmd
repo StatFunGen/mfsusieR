@@ -149,3 +149,11 @@ Use `mfsusie()` when:
   not require a shared `T`.
 - You want a single credible set list combining all the evidence,
   rather than ad-hoc colocalization across separate fsusie fits.
+## Session info
+
+This is the version of R and the packages that were used to generate
+these results.
+
+```{r session-info}
+sessionInfo()
+```

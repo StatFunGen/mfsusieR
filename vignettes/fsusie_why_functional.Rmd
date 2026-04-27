@@ -257,8 +257,12 @@ panel. Pass `truth = list(effect)` to overlay the per-position
 truth as dark-grey dots; the true causal SNP is highlighted on
 the PIP panel with a red ring and a vertical dashed reference.
 
-```{r fsusie-plot-default, fig.height = 5}
+```{r fsusie-plot-default-dims}
 fit_f_s <- mf_post_smooth(fit_f)
+plot_dims <- mfsusie_plot_dimensions(fit_f_s)
+```
+
+```{r fsusie-plot-default, fig.width = plot_dims$width, fig.height = plot_dims$height}
 mfsusie_plot(fit_f_s, truth = list(effect))
 # Highlight the true causal SNP on the PIP panel.
 abline(v = true_pos_filt, lty = 2, col = "firebrick", lwd = 1.2)
@@ -331,3 +335,12 @@ condition covariance prior is available. fSuSiE is appropriate
 when the response is a smooth function of position and the
 position grid is power-of-two (or remappable to one), which
 covers methylation, accessibility, and coverage-style traits.
+
+## Session info
+
+This is the version of R and the packages that were used to generate
+these results.
+
+```{r session-info}
+sessionInfo()
+```
