@@ -242,10 +242,8 @@ only when the true effect direction is supplied as the prior.
 ## Method 4: fSuSiE
 
 A single `fsusie()` call recovers the correct credible set and
-a smooth recovered effect curve. Use the `L = 15`, `L_greedy = 5`
-default that fSuSiE uses elsewhere; the greedy outer loop trims
-the effective number of effects so the choice of `L` does not
-need to be tuned per-dataset.
+a smooth recovered effect curve, no truth-informed configuration
+required.
 
 ```{r fsusie, message = FALSE, warning = FALSE}
 fit_f <- fsusie(y, X, L = 15L, L_greedy = 5L, verbose = FALSE)
@@ -253,16 +251,93 @@ fit_f$sets$cs
 fit_f$pip[true_pos_filt]
 ```
 
-```{r fsusie-plot, fig.height = 5}
+The default `mfsusie_plot()` shows PIPs in the top panel and the
+TI-smoothed effect curve with 95% credible band in the bottom
+panel. Pass `truth = list(effect)` to overlay the per-position
+truth as dark-grey dots; the true causal SNP is highlighted on
+the PIP panel with a red ring and a vertical dashed reference.
+
+```{r fsusie-plot-default, fig.height = 5}
 fit_f_s <- mf_post_smooth(fit_f)
 mfsusie_plot(fit_f_s, truth = list(effect))
+# Highlight the true causal SNP on the PIP panel.
+abline(v = true_pos_filt, lty = 2, col = "firebrick", lwd = 1.2)
+points(true_pos_filt, fit_f_s$pip[true_pos_filt], pch = 21L,
+       col = "firebrick", bg = NA, cex = 1.6, lwd = 2)
 ```
 
-The TI-smoothed effect curve tracks the truth (dark-grey dots)
-across the support, the credible band covers the per-position
-truth, and the credible set lands cleanly on the true SNP. fSuSiE
-recovers both the variant and the per-position effect direction
-without any truth-informed configuration.
+The credible set lands on the true SNP, and the smoothed effect
+curve tracks the truth across the affected support.
+
+For a publication-style view, build PIP and per-effect panels
+directly from `fit_f`'s posterior fields:
+
+```{r fsusie-plot-ggplot2, message = FALSE, fig.height = 3, fig.width = 8}
+library(ggplot2)
+library(cowplot)
+
+ti          <- fit_f_s$smoothed$TI
+mean_curve  <- ti$effect_curves[[1L]][[1L]]
+band        <- ti$credible_bands[[1L]][[1L]]
+df_truth    <- data.frame(x = seq_along(effect),     y = effect)
+df_curve    <- data.frame(x = seq_along(mean_curve), y = mean_curve)
+df_band     <- data.frame(x  = seq_along(mean_curve),
+                          lo = band[, 1L], hi = band[, 2L])
+
+P_effect <- ggplot() +
+  geom_ribbon(data = df_band,
+              mapping = aes(x = x, ymin = lo, ymax = hi),
+              fill = "skyblue", alpha = 0.45) +
+  geom_point(data = df_truth, mapping = aes(x = x, y = y),
+             colour = "grey30", size = 1.2) +
+  geom_line(data = df_curve, mapping = aes(x = x, y = y),
+            colour = "firebrick", linewidth = 1) +
+  geom_hline(yintercept = 0, linetype = "dotted", colour = "grey50") +
+  labs(x = "position", y = "effect",
+       title = "fSuSiE recovered effect curve") +
+  theme_classic()
+
+df_pip <- data.frame(x = seq_along(fit_f$pip), y = fit_f$pip)
+P_pip <- ggplot(df_pip, aes(x = x, y = y)) +
+  geom_point(colour = "grey60", size = 0.9) +
+  geom_point(data = df_pip[true_pos_filt, , drop = FALSE],
+             colour = "firebrick", size = 2.2) +
+  geom_vline(xintercept = true_pos_filt,
+             linetype = "dashed", colour = "firebrick", alpha = 0.6) +
+  ylim(0, 1) +
+  labs(x = "SNP", y = "PIP", title = "fSuSiE PIPs") +
+  theme_classic()
+
+plot_grid(P_pip, P_effect, nrow = 1L, ncol = 2L,
+          rel_widths = c(1, 1.2))
+```
+
+The PIP scatter on the left puts a single point at PIP near 1 on
+the true causal SNP (red); the effect-curve on the right has the
+credible band hugging the truth across the affected positions.
+
+For a closer look at the recovered shape, here is the same
+posterior mean curve and 95% credible band at full panel width,
+with the per-position truth as dark-grey dots:
+
+```{r fsusie-effect-curve-large, message = FALSE, fig.height = 4.2, fig.width = 8}
+ggplot() +
+  geom_ribbon(data = df_band,
+              mapping = aes(x = x, ymin = lo, ymax = hi),
+              fill = "skyblue", alpha = 0.4) +
+  geom_point(data = df_truth, mapping = aes(x = x, y = y),
+             colour = "grey30", size = 1.4) +
+  geom_line(data = df_curve, mapping = aes(x = x, y = y),
+            colour = "firebrick", linewidth = 1.1) +
+  geom_hline(yintercept = 0, linetype = "dotted", colour = "grey50") +
+  labs(x = "position", y = "effect",
+       title = "fSuSiE: posterior mean (red) and 95% credible band vs truth (grey dots)") +
+  theme_classic(base_size = 12)
+```
+
+The shape, the zero-effect prefix on positions 1..40, and the
+peak around the cosine maximum are all recovered cleanly without
+any truth-informed prior or pre-specified number of effects.
 
 ## When to use which tool in the SuSiE suite
 
