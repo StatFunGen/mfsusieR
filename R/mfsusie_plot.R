@@ -555,6 +555,11 @@ mf_cs_colors <- function(n_cs) {
 #'   shapes (or `NULL` to skip an outcome). Truth values are
 #'   overlaid as dark-grey dots and added to the legend. Default
 #'   `NULL` (no overlay).
+#' @param save optional file path. When non-NULL the plot is
+#'   written to the file at the dimensions returned by
+#'   `mfsusie_plot_dimensions()`. The graphics device is selected
+#'   from the file extension: `.pdf`, `.png`, `.jpg`/`.jpeg`, or
+#'   `.svg`. Default `NULL` (draw to the current device).
 #' @param ... reserved.
 #' @return Called for side effect; returns `invisible(NULL)`.
 #' @export
@@ -568,7 +573,8 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
                          lwd = 2.0,
                          add_legend = TRUE,
                          truth = NULL,
-                         smooth_method = NULL, ...) {
+                         smooth_method = NULL,
+                         save = NULL, ...) {
   if (!inherits(fit, "mfsusie")) {
     stop("`fit` must be an `mfsusie` (or `fsusie`) fit object.")
   }
@@ -580,6 +586,15 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
 
   M <- length(fit$dwt_meta$T_basis)
   K <- length(fit$sets$cs %||% list())
+
+  # Optional file output: open a sized device and close it on
+  # exit so the figure renders at the recommended dimensions.
+  if (!is.null(save)) {
+    dims <- mfsusie_plot_dimensions(fit, m = m, facet_cs = facet_cs,
+                                    smooth_method = smooth_method)
+    .open_save_device(save, dims)
+    on.exit(grDevices::dev.off(), add = TRUE)
+  }
 
   truth_norm <- .normalize_truth(truth, M, max(K, 1L))
   truth_for  <- function(mi) {
@@ -715,6 +730,127 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
 #' @export
 plot.mfsusie <- function(x, ...) {
   mfsusie_plot(x, ...)
+}
+
+# Internal: open a graphics device sized to `dims` if `save` is
+# non-NULL. Returns NULL when no device is opened. The caller is
+# responsible for `dev.off()` (typically via `on.exit`).
+.open_save_device <- function(save, dims) {
+  if (is.null(save)) return(invisible(NULL))
+  ext <- tolower(tools::file_ext(save))
+  if (ext == "pdf") {
+    grDevices::pdf(save, width = dims$width, height = dims$height)
+  } else if (ext == "png") {
+    grDevices::png(save, width = dims$width, height = dims$height,
+                   units = "in", res = 150)
+  } else if (ext %in% c("jpg", "jpeg")) {
+    grDevices::jpeg(save, width = dims$width, height = dims$height,
+                    units = "in", res = 150, quality = 95)
+  } else if (ext == "svg") {
+    if (!requireNamespace("svglite", quietly = TRUE)) {
+      grDevices::svg(save, width = dims$width, height = dims$height)
+    } else {
+      svglite::svglite(save, width = dims$width, height = dims$height)
+    }
+  } else {
+    stop("`save` must end in .pdf, .png, .jpg/.jpeg, or .svg; got '",
+         ext, "'.")
+  }
+  invisible(save)
+}
+
+#' Recommended figure dimensions for `mfsusie_plot()`
+#'
+#' Returns a width and height (in inches) sized to the number of
+#' panels `mfsusie_plot()` will draw on the supplied fit. The
+#' recommendation accounts for the PIP cell, the per-outcome
+#' effect cells, and the per-CS sub-cells when `facet_cs =
+#' "stack"` is used with `K >= 2` credible sets. Useful for
+#' setting `fig.width` / `fig.height` in a knitr chunk so each
+#' panel has enough vertical space to render legibly.
+#'
+#' Heuristics: `min_pip_height` (default 1.6 in) for the PIP
+#' cell, `min_cell_height` (default 1.5 in) for each effect
+#' cell. The PIP cell carries 1.5x the height weight of an
+#' effect cell. The recommended figure width defaults to
+#' `width = 8` inches.
+#'
+#' @param fit a fit returned by `mfsusie()` or `fsusie()`.
+#' @param m optional integer index. When supplied, recommend
+#'   dimensions for the focused single-outcome view.
+#' @param facet_cs `"auto"`, `"stack"`, or `"overlay"`. Default
+#'   `"auto"` matches `mfsusie_plot()`'s default.
+#' @param smooth_method optional smoother name to resolve
+#'   `facet_cs = "auto"` against the smoothed credible bands.
+#' @param min_pip_height minimum height (in) for the PIP cell.
+#' @param min_cell_height minimum height (in) for each effect
+#'   cell.
+#' @param width figure width in inches. Default `8`.
+#' @return a list with components `width`, `height` (numeric,
+#'   inches) and `n_cells` (integer, total panel count).
+#' @examples
+#' \donttest{
+#' set.seed(1L)
+#' n <- 100; p <- 20
+#' X <- matrix(rnorm(n * p), n)
+#' Y <- list(matrix(rnorm(n * 32), n), matrix(rnorm(n * 32), n))
+#' fit <- mfsusie(X, Y, L = 4, verbose = FALSE)
+#' fit_s <- mf_post_smooth(fit)
+#' mfsusie_plot_dimensions(fit_s, facet_cs = "stack")
+#' }
+#' @export
+mfsusie_plot_dimensions <- function(fit, m = NULL,
+                                    facet_cs = c("auto", "stack",
+                                                 "overlay"),
+                                    smooth_method = NULL,
+                                    min_pip_height = 2.2,
+                                    min_cell_height = 2.0,
+                                    width = 8) {
+  if (!inherits(fit, "mfsusie")) {
+    stop("`fit` must be an `mfsusie` (or `fsusie`) fit object.")
+  }
+  facet_cs <- match.arg(facet_cs)
+  M <- length(fit$dwt_meta$T_basis)
+  K <- length(fit$sets$cs %||% list())
+
+  # Resolve facet_cs the same way mfsusie_plot does.
+  picked   <- .pick_smooth_method(fit, smooth_method)
+  smoothed <- if (!is.null(picked)) fit$smoothed[[picked]] else NULL
+  facet_for <- function(mi) {
+    if (K < 2L) return("overlay")
+    .resolve_facet(facet_cs, fit, mi, smoothed)
+  }
+
+  # Cell counts per layout branch in mfsusie_plot.
+  if (!is.null(m)) {
+    if (m < 1L || m > M)
+      stop(sprintf("`m` must be in 1..%d.", M))
+    facet_res <- facet_for(m)
+    n_cells <- if (facet_res == "stack" && K >= 2L) K else 1L
+    has_pip <- FALSE
+  } else if (M == 1L) {
+    facet_res <- facet_for(1L)
+    n_eff   <- if (facet_res == "stack" && K >= 2L) K else 1L
+    n_cells <- 1L + n_eff
+    has_pip <- TRUE
+  } else if (facet_cs == "stack" && K >= 2L) {
+    n_cells <- 1L + M * K
+    has_pip <- TRUE
+  } else {
+    # Tiled grid layout: ceiling(sqrt(M+1)) x ceiling((M+1)/cols)
+    n_panels <- M + 1L
+    cols     <- ceiling(sqrt(n_panels))
+    rows     <- ceiling(n_panels / cols)
+    return(list(
+      width   = max(width, cols * min_cell_height),
+      height  = max(min_cell_height, rows * min_cell_height),
+      n_cells = n_panels))
+  }
+
+  effect_cells <- n_cells - as.integer(has_pip)
+  height <- (if (has_pip) min_pip_height else 0) +
+            effect_cells * min_cell_height
+  list(width = width, height = height, n_cells = n_cells)
 }
 
 # =====================================================================
@@ -863,6 +999,11 @@ plot.mfsusie <- function(x, ...) {
 #'   boolean vector or list-of-CS-vectors.
 #' @param cex_max numeric, upper clamp on `-log10(lfsr)` for
 #'   the dot size. Default `6`.
+#' @param save optional file path. When non-NULL the bubble grid
+#'   is written to the file at a size proportional to the number
+#'   of outcomes and credible sets. The graphics device is
+#'   selected from the file extension: `.pdf`, `.png`,
+#'   `.jpg`/`.jpeg`, or `.svg`.
 #' @param ... reserved.
 #' @return Called for side effect; returns `invisible(NULL)`.
 #' @export
@@ -871,7 +1012,8 @@ mfsusie_plot_lfsr <- function(fit,
                               truth          = NULL,
                               cex_max        = 6,
                               add_legend     = TRUE,
-                              smooth_method  = NULL, ...) {
+                              smooth_method  = NULL,
+                              save           = NULL, ...) {
   if (!inherits(fit, "mfsusie")) {
     stop("`fit` must be an `mfsusie` (or `fsusie`) fit object.")
   }
@@ -891,6 +1033,20 @@ mfsusie_plot_lfsr <- function(fit,
   smoothed <- fit$smoothed[[smooth_method]]
 
   M <- length(fit$dwt_meta$T_basis)
+  K <- length(fit$sets$cs %||% list())
+
+  # Optional file output: open a sized device and close it on
+  # exit. Width scales with the number of grid columns plus the
+  # legend strip; height scales with number of CS rows + outcome
+  # tile rows.
+  if (!is.null(save)) {
+    cols    <- ceiling(sqrt(M))
+    rows    <- ceiling(M / cols)
+    width   <- 4 * cols + (if (isTRUE(add_legend)) 2.5 else 0)
+    height  <- max(3, 0.6 * max(K, 1L) * rows + 1)
+    .open_save_device(save, list(width = width, height = height))
+    on.exit(grDevices::dev.off(), add = TRUE)
+  }
 
   # Normalize `truth` into a length-M list of length-K lists of
   # length-T_m boolean vectors (or NULL). Acceptable inputs:

@@ -33,7 +33,7 @@ mfsusie(
   low_count_filter = 0,
   quantile_norm = FALSE,
   control_mixsqp = NULL,
-  mixsqp_null_penalty = 0.7,
+  mixsqp_null_penalty = 0.1,
   model_init = NULL,
   small_sample_correction = FALSE
 )
@@ -104,8 +104,8 @@ loop. Default 0.1.}
 update of the mixture weights \code{pi_V[[m]]} per
 (outcome, scale) using the \code{mixsqp} solver. \code{"none"} holds
 the prior fixed at the initial \code{prior_variance_grid} /
-\code{null_prior_weight}; required by the C1 (susieR) degeneracy
-contract.}
+\code{null_prior_weight}; useful when collapsing \code{mfsusie()} to
+\code{susieR::susie()} for sanity checks.}
 
 \item{verbose}{logical.}
 
@@ -138,7 +138,19 @@ tailed assays. Default \code{FALSE}.}
 \item{control_mixsqp}{optional named list of \code{mixsqp} control
 arguments forwarded to the per-(outcome, scale) M-step.}
 
-\item{mixsqp_null_penalty}{numeric, mixsqp null-component penalty (internal).
+\item{mixsqp_null_penalty}{numeric, per-coefficient pseudo-count
+on the null component of the mixsqp M-step. The total null
+pseudo-count fed to mixsqp is \code{mixsqp_null_penalty * idx_size},
+versus a total data weight of \code{idx_size} from the \code{zeta}-
+weighted SNP rows; the ratio \code{mixsqp_null_penalty : 1} is
+therefore the null:data weight ratio at the M-step. Default
+\code{0.1} corresponds to a 10\% null:data ratio, anchored to
+\code{ashr::ash.workhorse(nullweight = 10)} over a typical
+\code{idx_size = 128} (ratio ~0.08). For multi-outcome fits the
+penalty is scaled by the number of outcomes \code{M} so that the
+null:data balance stays invariant as the per-effect SNP
+posterior concentrates linearly in \code{M}; single-outcome fits
+are unchanged.
 Default 0.7.}
 
 \item{model_init}{optional \code{mfsusie} fit object from a prior
