@@ -124,8 +124,6 @@ matrix before the IBSS loop:
   heavy-tailed or visibly non-Gaussian.
 
 Both flags route through `mf_adjust_for_covariates()` as well.
-See `vignette("practical_data_applications")` for an applied
-walk-through on a multi-region ATAC-seq example dataset.
 
 ## When to reach for mfSuSiE over fSuSiE+COLOC
 

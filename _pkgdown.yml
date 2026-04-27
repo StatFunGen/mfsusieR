@@ -93,7 +93,8 @@ articles:
     contents:
       - mfsusie_intro
       - mfsusie_long_running_fits
-      - practical_data_applications
+      # `practical_data_applications` is not ready: the per-cell-type
+      # ATAC-seq example is not good enough to go live.
 
   - title: "Plotting and post-processing"
     contents:

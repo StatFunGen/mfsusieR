@@ -266,8 +266,7 @@ matrix:
   Use when the per-position residuals are heavy-tailed or
   visibly non-Gaussian.
 
-See `vignette("practical_data_applications")` for an applied
-walk-through on a multi-region ATAC-seq example dataset.
+See `?mfsusie` for the full set of preprocessing options.
 
 ## What the fit object carries
 
