@@ -80,11 +80,11 @@ articles:
       Fine-mapping a single response. One Y, one set of predictor variables.
     contents:
       - fsusie_intro
+      - fsusie_why_functional
       - fsusie_covariates_adjustment
       - fsusie_colocalization
       - fsusie_dnam_case_study
       - fsusie_gtex_case_study
-      - fsusie_why_functional
 
   - title: "Multi-context functional regression fine-mapping using mfSuSiE"
     desc: >

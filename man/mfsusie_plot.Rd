@@ -16,6 +16,7 @@ mfsusie_plot(
   lfsr_threshold = 0.01,
   lwd = 2,
   add_legend = TRUE,
+  truth = NULL,
   smooth_method = NULL,
   ...
 )
@@ -56,6 +57,14 @@ secondary axis. Default \code{0.01}.}
 
 \item{add_legend}{logical, show CS legend on each panel.
 Default \code{TRUE}.}
+
+\item{truth}{optional ground-truth overlay. For \code{M = 1}: a
+length-\code{T_1} numeric vector (replicated across all CS panels)
+or a length-\code{K} list of length-\code{T_1} vectors (per-CS truth).
+For \code{M > 1}: a length-\code{M} list, each entry one of those two
+shapes (or \code{NULL} to skip an outcome). Truth values are
+overlaid as dark-grey dots and added to the legend. Default
+\code{NULL} (no overlay).}
 
 \item{...}{reserved.}
 }

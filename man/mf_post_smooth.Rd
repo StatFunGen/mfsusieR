@@ -37,14 +37,13 @@ stationary-wavelet transform. Default \code{"DaubExPhase"}.}
 helper. Default 20.}
 }
 \value{
-the input fit with \verb{$effect_curves} and
-\verb{$credible_bands} populated. \verb{$lfsr_curves} is also populated
-when \code{method = "HMM"}. Scalar outcomes
+the input fit with \verb{$effect_curves}, \verb{$credible_bands},
+and \verb{$lfsr_curves} populated. Scalar outcomes
 (\code{T_basis[m] = 1}) skip the wavelet step (smoothing is a
 no-op there).
 }
 \description{
-Three smoothing methods are dispatched by \code{method}:
+Four smoothing methods are dispatched by \code{method}:
 }
 \details{
 \itemize{
@@ -52,21 +51,26 @@ Three smoothing methods are dispatched by \code{method}:
 variable's wavelet posterior mean. Fast, no iterations,
 uses only the wavelet posterior moments. Suitable for quick
 visual cleanup.
-\item \code{"TI"} -- cycle-spinning translation-invariant denoising
-(Coifman & Donoho 1995). For each effect, isolates the
-per-effect residual response (in position space), regresses
-onto the lead variable's column of X via the saved residual
-\itemize{
-\item lead column, applies the stationary wavelet transform
-row-by-row, scalewise \code{ashr::ash} shrinkage on wavelet
-coefficients, and inverts via cycle-spinning average.
-Produces tighter credible bands than scalewise; matches the
-refinement step in the fSuSiE Methods.
-}
+\item \code{"TI"} (default) -- cycle-spinning translation-invariant
+denoising (Coifman & Donoho 1995). For each effect, isolates
+the per-effect residual response (in position space),
+regresses onto the lead variable's column of X, applies the
+stationary wavelet transform row-by-row, scalewise
+\code{ashr::ash} shrinkage on wavelet coefficients, and inverts
+via cycle-spinning average. Produces tighter credible bands
+than scalewise.
 \item \code{"HMM"} -- hidden Markov denoising on per-position regression
-coefficients. Yields a posterior mean curve plus per-position
-\code{lfsr_curves}.
+coefficients. Yields a posterior mean curve plus a mixture-
+posterior local false sign rate.
+\item \code{"smash"} -- \code{smashr::smash.gaus} empirical-Bayes wavelet
+shrinkage on the per-position regression estimate. Requires
+the \code{smashr} package (Suggests).
 }
+
+All four methods populate \code{lfsr_curves}. For TI, scalewise,
+and smash the lfsr is \verb{pnorm(-|mean| / sd)} under the
+Gaussian-posterior approximation; for HMM it comes from the
+mixture posterior directly.
 
 All three operate on the fit alone: residuals are read from
 \code{fit$residuals} and the per-effect lead variable column from

@@ -71,9 +71,8 @@ top-left tile (CS-colored), then one effect-curve panel per
 outcome with TI-smoothed curves, 95% credible bands, and
 affected-region bars at the bottom of each panel.
 
-```{r mfsusie-plot, fig.width = 8, fig.height = 5}
+```{r mfsusie-smooth}
 fit_s <- mf_post_smooth(fit, method = "TI")
-mfsusie_plot(fit_s, facet_cs = "stack")
 ```
 
 When the fit has both `M > 1` outcomes and several credible
@@ -83,6 +82,20 @@ which keeps the per-CS curves at full width. The default
 `facet_cs = "auto"` falls back to a per-outcome overlay grid
 when `M > 1`; switch to `"stack"` when you want a separated
 view per CS.
+
+`mfsusie_plot_dimensions()` returns a `(width, height)`
+recommendation in inches sized to the number of panels the
+fit will produce. Pass it through to the chunk so each cell
+keeps a legible amount of vertical space.
+
+```{r mfsusie-plot-dims}
+plot_dims <- mfsusie_plot_dimensions(fit_s, facet_cs = "stack")
+plot_dims
+```
+
+```{r mfsusie-plot, fig.width = plot_dims$width, fig.height = plot_dims$height}
+mfsusie_plot(fit_s, facet_cs = "stack")
+```
 
 ```{r cs}
 fit$sets$cs

@@ -315,26 +315,6 @@ plot_grid(P_pip, P_effect, nrow = 1L, ncol = 2L,
 The PIP scatter on the left puts a single point at PIP near 1 on
 the true causal SNP (red); the effect-curve on the right has the
 credible band hugging the truth across the affected positions.
-
-For a closer look at the recovered shape, here is the same
-posterior mean curve and 95% credible band at full panel width,
-with the per-position truth as dark-grey dots:
-
-```{r fsusie-effect-curve-large, message = FALSE, fig.height = 4.2, fig.width = 8}
-ggplot() +
-  geom_ribbon(data = df_band,
-              mapping = aes(x = x, ymin = lo, ymax = hi),
-              fill = "skyblue", alpha = 0.4) +
-  geom_point(data = df_truth, mapping = aes(x = x, y = y),
-             colour = "grey30", size = 1.4) +
-  geom_line(data = df_curve, mapping = aes(x = x, y = y),
-            colour = "firebrick", linewidth = 1.1) +
-  geom_hline(yintercept = 0, linetype = "dotted", colour = "grey50") +
-  labs(x = "position", y = "effect",
-       title = "fSuSiE: posterior mean (red) and 95% credible band vs truth (grey dots)") +
-  theme_classic(base_size = 12)
-```
-
 The shape, the zero-effect prefix on positions 1..40, and the
 peak around the cosine maximum are all recovered cleanly without
 any truth-informed prior or pre-specified number of effects.

@@ -3,7 +3,7 @@
 \docType{data}
 \name{practical_fits}
 \alias{practical_fits}
-\title{Fitted mfsusie objects for the practical_data_applications vignette}
+\title{Fitted mfsusie objects under five preprocessing configurations}
 \format{
 A list with components
 \describe{
@@ -33,13 +33,15 @@ practical_fits
 \description{
 Five fits on the same simulated dataset (\code{n = 40}, \code{p = 25},
 \code{M = 2}, \code{T_m = 32}, signal SNP at index 7), one per
-configuration shown in
-\code{vignette("practical_data_applications")}. The simulated
-dataset is shaped after a chromatin-accessibility scQTL panel
-by Anjing Liu and William Denault (Wang group). The
-underlying ATAC-seq genotype and read-count data are not
-redistributable; this dataset ships fitted-model summaries
-only, no individual-level inputs.
+configuration: default (Wakefield Normal marginal), small-sample
+Student-t correction, low-count column filtering,
+wavelet-domain quantile normalization, and all three
+corrections combined. The simulated dataset reproduces the
+shape of a small-cohort chromatin-accessibility QTL panel
+(sparse coverage in some cell types, heavy-tailed wavelet
+coefficients in others). The underlying genotype and
+read-count data are not redistributable; this object ships
+fitted-model summaries only, no individual-level inputs.
 }
 \examples{
 \donttest{

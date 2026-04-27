@@ -74,7 +74,7 @@ Same named-list shape as \code{mf_adjust_for_covariates()}.
 }
 \description{
 Inner workhorse for \code{method = "wavelet_eb"}. Implements the
-per-coefficient EB regression at upstream-equivalent defaults so
-the result bit-matches the upstream EBmvFR(adjust = TRUE)
-pipeline.
+per-coefficient empirical-Bayes regression of a functional
+response \code{Y} on a covariate matrix \code{Z} (optionally controlling
+for \code{X} via the Frisch-Waugh-Lovell construction).
 }
