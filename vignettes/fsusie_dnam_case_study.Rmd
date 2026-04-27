@@ -263,9 +263,7 @@ smoother gives pointwise credible bands for each per-CpG
 effect:
 
 ```{r ti-smooth, message = FALSE}
-fit_TI <- mf_post_smooth(fit, method = "TI",
-                         wavelet_filter = 1L,
-                         wavelet_family = "DaubExPhase")
+fit_TI <- mf_post_smooth(fit, method = "TI")
 range(fit_h$pip - fit_TI$pip)
 ```
 

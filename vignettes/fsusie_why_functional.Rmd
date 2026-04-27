@@ -62,9 +62,10 @@ cat("N =", nrow(X), "  J =", ncol(X), "  T =", T_m,
 ## Method 1: Per-position SuSiE
 
 For each affected position run `susie(X, y[, t], L = 1)` and
-collect the credible sets. The fit fails to detect a credible
-set at most positions, and where it does the credible sets are
-inconsistent across nearby positions.
+collect the credible sets. Two failure modes appear: (i)
+SuSiE returns no credible set at most affected positions; (ii)
+when it does return a CS, the lead variant is inconsistent
+across nearby positions.
 
 ```{r per-position, message = FALSE, warning = FALSE}
 affected_pos <- which(effect > 0)
@@ -76,9 +77,54 @@ n_cs_per_pos <- vapply(susie_est, function(s) length(s$cs), integer(1L))
 table(n_cs_per_pos)
 ```
 
-The "table" entry at zero is the count of CpGs where SuSiE
-returns no credible set; only a small minority of affected
-positions yield a non-empty CS.
+Most positions (the `0` column above) yield no CS at all.
+Compare positions 88 and 91 to see the second failure: both
+positions carry similar effect amplitude, but the per-position
+SuSiE fits land on different lead variants, so reasoning about
+"the causal SNP" from per-position fits is not straightforward.
+
+```{r per-position-illustration, fig.height = 4.5, fig.width = 8, message = FALSE, warning = FALSE}
+illustrate_pos <- function(t) {
+  sf <- susie(X, y[, t], L = 1L)
+  list(t = t, pip = sf$pip, cs = sf$sets$cs)
+}
+ill <- list(illustrate_pos(88L), illustrate_pos(91L))
+
+par(mfrow = c(2L, 2L), mar = c(3.5, 4, 2.5, 1))
+# Top row: effect curve with the highlighted position.
+for (i in seq_along(ill)) {
+  plot(effect, pch = 20L, col = "grey60", cex = 0.7,
+       xlab = "position", ylab = "true effect",
+       main = sprintf("Position %d", ill[[i]]$t),
+       cex.main = 1.05, font.main = 2L)
+  abline(h = 0, lty = 3, col = "grey50")
+  points(ill[[i]]$t, effect[ill[[i]]$t], pch = 21L,
+         col = "firebrick", bg = "firebrick", cex = 1.4)
+}
+# Bottom row: per-position SuSiE PIP.
+for (i in seq_along(ill)) {
+  plot(ill[[i]]$pip, pch = 20L, col = "grey60", cex = 0.7,
+       xlab = "SNP", ylab = "PIP", ylim = c(0, 1),
+       main = sprintf("Per-position SuSiE PIP at position %d",
+                      ill[[i]]$t),
+       cex.main = 1.0, font.main = 2L)
+  abline(v = true_pos_filt, lty = 2, col = "grey50")
+  cs_l1 <- ill[[i]]$cs$L1
+  if (!is.null(cs_l1)) {
+    points(cs_l1, ill[[i]]$pip[cs_l1], pch = 19L,
+           col = "dodgerblue", cex = 1.2)
+  }
+  points(true_pos_filt, ill[[i]]$pip[true_pos_filt], pch = 21L,
+         col = "firebrick", bg = NA, cex = 1.6, lwd = 1.8)
+}
+par(mfrow = c(1L, 1L))
+```
+
+Top row: the per-position truth, with the highlighted position
+in red. Bottom row: the SuSiE PIP at that position; blue points
+mark the credible set, red ring marks the true causal SNP. The
+two positions sit a few CpGs apart yet pick different lead
+variants, illustrating the per-position-fit incoherence.
 
 ## Method 2: Top-PC SuSiE for PC = 1..5
 
@@ -101,9 +147,15 @@ data.frame(PC = seq_len(5L),
            n_cs            = pc_n_cs)
 ```
 
-Most of the top-PC fits fail to recover the true causal SNP:
-the principal-component direction is dominated by orthogonal
-noise rather than the variable-driven signal.
+PC 1 captures the trait-driven direction cleanly and SuSiE on
+the PC 1 score returns a single, high-PIP credible set on the
+true SNP. That fixes the per-position-SuSiE recall problem:
+collapsing to one scalar derived from the curve gives a
+coherent fine-mapping signal. But PCA discards the per-position
+effect direction. The fit tells us a signal exists at one
+variant; it does not tell us where on the curve that variant
+acts. That target information is what fSuSiE preserves and
+PCA loses.
 
 ## Method 3: mvSuSiE under default and tuned configurations
 
@@ -147,39 +199,70 @@ cat("Max PIP (default):", max(fit_mv_default$pip), "\n")
 cat("CS count (default):", length(fit_mv_default$sets$cs), "\n")
 ```
 
-```{r mvsusie-effect-curve, eval = has_mvsusie, fig.height = 3.5}
-# Recovered effect curve from the tuned mvSuSiE fit. coef() on
-# an mvsusie fit returns a (J + 1) x R matrix; row j + 1 is the
-# fitted effect curve of SNP j across positions.
-lead_snp <- which.max(fit_mv_tuned$pip)
-mv_effect <- as.numeric(coef(fit_mv_tuned)[lead_snp + 1L, ])
+```{r mvsusie-effect-curve, eval = has_mvsusie, fig.height = 4, fig.width = 8}
+# Recovered effect curves from both mvSuSiE configurations.
+# `coef()` on an mvsusie fit returns a (J + 1) x R matrix; row
+# j + 1 is the fitted effect curve of SNP j across positions.
+lead_tuned   <- which.max(fit_mv_tuned$pip)
+lead_default <- which.max(fit_mv_default$pip)
+mv_eff_tuned   <- as.numeric(coef(fit_mv_tuned)[lead_tuned + 1L, ])
+mv_eff_default <- as.numeric(coef(fit_mv_default)[lead_default + 1L, ])
 
-plot(effect, type = "l", lwd = 2, col = "black",
+par(mfrow = c(1L, 2L), mar = c(4, 4, 2.5, 1))
+yrng <- range(c(effect, mv_eff_tuned, mv_eff_default))
+plot(effect, pch = 20L, col = "grey30", cex = 0.7, ylim = yrng,
      xlab = "position", ylab = "effect",
-     main = "mvSuSiE (tuned) recovered effect")
-lines(mv_effect, col = "#1f78b4", lwd = 1.5, lty = 2)
-legend("topright", legend = c("truth", "mvSuSiE (tuned)"),
-       col = c("black", "#1f78b4"), lwd = c(2, 1.5),
-       lty = c(1, 2), bty = "n")
+     main = "mvSuSiE tuned (truth-informed prior)",
+     cex.main = 1.05, font.main = 2L)
+abline(h = 0, lty = 3, col = "grey50")
+lines(mv_eff_tuned, col = "firebrick", lwd = 2)
+legend("topright", legend = c("truth", "mvSuSiE tuned"),
+       col = c("grey30", "firebrick"), lwd = c(NA, 2),
+       lty = c(NA, 1), pch = c(20, NA), bty = "n", cex = 0.8)
+
+plot(effect, pch = 20L, col = "grey30", cex = 0.7, ylim = yrng,
+     xlab = "position", ylab = "effect",
+     main = "mvSuSiE default (canonical prior)",
+     cex.main = 1.05, font.main = 2L)
+abline(h = 0, lty = 3, col = "grey50")
+lines(mv_eff_default, col = "firebrick", lwd = 2)
+legend("topright", legend = c("truth", "mvSuSiE default"),
+       col = c("grey30", "firebrick"), lwd = c(NA, 2),
+       lty = c(NA, 1), pch = c(20, NA), bty = "n", cex = 0.8)
+par(mfrow = c(1L, 1L))
 ```
+
+The tuned configuration recovers the effect shape closely. The
+default configuration's recovered curve is essentially flat at
+zero: with no truth-informed prior the canonical mixture cannot
+distinguish the signal from noise, the PIPs collapse, and the
+fitted effect carries no information. The signal is recoverable
+only when the true effect direction is supplied as the prior.
 
 ## Method 4: fSuSiE
 
 A single `fsusie()` call recovers the correct credible set and
-a smooth recovered effect curve.
+a smooth recovered effect curve. Use the `L = 15`, `L_greedy = 5`
+default that fSuSiE uses elsewhere; the greedy outer loop trims
+the effective number of effects so the choice of `L` does not
+need to be tuned per-dataset.
 
 ```{r fsusie, message = FALSE, warning = FALSE}
-fit_f <- fsusie(y, X, L = 1L, verbose = TRUE)
+fit_f <- fsusie(y, X, L = 15L, L_greedy = 5L, verbose = FALSE)
 fit_f$sets$cs
 fit_f$pip[true_pos_filt]
 ```
 
-```{r fsusie-plot}
-fit_f_s <- mf_post_smooth(fit_f, method = "TI",
-                          wavelet_filter = 1L,
-                          wavelet_family = "DaubExPhase")
-mfsusie_plot(fit_f_s)
+```{r fsusie-plot, fig.height = 5}
+fit_f_s <- mf_post_smooth(fit_f)
+mfsusie_plot(fit_f_s, truth = list(effect))
 ```
+
+The TI-smoothed effect curve tracks the truth (dark-grey dots)
+across the support, the credible band covers the per-position
+truth, and the credible set lands cleanly on the true SNP. fSuSiE
+recovers both the variant and the per-position effect direction
+without any truth-informed configuration.
 
 ## When to use which tool in the SuSiE suite
 

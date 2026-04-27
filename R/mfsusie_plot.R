@@ -146,7 +146,7 @@ mf_cs_colors <- function(n_cs) {
   plot(pos, pip, type = "p", pch = pch, col = col, cex = cex,
        lwd = 1.6,
        xlab = xlab, ylab = ylab, ylim = c(0, 1), main = main,
-       cex.main = 0.95, las = 1)
+       cex.main = 1.05, font.main = 2L, las = 1)
   abline(h = 0.95, lty = 3, col = "grey50")
   cs <- fit$sets$cs %||% list()
   if (add_legend && length(cs) > 0L) {
@@ -156,21 +156,73 @@ mf_cs_colors <- function(n_cs) {
   }
 }
 
+# Internal helpers shared by `.draw_effect_band` and
+# `.draw_effect_errorbar`.
+
+# y-axis range that fits curves, bands, optional truth, plus 0.
+.effect_yrange <- function(curves, bands, truth_per_cs = NULL) {
+  has_truth <- !is.null(truth_per_cs) &&
+    any(!vapply(truth_per_cs, is.null, logical(1)))
+  range(unlist(curves), unlist(lapply(bands, c)),
+        if (has_truth) unlist(truth_per_cs) else NULL,
+        0, na.rm = TRUE)
+}
+
+# Overlay per-CS truth values as dark-grey dots.
+.overlay_truth_dots <- function(pos, truth_per_cs) {
+  if (is.null(truth_per_cs)) return(invisible(NULL))
+  for (i in seq_along(truth_per_cs)) {
+    tr <- truth_per_cs[[i]]
+    if (is.null(tr)) next
+    pos_i <- pos[seq_along(tr)]
+    points(pos_i, tr, col = "grey30", pch = 20L, cex = 0.7)
+  }
+  invisible(NULL)
+}
+
+# CS legend (with optional "truth" row at the top). `style` is
+# "band" (line in legend) or "errorbar" (filled point).
+.effect_cs_legend <- function(cs_subset, pal, has_truth, lwd, style) {
+  K <- length(cs_subset)
+  lab <- paste0("CS", seq_len(K))
+  cols <- pal
+  if (style == "band") {
+    lwds <- rep(lwd, K); ltys <- rep(1L, K); pchs <- rep(NA_integer_, K)
+  } else {
+    lwds <- rep(NA_real_, K); ltys <- rep(NA_integer_, K); pchs <- rep(16L, K)
+  }
+  if (has_truth) {
+    lab  <- c("truth", lab)
+    cols <- c("grey30", cols)
+    lwds <- c(NA_real_, lwds)
+    ltys <- c(NA_integer_, ltys)
+    pchs <- c(20L, pchs)
+  }
+  legend("topright", legend = lab, col = cols, lwd = lwds,
+         lty = ltys, pch = pchs, bty = "n", cex = 0.75)
+}
+
 # Internal: draw the band-style overlay of all `cs_subset` CSes
-# on the current device cell.
+# on the current device cell. `truth_per_cs`, when non-NULL, is a
+# length-`length(cs_subset)` list of length-T_m vectors (or NULLs);
+# truth values are overlaid as dark-grey dots and added to the
+# legend.
 .draw_effect_band <- function(fit, m, cs_subset, pos, pal, lwd, smoothed,
                               show_grid_dots, show_affected_region,
                               show_lfsr_curve, lfsr_threshold,
-                              add_legend, main, xlab, xaxt) {
+                              add_legend, main, xlab, xaxt,
+                              truth_per_cs = NULL) {
   curves <- lapply(cs_subset, function(l) .effect_curve(fit, l, m, smoothed))
   bands  <- lapply(cs_subset, function(l) .credible_band(fit, l, m, smoothed))
   lfsrs  <- lapply(cs_subset, function(l) .lfsr_curve(fit, l, m, smoothed))
-  has_lfsr <- show_lfsr_curve && any(!vapply(lfsrs, is.null, logical(1)))
+  has_lfsr  <- show_lfsr_curve && any(!vapply(lfsrs, is.null, logical(1)))
+  has_truth <- !is.null(truth_per_cs) &&
+    any(!vapply(truth_per_cs, is.null, logical(1)))
 
-  yrange <- range(unlist(curves), unlist(lapply(bands, c)), 0,
-                  na.rm = TRUE)
+  yrange <- .effect_yrange(curves, bands, truth_per_cs)
   plot(NA, xlim = range(pos), ylim = yrange,
-       xlab = xlab, ylab = "effect", main = main, las = 1, xaxt = xaxt)
+       xlab = xlab, ylab = "effect", main = main, las = 1, xaxt = xaxt,
+       cex.main = 1.05, font.main = 2L)
   abline(h = 0, lty = 2, col = "grey60")
 
   for (i in seq_along(cs_subset)) {
@@ -219,13 +271,11 @@ mf_cs_colors <- function(n_cs) {
     }
   }
 
+  .overlay_truth_dots(pos, truth_per_cs)
+
   if (add_legend) {
-    # Two-part legend: CS colors and (when lfsr is overlaid)
-    # solid = effect, dashed = lfsr.
-    if (length(cs_subset) > 1L) {
-      legend("topright",
-             legend = paste0("CS", seq_along(cs_subset)),
-             col = pal, lwd = lwd, bty = "n", cex = 0.75)
+    if (length(cs_subset) > 1L || has_truth) {
+      .effect_cs_legend(cs_subset, pal, has_truth, lwd, style = "band")
     }
     if (has_lfsr) {
       legend("topleft",
@@ -241,7 +291,8 @@ mf_cs_colors <- function(n_cs) {
 # current device cell. Errors when no credible bands are available.
 .draw_effect_errorbar <- function(fit, m, cs_subset, pos, pal, smoothed,
                                   show_affected_region,
-                                  add_legend, main, xlab, xaxt) {
+                                  add_legend, main, xlab, xaxt,
+                                  truth_per_cs = NULL) {
   curves <- lapply(cs_subset, function(l) .effect_curve(fit, l, m, smoothed))
   bands  <- lapply(cs_subset, function(l) .credible_band(fit, l, m, smoothed))
 
@@ -250,11 +301,12 @@ mf_cs_colors <- function(n_cs) {
          "credible bands. Call `mf_post_smooth()` first.")
   }
 
-  yrange <- range(unlist(curves), unlist(lapply(bands, c)), 0,
-                  na.rm = TRUE)
+  has_truth <- !is.null(truth_per_cs) &&
+    any(!vapply(truth_per_cs, is.null, logical(1)))
+  yrange <- .effect_yrange(curves, bands, truth_per_cs)
   plot(NA, xlim = range(pos), ylim = yrange,
        xlab = xlab, ylab = "effect", main = main, las = 1,
-       xaxt = xaxt)
+       xaxt = xaxt, cex.main = 1.05, font.main = 2L)
   abline(h = 0, lty = 2, col = "grey60")
 
   for (i in seq_along(cs_subset)) {
@@ -283,9 +335,11 @@ mf_cs_colors <- function(n_cs) {
     }
   }
 
-  if (add_legend && length(cs_subset) > 1L) {
-    legend("topright", legend = paste0("CS", seq_along(cs_subset)),
-           col = pal, pch = 16L, bty = "n", cex = 0.75)
+  .overlay_truth_dots(pos, truth_per_cs)
+
+  if (add_legend && (length(cs_subset) > 1L || has_truth)) {
+    .effect_cs_legend(cs_subset, pal, has_truth, lwd = NA_real_,
+                      style = "errorbar")
   }
 }
 
@@ -296,12 +350,14 @@ mf_cs_colors <- function(n_cs) {
                                 show_grid_dots, show_affected_region,
                                 show_lfsr_curve, lfsr_threshold,
                                 add_legend, main,
-                                xlab = "outcome position", xaxt = "s") {
+                                xlab = "outcome position", xaxt = "s",
+                                truth_per_cs = NULL) {
   if (effect_style == "errorbar") {
     .draw_effect_errorbar(fit, m, cs_subset, pos, pal, smoothed,
                           show_affected_region = show_affected_region,
                           add_legend = add_legend,
-                          main = main, xlab = xlab, xaxt = xaxt)
+                          main = main, xlab = xlab, xaxt = xaxt,
+                          truth_per_cs = truth_per_cs)
   } else {
     .draw_effect_band(fit, m, cs_subset, pos, pal, lwd, smoothed,
                       show_grid_dots = show_grid_dots,
@@ -309,7 +365,8 @@ mf_cs_colors <- function(n_cs) {
                       show_lfsr_curve = show_lfsr_curve,
                       lfsr_threshold = lfsr_threshold,
                       add_legend = add_legend,
-                      main = main, xlab = xlab, xaxt = xaxt)
+                      main = main, xlab = xlab, xaxt = xaxt,
+                      truth_per_cs = truth_per_cs)
   }
 }
 
@@ -345,7 +402,8 @@ mf_cs_colors <- function(n_cs) {
                                   effect_style, pos, lwd,
                                   show_grid_dots, show_affected_region,
                                   show_lfsr_curve, lfsr_threshold,
-                                  add_legend, main = NULL) {
+                                  add_legend, main = NULL,
+                                  truth_per_cs = NULL) {
   T_basis <- fit$dwt_meta$T_basis[m]
   if (is.null(pos))  pos  <- fit$dwt_meta$pos[[m]]
   if (is.null(main)) main <- .outcome_main(fit, m)
@@ -369,7 +427,8 @@ mf_cs_colors <- function(n_cs) {
                      show_lfsr_curve = show_lfsr_curve,
                      lfsr_threshold = lfsr_threshold,
                      add_legend = add_legend,
-                     main = main)
+                     main = main,
+                     truth_per_cs = truth_per_cs)
 }
 
 # Internal: K stacked per-CS effect cells. Caller has already
@@ -380,7 +439,10 @@ mf_cs_colors <- function(n_cs) {
                                      show_grid_dots, show_affected_region,
                                      show_lfsr_curve, lfsr_threshold,
                                      add_legend,
-                                     mar_cs = NULL) {
+                                     mar_cs = NULL,
+                                     truth_per_cs = NULL,
+                                     main_prefix = NULL,
+                                     last_cell = TRUE) {
   cs   <- fit$sets$cs %||% list()
   cs_l <- fit$sets$cs_index %||% seq_along(cs)
   pal  <- mf_cs_colors(length(cs))
@@ -389,6 +451,9 @@ mf_cs_colors <- function(n_cs) {
     op <- par(mar = mar_cs); on.exit(par(op), add = TRUE)
   }
   for (i in seq_len(K)) {
+    is_last <- last_cell && (i == K)
+    title_i <- if (is.null(main_prefix)) sprintf("CS%d", i)
+               else sprintf("%s — CS%d", main_prefix, i)
     .draw_effect_panel(fit, m, cs_subset = cs_l[i],
                        effect_style = effect_style,
                        pos = pos, pal = pal[i], lwd = lwd,
@@ -398,10 +463,49 @@ mf_cs_colors <- function(n_cs) {
                        show_lfsr_curve = show_lfsr_curve,
                        lfsr_threshold = lfsr_threshold,
                        add_legend = (i == 1L) && add_legend,
-                       main = sprintf("CS%d", i),
-                       xaxt = if (i == K) "s" else "n",
-                       xlab = if (i == K) "outcome position" else "")
+                       main = title_i,
+                       xaxt = if (is_last) "s" else "n",
+                       xlab = if (is_last) "outcome position" else "",
+                       truth_per_cs = if (!is.null(truth_per_cs))
+                         truth_per_cs[i] else NULL)
   }
+}
+
+# Internal: normalize the user-facing `truth` argument into a
+# canonical list[M] of list[K] of length-T_m vectors (or NULL each).
+# Accepted shapes:
+#
+#  M = 1, K = K:
+#    NULL                    -> no truth
+#    numeric vector length-T -> single truth, replicated for every CS
+#    list of K vectors       -> per-CS truth
+#    list(vec)               -> single truth, replicated for every CS
+#
+#  M > 1:
+#    NULL                    -> no truth
+#    list of length M, each entry NULL / vector / list-of-K-vectors
+.normalize_truth <- function(truth, M, K) {
+  empty <- replicate(M, vector("list", K), simplify = FALSE)
+  if (is.null(truth)) return(empty)
+  per_cs <- function(x) {
+    if (is.null(x)) return(vector("list", K))
+    if (is.numeric(x) && !is.list(x)) return(rep(list(x), K))
+    if (is.list(x) && length(x) == K) return(x)
+    if (is.list(x) && length(x) == 1L && is.numeric(x[[1L]]))
+      return(rep(list(x[[1L]]), K))
+    stop("`truth` entry must be NULL, a length-T_m vector, or a ",
+         "length-K list of length-T_m vectors.")
+  }
+  if (M == 1L) {
+    if (is.numeric(truth) && !is.list(truth)) return(list(rep(list(truth), K)))
+    if (is.list(truth) && length(truth) == K) return(list(truth))
+    if (is.list(truth) && length(truth) == 1L)  return(list(per_cs(truth[[1L]])))
+    stop("`truth` for M = 1 must be NULL, a length-T_1 vector, ",
+         "or a length-K list of length-T_1 vectors.")
+  }
+  if (!is.list(truth) || length(truth) != M)
+    stop("`truth` for M > 1 must be a length-M list.")
+  lapply(truth, per_cs)
 }
 
 #' Plot an mfsusie() / fsusie() fit
@@ -456,6 +560,13 @@ mf_cs_colors <- function(n_cs) {
 #' @param lwd numeric, curve line width. Default `1.5`.
 #' @param add_legend logical, show CS legend on each panel.
 #'   Default `TRUE`.
+#' @param truth optional ground-truth overlay. For `M = 1`: a
+#'   length-`T_1` numeric vector (replicated across all CS panels)
+#'   or a length-`K` list of length-`T_1` vectors (per-CS truth).
+#'   For `M > 1`: a length-`M` list, each entry one of those two
+#'   shapes (or `NULL` to skip an outcome). Truth values are
+#'   overlaid as dark-grey dots and added to the legend. Default
+#'   `NULL` (no overlay).
 #' @param ... reserved.
 #' @return Called for side effect; returns `invisible(NULL)`.
 #' @export
@@ -468,6 +579,7 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
                          lfsr_threshold = 0.01,
                          lwd = 2.0,
                          add_legend = TRUE,
+                         truth = NULL,
                          smooth_method = NULL, ...) {
   if (!inherits(fit, "mfsusie")) {
     stop("`fit` must be an `mfsusie` (or `fsusie`) fit object.")
@@ -481,11 +593,15 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
   M <- length(fit$dwt_meta$T_basis)
   K <- length(fit$sets$cs %||% list())
 
+  truth_norm <- .normalize_truth(truth, M, max(K, 1L))
+  truth_for  <- function(mi) {
+    if (K < 1L) return(NULL)
+    truth_norm[[mi]]
+  }
+
   # Resolve facet for the outcome we are about to render. Stack
   # only fires when there are at least 2 credible sets and the
-  # caller did not force overlay. M > 1 always uses overlay (one
-  # cell per outcome in the tiled grid; stack would re-allocate
-  # the device and clobber the outer mfrow).
+  # caller did not force overlay.
   resolve_facet_for <- function(mi) {
     if (K < 2L) return("overlay")
     .resolve_facet(facet_cs, fit, mi, smoothed)
@@ -499,9 +615,11 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
                          show_affected_region = show_affected_region,
                          show_lfsr_curve = show_lfsr_curve,
                          lfsr_threshold = lfsr_threshold,
-                         add_legend = add_legend, main = main)
+                         add_legend = add_legend, main = main,
+                         truth_per_cs = truth_for(mi))
   }
-  draw_stack_cells <- function(mi, main_outer) {
+  draw_stack_cells <- function(mi, main_outer, last_cell = TRUE,
+                                main_prefix = NULL) {
     .draw_effect_stack_cells(fit, m = mi, smoothed = smoothed, K = K,
                              effect_style = effect_style,
                              pos = NULL, lwd = lwd,
@@ -510,9 +628,13 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
                              show_lfsr_curve = show_lfsr_curve,
                              lfsr_threshold = lfsr_threshold,
                              add_legend = add_legend,
-                             mar_cs = c(2.5, 4, 1.5, 4))
+                             mar_cs = c(2.5, 4, 1.8, 4),
+                             truth_per_cs = truth_for(mi),
+                             main_prefix = main_prefix,
+                             last_cell = last_cell)
     if (!is.null(main_outer))
-      mtext(main_outer, side = 3, outer = TRUE, line = 0.2, cex = 0.95)
+      mtext(main_outer, side = 3, outer = TRUE, line = 0.2,
+            cex = 1.05, font = 2L)
   }
 
   # Single-outcome focus: one effect region. May expand to K
@@ -523,8 +645,8 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
     if (facet_res == "stack" && K >= 2L) {
       layout(matrix(seq_len(K), ncol = 1L), heights = rep(1, K))
       on.exit(layout(1L), add = TRUE)
-      op <- par(mar = c(2.5, 4, 1.5, 4),
-                oma = c(2.5, 0, 1.5, 0))
+      op <- par(mar = c(2.5, 4, 1.8, 4),
+                oma = c(2.5, 0, 1.8, 0))
       on.exit(par(op), add = TRUE)
       draw_stack_cells(m, main_outer = .outcome_main(fit, m))
     } else {
@@ -554,10 +676,29 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
     return(invisible(NULL))
   }
 
-  # M > 1: tiled grid, PIP in the top-left slot, M overlay
-  # effect cells filling the rest. Stack is forced off here so
-  # the inner panels do not call `par(mfrow)` and clobber the
-  # outer layout.
+  # M > 1: two layouts.
+  #   facet_cs = "stack" with K >= 2: vertical stack of 1 PIP cell
+  #     and M*K per-(outcome, CS) cells. Use this when each CS
+  #     deserves its own panel per outcome (e.g., DNAm-CS1, ...,
+  #     RNA-CS3 stacked vertically).
+  #   else: tiled grid, PIP in the top-left slot, M overlay cells.
+  if (facet_cs == "stack" && K >= 2L) {
+    n_cells <- 1L + M * K
+    layout(matrix(seq_len(n_cells), ncol = 1L),
+           heights = c(1.0, rep(1.0, M * K)))
+    on.exit(layout(1L), add = TRUE)
+    op <- par(mar = c(4, 4, 2.5, 4))
+    on.exit(par(op), add = TRUE)
+    .draw_pip(fit, pos = pos, add_legend = add_legend)
+    for (mi in seq_len(M)) {
+      is_last_outcome <- (mi == M)
+      draw_stack_cells(mi, main_outer = NULL,
+                       last_cell = is_last_outcome,
+                       main_prefix = .outcome_main(fit, mi))
+    }
+    return(invisible(NULL))
+  }
+
   n_panels <- M + 1L
   cols     <- ceiling(sqrt(n_panels))
   rows     <- ceiling(n_panels / cols)

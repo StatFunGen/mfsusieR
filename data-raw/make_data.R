@@ -174,16 +174,16 @@ multiomic_example <- local({
   list(
     X        = X,
     Y_list   = list(
-      dnam = Y_dnam,
-      rna  = Y_rna,
-      eqtl = matrix(Y_eqtl, ncol = 1L),
-      pqtl = matrix(Y_pqtl, ncol = 1L)
+      DNAm     = Y_dnam,
+      `RNA-seq` = Y_rna,
+      eQTL     = matrix(Y_eqtl, ncol = 1L),
+      pQTL     = matrix(Y_pqtl, ncol = 1L)
     ),
     pos_list = list(
-      dnam = cpg_pos,
-      rna  = exon_pos,
-      eqtl = 1L,
-      pqtl = 1L
+      DNAm     = cpg_pos,
+      `RNA-seq` = exon_pos,
+      eQTL     = 1L,
+      pQTL     = 1L
     ),
     causal_snps = causal,
     description = paste0(
