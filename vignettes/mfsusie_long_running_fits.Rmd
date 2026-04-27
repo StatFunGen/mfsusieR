@@ -28,11 +28,17 @@ on the loci that actually need it.
 The pattern this vignette covers is a two-pass scan:
 
 1. **First pass**: run every locus with a low `max_iter` budget
-   (e.g. 5). Most non-signal loci converge immediately and need
-   no further attention; the rest emerge as candidates.
-2. **Second pass**: re-fit the candidates with a larger budget,
-   warm-started from the partial fit so the IBSS loop does not
-   restart from cold and just polishes the partial state.
+   (e.g. 5). Two outcomes are useful directly. Loci that
+   converge with `converged = TRUE` are done. Loci that did not
+   converge but whose first-pass PIPs are flat (no SNP near 1,
+   no narrow credible set) are unlikely to produce signal at any
+   budget and can also be dropped. Filtering on these criteria
+   alone usually drops the bulk of a genome-wide scan.
+2. **Second pass**: re-fit the remaining candidates (didn't
+   converge, but first-pass PIPs already concentrate on a small
+   number of SNPs) with a larger budget, warm-started from the
+   partial fit so the IBSS loop does not restart from cold and
+   just polishes the partial state.
 
 ```{r setup, message = FALSE}
 library(mfsusieR)
