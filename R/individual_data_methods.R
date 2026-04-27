@@ -449,7 +449,7 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
   # we scale `mixsqp_null_penalty` by M. See
   # `inst/notes/cross-package-audit-derivations.md` section 1
   # for the full derivation.
-  mixsqp_null_penalty <- (params$mixsqp_null_penalty %||% 0.01) *
+  mixsqp_null_penalty <- (params$mixsqp_null_penalty %||% 0.1) *
                         max(1L, data$M)
   control    <- params$control_mixsqp %||% list()
   zeta_l     <- model$alpha[l, ]

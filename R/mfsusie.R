@@ -96,7 +96,19 @@
 #'   tailed assays. Default `FALSE`.
 #' @param control_mixsqp optional named list of `mixsqp` control
 #'   arguments forwarded to the per-(outcome, scale) M-step.
-#' @param mixsqp_null_penalty numeric, mixsqp null-component penalty (internal).
+#' @param mixsqp_null_penalty numeric, per-coefficient pseudo-count
+#'   on the null component of the mixsqp M-step. The total null
+#'   pseudo-count fed to mixsqp is `mixsqp_null_penalty * idx_size`,
+#'   versus a total data weight of `idx_size` from the `zeta`-
+#'   weighted SNP rows; the ratio `mixsqp_null_penalty : 1` is
+#'   therefore the null:data weight ratio at the M-step. Default
+#'   `0.1` corresponds to a 10% null:data ratio, anchored to
+#'   `ashr::ash.workhorse(nullweight = 10)` over a typical
+#'   `idx_size = 128` (ratio ~0.08). For multi-outcome fits the
+#'   penalty is scaled by the number of outcomes `M` so that the
+#'   null:data balance stays invariant as the per-effect SNP
+#'   posterior concentrates linearly in `M`; single-outcome fits
+#'   are unchanged.
 #'   Default 0.7.
 #' @param small_sample_correction logical. When `TRUE`, replaces
 #'   the per-variable Wakefield Normal marginal Bayes factor in
@@ -170,7 +182,7 @@ mfsusie <- function(X, Y,
                     low_count_filter          = 0,
                     quantile_norm             = FALSE,
                     control_mixsqp            = NULL,
-                    mixsqp_null_penalty       = 0.01,
+                    mixsqp_null_penalty       = 0.1,
                     model_init                = NULL,
                     small_sample_correction   = FALSE) {
   if (!is.logical(small_sample_correction) ||

@@ -42,12 +42,40 @@ jobs:
 
       - name: Compute coverage and write shields.io endpoint JSON
         run: |
-          pixi run -e r44 R -e '
-          cov <- covr::package_coverage(quiet = TRUE);
-          pct <- covr::percent_coverage(cov);
-          color <- if (pct >= 90) "brightgreen" else if (pct >= 80) "green" else if (pct >= 70) "yellowgreen" else if (pct >= 60) "yellow" else if (pct >= 50) "orange" else "red";
-          jsonlite::write_json(list(schemaVersion = 1L, label = "coverage", message = sprintf("%.1f%%", pct), color = color), path = "docs/coverage.json", auto_unbox = TRUE)
-          '
+          pixi run -e r44 R --no-save <<'EOF'
+          dir.create("docs", showWarnings = FALSE, recursive = TRUE)
+          out_path <- "docs/coverage.json"
+          ok <- tryCatch({
+            cov <- covr::package_coverage(quiet = TRUE)
+            pct <- covr::percent_coverage(cov)
+            cat(sprintf("Computed coverage: %.2f%%\n", pct))
+            color <- if (pct >= 90) "brightgreen"
+              else if (pct >= 80) "green"
+              else if (pct >= 70) "yellowgreen"
+              else if (pct >= 60) "yellow"
+              else if (pct >= 50) "orange"
+              else "red"
+            jsonlite::write_json(
+              list(schemaVersion = 1L, label = "coverage",
+                   message = sprintf("%.1f%%", pct), color = color),
+              path = out_path, auto_unbox = TRUE)
+            TRUE
+          }, error = function(e) {
+            cat(sprintf("Coverage computation failed: %s\n", conditionMessage(e)))
+            FALSE
+          })
+          if (!ok) {
+            cat("Writing fallback coverage.json (red, message='unknown').\n")
+            jsonlite::write_json(
+              list(schemaVersion = 1L, label = "coverage",
+                   message = "unknown", color = "red"),
+              path = out_path, auto_unbox = TRUE)
+          }
+          stopifnot(file.exists(out_path))
+          cat("\nFinal coverage.json contents:\n")
+          cat(readLines(out_path), sep = "\n")
+          cat("\n")
+          EOF
 
       - name: Setup Pages
         uses: actions/configure-pages@v6
