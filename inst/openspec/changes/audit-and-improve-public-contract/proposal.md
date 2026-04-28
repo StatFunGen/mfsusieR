@@ -36,12 +36,35 @@ shape-compatible with `susieR` (`alpha`, `lbf`,
 
 The rest of the fit object stays as is.
 
-### Section 2: Feature gap with `fsusieR` and `mvf.susie.alpha`
+### Section 2: Feature gap — port-now items
 
-Read every exported function and parameter of `fsusieR` and
-`mvf.susie.alpha`. List unported features in a session note.
-For each, classify as `would-port-if-asked`, `out-of-scope`,
-or `port-now`. Pure investigation; no code changes here.
+The feature-parity audit (`2026-04-28-audit-findings.md`
+section B) identified specific gaps. Three port-now items:
+
+- **Post-processing summary helper** that takes a fit and
+  returns per-(CS, outcome) position ranges where the
+  credible band excludes zero. Replaces the
+  `affected_reg` / `affected_reg_effect` upstream functions.
+  Designed as a clean post-processing API alongside the
+  Yuan 2024 post-hoc causal-configuration helper (next
+  bullet); both take `fit` and return diagnostic summaries
+  off the existing `credible_bands` and `alpha` fields.
+- **Yuan 2024 post-hoc causal configurations**
+  (`posthoc = TRUE` in mvf.susie.alpha). 2^L combinations
+  of credible-set effects; for L ≤ 15 implement in pure R,
+  port to C++ only if a real fixture measures slow.
+- **`simu_IBSS_ash_vanilla` simulation helper** (fsusieR).
+  Port into the existing `data-raw/` simulation
+  conventions, same way other fsusieR simulation helpers
+  were ported. One file under `data-raw/`, one entry in
+  `data/` if a fixture is shipped.
+
+Already covered by existing susieR / mfsusieR helpers
+(no port needed):
+
+- `cs_relation` / `cal_cor_cs` — covered by
+  `susieR::get_cs_correlation()` at
+  `R/susie_get_functions.R:442`.
 
 ### Section 3: Maximize susieR backbone usage (delete-or-patch discipline)
 
@@ -138,24 +161,18 @@ Out of scope for this section:
   workload).
 - Other susieR args beyond the four named above.
 
-### Section 5: HMM credible band — drop gating, document
+### Section 5: HMM credible band — remove suppression
 
-Per the `2026-04-28-audit-findings.md` audit (B3): mfsusieR's
-HMM band formula is mathematically correct. It uses the
-proper law of total variance for the wavelet posterior
-(`var_w = mu2_w - mean_w^2`), inverse-DWT projects to
-position-space via `W_inv^2`, and uses `qnorm((1+level)/2)`
-for the requested coverage. The "wide band" complaint that
-suppressed display was a false signal — it conflated
-mfsusieR's band with fsusieR's bug-affected DWT-band path
-(which aggregates SDs linearly under alpha rather than
-variances, then uses a 3-sigma multiplier instead of `1-α`).
+Per the audit (B3): mfsusieR's HMM band formula is correct.
+The suppression was a false-positive bug guess.
 
-Action reduced to: drop the gating that hides the HMM band,
-add a one-paragraph roxygen note explaining the band
-semantics, no formula change.
+Action: remove the gating that hides the HMM band, make the
+HMM smoother return a populated `credible_bands` field
+identical in shape and semantics to the other smoothers
+(TI, smash, scalewise). No roxygen explanation needed
+(pre-alpha; this is a bug fix, not a feature).
 
-### Section 6: Performance and convergence on the heavy fixture
+### Section 6: Performance and convergence on the heavy fixture (LAST)
 
 Heavy-fixture re-measurement (`n=84, p≈3500, M=6, T=128, L=10`)
 **still exceeds 10 minutes** after the cache + subsetting +
@@ -182,6 +199,17 @@ Plan:
    sigma broadcast. Tight loop in cpp11armadillo or via the
    `compute_marginal_bhat_shat` susieR helper if compatible.
    Numerical identity at `tol = 1e-12`.
+   **Linear-algebra tricks**:
+   - Batch across M outcomes: concatenate Y_m horizontally
+     into one `n × T_total` matrix per effect; single
+     `crossprod(X, R_concat)` call instead of M separate
+     calls. Saves per-call BLAS overhead.
+   - Fused `Xb + crossprod` via armadillo lazy expressions:
+     evaluate `t(X) * (D - X * b_l)` as one expression,
+     avoiding the intermediate `Xb_l` matrix allocation.
+   - Sufficient-stats mode (XtX precomputed) would pay off
+     only for `n >> p`; opposite of our heavy-fixture
+     regime. Skip.
 3. **Convergence-side wins**: re-measure after exposing
    `convergence_method = "pip"` (Section 4). If PIP-based
    stopping converges in fewer iterations on this fixture
