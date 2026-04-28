@@ -4,10 +4,10 @@ Title: Multi-Outcome Functional Regression with the Sum of Single Effects Model
 Version: 0.0.1
 Date: 2026-04-25
 Authors@R: c(
-    person("Gao", "Wang", role = c("aut", "cre"),
-           email = "wang.gao@columbia.edu"),
     person("Anjing", "Liu", role = "aut"),
-    person("William R. P.", "Denault", role = "aut"))
+    person("William R. P.", "Denault", role = "aut"),
+    person("Gao", "Wang", role = c("aut", "cre"),
+           email = "wang.gao@columbia.edu"))
 Description: Bayesian variable selection for functional regression
     problems with one or many outcomes. Each outcome may be a scalar
     or a curve sampled at a grid of positions. The method is built
