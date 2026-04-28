@@ -47,17 +47,40 @@ audit, §6.1 perf re-measurement) are read-only and skip the
   length-`S_m`, or scalar when `residual_variance_scope =
   "per_outcome"`) in the `mfsusie()` `@return` block.
 
-## 2. Feature gap with `fsusieR` / `mvf.susie.alpha`
+## 2. Feature gap port-now items
 
-- [ ] 2.1 List every exported function in `fsusieR`. For each,
-  identify whether mfsusieR has an equivalent and where.
-- [ ] 2.2 Same for `mvf.susie.alpha`.
-- [ ] 2.3 List every public parameter in `fsusieR::susiF` and
-  `mvf.susie.alpha::multfsusie`. Identify mfsusieR equivalent
-  parameter or note as gap.
-- [ ] 2.4 Write `inst/notes/sessions/<date>-feature-parity.md`
-  with the table; classify each gap as `port-now` /
-  `port-if-asked` / `out-of-scope`. No code change here.
+The audit (2026-04-28-audit-findings.md section B)
+identified the gaps. This section ports them.
+
+### 2a. Post-processing summary helper
+
+- [ ] 2a.1 New function `mf_summarize_effects(fit, ...)` (or
+  similar name) that takes a fit (with credible bands
+  populated by `mf_post_smooth()`) and returns a list of
+  per-(CS, outcome) position ranges where the band excludes
+  zero. Reads existing `fit$smoothed[[method]]$credible_bands`
+  and `fit$sets$cs`.
+- [ ] 2a.2 Roxygen + a unit test on a fixture with known
+  causal SNPs at known positions.
+
+### 2b. Yuan 2024 post-hoc causal configurations
+
+- [ ] 2b.1 New function `mf_posthoc_configurations(fit, ...)`
+  that takes a fit and returns posterior probability over
+  the 2^L causal configurations.
+- [ ] 2b.2 Implement in pure R first.
+- [ ] 2b.3 If a real fixture measures slow at typical L
+  (say > 100 ms), evaluate cpp11 port. For L <= 15 expect
+  pure R sufficient.
+
+### 2c. `simu_IBSS_ash_vanilla` simulation helper
+
+- [ ] 2c.1 Port the body from
+  `~/GIT/fsusieR/R/Simulations_functions.R` into a new
+  `data-raw/` script following the existing simulation
+  helper conventions.
+- [ ] 2c.2 If a fixture is shipped, add a `data/` entry
+  with documentation.
 
 ## 3. Maximize susieR backbone (delete-or-patch)
 
@@ -74,28 +97,78 @@ audit, §6.1 perf re-measurement) are read-only and skip the
   `inst/notes/sessions/<date>-s3-override-audit.md` with
   one-line rationales.
 
-### 3b. Apply delete-and-inherit
+### 3b. Apply delete-and-inherit -- mfsusieR (commit)
 
-- [ ] 3b.1 For each override classified as
-  `delete-and-inherit`, drop the override. Confirm
-  `devtools::test()` passes.
-- [ ] 3b.2 Verify on a fixture that the susieR default
-  produces byte-identical output to the pre-deletion
-  override.
+- [ ] 3b.1 Drop the 9 overrides identified in the audit
+  (`validate_prior`, `check_convergence`, `configure_data`,
+  `get_cs`, `neg_loglik`, `get_alpha_l.mfsusie`,
+  `set_prior_variance_l.mfsusie`,
+  `get_prior_variance_l.mfsusie`, `get_variable_names`).
+  Verify `get_variable_names` falls through to `.individual`
+  byte-equivalently before deletion.
+- [ ] 3b.2 Run `devtools::test()`; expect 1188 PASS
+  unchanged (or +/- a few that read deleted fields).
+- [ ] 3b.3 Run the 3-auditor humanize step.
+- [ ] 3b.4 Commit.
 
-### 3c. Plan patch-susieR-and-delete
+### 3c. Apply delete-and-inherit -- mvsusieR (stage, do not commit)
 
-- [ ] 3c.1 For each override classified as
-  `patch-susieR-and-delete`, write a one-paragraph susieR
-  patch sketch (what generic / option to add upstream).
-- [ ] 3c.2 Attach to a tracking note for separate upstream
-  coordination per the CLAUDE.md `feature/L_greedy`
-  pattern. Do NOT edit susieR in this change without
-  explicit user approval.
+For ~5 mvsusieR overrides identified by the sidebar audit
+(`neg_loglik.mv_individual`, `get_cs.mv_individual`,
+`get_cs.mv_ss` -- a safety upgrade since `.ss` uses
+`safe_cov2cor` instead of `cov2cor`, `get_alpha_l.mvsusie`,
+`get_prior_variance_l.mvsusie`, `set_prior_variance_l.mvsusie`):
 
-### 3d. Document survivors
+- [ ] 3c.1 Apply the deletions in `~/GIT/mvsusieR/R/`
+  (working tree changes only).
+- [ ] 3c.2 Run mvsusieR's test suite; verify no regression.
+- [ ] 3c.3 Stop. Do not commit. User reviews and commits
+  manually (matching the user's stated workflow for
+  cross-package changes).
 
-- [ ] 3d.1 For each override classified as `keep`, add a
+### 3d. susieR patches -- stage, do not commit
+
+For each `patch-susieR-and-delete` candidate (P1, P2, P3,
+optionally P4-P6), apply the patch to `~/GIT/susieR/R/` on
+the master branch:
+
+- [ ] 3d.1 P1: `format_sigma2_summary(model)` and
+  `format_extra_diag(model)` generics in
+  `check_convergence.default`. Default
+  `format_sigma2_summary` returns `sprintf("%.4f", model$sigma2)`;
+  default `format_extra_diag` returns `""`.
+- [ ] 3d.2 P2: change `sum(model$KL)` to
+  `sum(model$KL, na.rm = TRUE)` in `get_objective.default`.
+- [ ] 3d.3 P3: add `cleanup_extra_fields(data)` generic
+  called from `cleanup_model.default`; default returns
+  `character(0)`.
+- [ ] 3d.4 Run susieR's test suite; verify no regression.
+- [ ] 3d.5 Stop. Do not commit. User reviews and commits
+  manually.
+
+### 3e. After P1 lands -- delete check_convergence override
+
+- [ ] 3e.1 Once user commits the susieR P1 patch, delete
+  `check_convergence.mf_individual`.
+- [ ] 3e.2 Override `format_sigma2_summary.mf_individual`
+  to return the compact list-of-vectors summary.
+- [ ] 3e.3 Override `format_extra_diag.mf_individual` to
+  return `max_pi_null` / `max_KL` / `n_eff`.
+- [ ] 3e.4 Run mfsusieR test suite + 3-auditor humanize
+  step.
+- [ ] 3e.5 Commit.
+
+### 3f. After P2/P3 land -- delete more overrides
+
+- [ ] 3f.1 Once user commits the susieR P2/P3 patches,
+  delete `get_objective.mf_individual` and
+  `cleanup_model.mf_individual`.
+- [ ] 3f.2 Run tests + 3-auditor humanize step.
+- [ ] 3f.3 Commit.
+
+### 3g. Document survivors
+
+- [ ] 3g.1 For each override classified as `keep`, add a
   one-line comment at the top of the body stating the
   divergence reason.
 
@@ -180,22 +253,13 @@ audit, §6.1 perf re-measurement) are read-only and skip the
   4g.3 and document the gap in
   `inst/notes/refactor-exceptions.md`.
 
-## 5. HMM credible band -- drop gating, document
+## 5. HMM credible band -- remove suppression
 
-Per the audit, mfsusieR's HMM band formula is correct (proper
-law-of-total-variance); the suppression was unjustified.
-
-- [ ] 5.1 Identify the visualization gating that hides the
-  HMM credible band display.
-- [ ] 5.2 Remove the gating; populate the band normally.
-- [ ] 5.3 Add a one-paragraph roxygen note in
-  `mf_post_smooth()` explaining the band derivation
-  (`var_w = mu2_w - mean_w^2`, inverse-DWT via `W_inv^2`,
-  `qnorm((1+level)/2)` multiplier for `1-α` coverage).
-- [ ] 5.4 Add a unit test that asserts the HMM band from a
-  small fixture has `lower <= mean <= upper` everywhere and
-  approximate `1-α` coverage on the manuscript's reference
-  case.
+- [ ] 5.1 Identify the gating that hides the HMM band.
+- [ ] 5.2 Remove the gating; populate `credible_bands` the
+  same way TI / smash / scalewise smoothers do.
+- [ ] 5.3 Run tests + 3-auditor humanize step.
+- [ ] 5.4 Commit. No roxygen note (pre-alpha; bug fix).
 
 ## 6. Performance and convergence
 
