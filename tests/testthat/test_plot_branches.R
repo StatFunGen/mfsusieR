@@ -156,7 +156,9 @@ test_that("affected_runs and .affected_mask handle non-empty bands", {
 test_that(".pip_title formats coverage and purity when sets$cs is populated", {
   fit <- build_three_outcome_fit()
   title <- mfsusieR:::.pip_title(fit)
-  expect_true(grepl("coverage", title))
+  # Coverage is formatted as "95% CS"; purity as "min(|r|)=...".
+  # Single-line title (was a two-line title; collapsed for layout).
+  expect_true(grepl("CS", title))
   expect_true(grepl("min", title))
 })
 

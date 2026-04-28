@@ -128,10 +128,37 @@ mf_em_m_step_per_scale <- function(L, zeta, idx_size,
     if (is.null(control_mixsqp$verbose)) control_mixsqp$verbose <- FALSE
     control_mixsqp
   }
-  out <- mixsqp(L, w,
-                x0      = c(init_pi0_w, rep(1e-6, K - 1)),
-                log     = FALSE,
-                control = ctrl)$x
+  # Filter all-zero columns of L before handing to mixsqp. Each such
+  # column corresponds to a mixture-component standard deviation that
+  # has zero data support at this (outcome, scale, l) -- e.g., a
+  # very fine-scale sd_k against an alpha-thinned variant subset
+  # whose density at that scale is below numerical precision. mixsqp
+  # is correct on these columns (it sets their weight to 0 and emits
+  # a warning), but the warning leaks to user output once per
+  # `optimize_prior_variance` call -- which fires L * S_m times per
+  # IBSS iteration. We drop the all-zero columns up front, run
+  # mixsqp on the survivors, and pad the solution back with zeros
+  # in the dropped slots. Numerically identical to mixsqp's own
+  # all-zeros handling, but quiet.
+  zero_col <- colSums(abs(L)) == 0
+  if (any(zero_col)) {
+    keep_cols <- which(!zero_col)
+    L_keep    <- L[, keep_cols, drop = FALSE]
+    K_keep    <- length(keep_cols)
+    if (K_keep == 0L) {
+      out <- numeric(K); out[1L] <- 1; return(out)
+    }
+    x0_keep  <- c(init_pi0_w, rep(1e-6, K_keep - 1L))
+    pi_keep  <- mixsqp(L_keep, w, x0 = x0_keep, log = FALSE,
+                       control = ctrl)$x
+    out <- numeric(K)
+    out[keep_cols] <- pi_keep
+  } else {
+    out <- mixsqp(L, w,
+                  x0      = c(init_pi0_w, rep(1e-6, K - 1)),
+                  log     = FALSE,
+                  control = ctrl)$x
+  }
   if (out[1] > 1 - tol_null_prior) {
     out    <- numeric(K)
     out[1] <- 1
