@@ -182,16 +182,6 @@ ibss_initialize.mf_individual <- function(data, params) {
 #' Per-iteration prior sanity check (no-op for `mf_individual`)
 #'
 #' susieR's `validate_prior.default` checks the scalar `V[l]` is
-#' non-negative; mfsusieR holds `V[l]` = 1 by design and validates
-#' the mixture-weight prior at construction time
-#' (`mf_prior_scale_mixture`). No per-iteration validation needed.
-#'
-#' @keywords internal
-#' @noRd
-validate_prior.mf_individual <- function(data, params, model, ...) {
-  invisible(TRUE)
-}
-
 # ---- track_ibss_fit --------------------------------------------
 
 #' IBSS iteration tracking (no-op by default)
@@ -282,21 +272,6 @@ cleanup_model.mf_individual <- function(data, params, model, ...) {
   model
 }
 
-# ---- configure_data -------------------------------------------
-
-#' Configure data pre-IBSS (no-op for `mf_individual`)
-#'
-#' susieR's `configure_data.individual` handles the
-#' `unmappable_effects` shim (ash / sufficient-stats conversion).
-#' mfsusieR does not support that path; configure_data is a
-#' pass-through.
-#'
-#' @keywords internal
-#' @noRd
-configure_data.mf_individual <- function(data, params, ...) {
-  data
-}
-
 # ---- User-facing post-fit accessors ---------------------------
 
 #' Per-outcome column scale factors of X
@@ -329,18 +304,6 @@ get_intercept.mf_individual <- function(data, params, model, ...) {
 #' @noRd
 get_fitted.mf_individual <- function(data, params, model, ...) {
   model$fitted
-}
-
-#' Credible sets via `susie_get_cs` (works on alpha + X)
-#' @keywords internal
-#' @noRd
-get_cs.mf_individual <- function(data, params, model, ...) {
-  if (is.null(params$coverage) || is.null(params$min_abs_corr)) return(NULL)
-  susie_get_cs(model,
-                       X            = data$X,
-                       coverage     = params$coverage,
-                       min_abs_corr = params$min_abs_corr,
-                       n_purity     = params$n_purity %||% 100)
 }
 
 #' Variable name assignment on the fit's per-effect arrays
