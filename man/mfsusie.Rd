@@ -201,8 +201,13 @@ moment in the wavelet domain.}
 \item{\code{pi_V}}{\code{list[M]} of \verb{S_m x K} mixture-weight matrices.}
 \item{\code{G_prior}}{\code{list[M]} of \code{list[S_m]} ash-shaped prior
 records (mutated by the IBSS loop).}
-\item{\code{sigma2}}{\code{list[M]} of either scalar or
-length-\code{S_m} per-(scale, outcome) residual variances.}
+\item{\code{sigma2}}{\code{list[M]}. Element m is either a scalar
+(when \code{residual_variance_scope = "per_outcome"}) or a
+length-\code{S_m} vector of per-scale residual variances
+(when \code{residual_variance_scope = "per_scale"}, the
+default). The richer per-scale shape is mfsusieR-
+specific; downstream code reading \code{sigma2} should
+handle both.}
 \item{\code{elbo}}{numeric vector of ELBO values per iteration.}
 \item{\code{niter}, \code{converged}}{IBSS termination metadata.}
 \item{\code{pip}}{length-p posterior inclusion probabilities.}

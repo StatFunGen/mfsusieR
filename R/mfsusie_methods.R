@@ -287,6 +287,19 @@ summary.mfsusie <- function(object, ...) {
     NULL
   }
 
+  # Summarize the mixture-prior null mass across (m, s) groups.
+  # `pi_V[[m]]` is an `S_m x K` matrix; column 1 is the null
+  # component. The min/median/max of column 1 across all (m, s)
+  # groups is a one-line diagnostic for prior collapse / overfit.
+  pi_null_summary <- if (!is.null(object$pi_V)) {
+    null_mass <- unlist(lapply(object$pi_V, function(piVm) piVm[, 1L]))
+    if (length(null_mass) > 0L) {
+      list(min    = min(null_mass),
+           median = stats::median(null_mass),
+           max    = max(null_mass))
+    } else NULL
+  } else NULL
+
   out <- list(
     n_effects   = nrow(alpha),
     n_variables      = ncol(alpha),
@@ -296,6 +309,7 @@ summary.mfsusie <- function(object, ...) {
     n_iter      = object$niter %||% 0L,
     elbo_final  = if (!is.null(object$elbo)) object$elbo[length(object$elbo)] else NA_real_,
     pip         = pip,
+    pi_null     = pi_null_summary,
     cs          = cs_table
   )
   class(out) <- "summary.mfsusie"
@@ -311,6 +325,10 @@ print.summary.mfsusie <- function(x, ...) {
   cat(sprintf("  T_basis per outcome: (%s)\n",
               paste(x$T_basis, collapse = ", ")))
   cat(sprintf("  Final ELBO: %.4f\n", x$elbo_final))
+  if (!is.null(x$pi_null)) {
+    cat(sprintf("  Mixture null-mass across (m, s): min=%.3f, median=%.3f, max=%.3f\n",
+                x$pi_null$min, x$pi_null$median, x$pi_null$max))
+  }
   if (!is.null(x$cs) && nrow(x$cs) > 0L) {
     cat("  Credible sets:\n")
     for (i in seq_len(nrow(x$cs))) {
