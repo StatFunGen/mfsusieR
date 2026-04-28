@@ -36,9 +36,7 @@
 #' data(dnam_example)
 #' fit <- fsusie(dnam_example$Y, dnam_example$X,
 #'               pos = dnam_example$pos, L = 15, L_greedy = 5, verbose = TRUE)
-#' fit_s <- mf_post_smooth(fit, method = "TI",
-#'                         wavelet_filter = 1L,
-#'                         wavelet_family = "DaubExPhase")
+#' fit_s <- mf_post_smooth(fit, method = "TI")
 #' mfsusie_plot(fit_s)
 #' }
 "dnam_example"
@@ -112,9 +110,7 @@
 #' fit <- mfsusie(multiomic_example$X, multiomic_example$Y_list,
 #'                pos = multiomic_example$pos_list, L = 15, L_greedy = 5,
 #'                verbose = TRUE)
-#' fit_s <- mf_post_smooth(fit, method = "TI",
-#'                         wavelet_filter = 1L,
-#'                         wavelet_family = "DaubExPhase")
+#' fit_s <- mf_post_smooth(fit, method = "TI")
 #' mfsusie_plot(fit_s)
 #' }
 "multiomic_example"
@@ -149,9 +145,7 @@
 #' fit <- fsusie(gtex_example$Y, gtex_example$X,
 #'               pos = gtex_example$pos, L = 15, L_greedy = 5,
 #'               verbose = TRUE)
-#' fit_s <- mf_post_smooth(fit, method = "TI",
-#'                         wavelet_filter = 1L,
-#'                         wavelet_family = "DaubExPhase")
+#' fit_s <- mf_post_smooth(fit, method = "TI")
 #' mfsusie_plot(fit_s)
 #' }
 "gtex_example"
