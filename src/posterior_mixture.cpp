@@ -167,3 +167,46 @@ list mixture_posterior_per_scale_cpp(doubles_matrix<> bhat,
     "pmean2"_nm = pmean2
   });
 }
+
+// Per-position likelihood matrix consumed by mixsqp in
+// `mf_em_likelihood_per_scale`. Returns the LOG of the per-row
+// dnorm densities so the caller can apply NaN imputation in
+// log-space before exponentiating.
+//
+// `log_L[j, k] = log(dnorm(bvec[j]; mean = 0, sd = sdmat[j, k]))
+//              = -0.5 log(2*pi) - 0.5 * (bvec[j] / sdmat[j, k])^2
+//                - log_sdmat[j, k]`
+//
+// Inputs:
+//   bvec       length-N
+//   sdmat      N x K (cached or per-call computed by caller)
+//   log_sdmat  N x K
+// Output:
+//   log_L      N x K
+[[cpp11::register]]
+doubles_matrix<> mf_em_log_likelihood_per_scale_cpp(
+    doubles bvec,
+    doubles_matrix<> sdmat,
+    doubles_matrix<> log_sdmat) {
+  const int N = bvec.size();
+  const int K = sdmat.ncol();
+  if (sdmat.nrow() != N) {
+    stop("`sdmat` must have `length(bvec)` rows.");
+  }
+  if (log_sdmat.nrow() != N || log_sdmat.ncol() != K) {
+    stop("`log_sdmat` must have the same shape as `sdmat`.");
+  }
+  static constexpr double kHalfLog2Pi =
+      0.5 * 1.8378770664093454835606594728112352797;
+
+  writable::doubles_matrix<> log_L(N, K);
+  for (int k = 0; k < K; ++k) {
+    for (int j = 0; j < N; ++j) {
+      const double b  = bvec[j];
+      const double sd = sdmat(j, k);
+      const double z  = b / sd;
+      log_L(j, k) = -kHalfLog2Pi - 0.5 * z * z - log_sdmat(j, k);
+    }
+  }
+  return log_L;
+}

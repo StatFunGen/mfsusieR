@@ -7,3 +7,7 @@ mixture_log_bf_per_scale_cpp <- function(bhat, shat, sd_grid, pi_grid, v_scale) 
 mixture_posterior_per_scale_cpp <- function(bhat, shat, sd_grid, pi_grid, v_scale) {
   .Call(`_mfsusieR_mixture_posterior_per_scale_cpp`, bhat, shat, sd_grid, pi_grid, v_scale)
 }
+
+mf_em_log_likelihood_per_scale_cpp <- function(bvec, sdmat, log_sdmat) {
+  .Call(`_mfsusieR_mf_em_log_likelihood_per_scale_cpp`, bvec, sdmat, log_sdmat)
+}
