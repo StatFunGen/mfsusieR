@@ -41,11 +41,13 @@ compute_residuals.mf_individual <- function(data, params, model, l, ...) {
 
     Xr_without_lm <- model$fitted[[m]] - Xb_lm
     R_m  <- data$D[[m]] - Xr_without_lm
-    XtR_m <- crossprod(X, R_m)
+
+    idx_m <- data$na_idx[[m]]
+    XtR_m <- crossprod(X[idx_m, , drop = FALSE], R_m[idx_m, , drop = FALSE])
 
     model$residuals[[m]]        <- XtR_m
     model$fitted_without_l[[m]] <- Xr_without_lm
-    model$raw_residuals[[m]]    <- R_m
+    model$raw_residuals[[m]]    <- R_m        # keep full n x T for reference
   }
   model
 }
@@ -115,7 +117,7 @@ mf_sigma2_per_position <- function(data, model, m) {
 # `calculate_posterior_moments` so the divide-by-pw and per-scale
 # sigma2 broadcast lives in one place.
 mf_per_outcome_bhat_shat <- function(data, model, m) {
-  pw    <- data$xtx_diag
+  pw    <- data$xtx_diag_list[[m]]
   XtR_m <- model$residuals[[m]]
   bhat_m <- XtR_m / pw
   sigma2_per_pos <- mf_sigma2_per_position(data, model, m)
@@ -291,16 +293,18 @@ calculate_posterior_moments.mf_individual <- function(data, params, model, V, l,
 SER_posterior_e_loglik.mf_individual <- function(data, params, model, l, ...) {
   X       <- data$X
   alpha_l <- model$alpha[l, ]
-  pw      <- data$xtx_diag
   out     <- 0
   for (m in seq_len(data$M)) {
+    idx_m <- data$na_idx[[m]]
+    pw    <- data$xtx_diag_list[[m]]
+    n     <- length(idx_m)
+
     Eb_m  <- alpha_l * model$mu[[l]][[m]]
     Eb2_m <- alpha_l * model$mu2[[l]][[m]]
-    R_m   <- model$raw_residuals[[m]]
-    n     <- nrow(R_m)
+    R_m   <- model$raw_residuals[[m]][idx_m, , drop = FALSE]
     sigma2_per_pos <- mf_sigma2_per_position(data, model, m)
 
-    XEb_m <- X %*% Eb_m
+    XEb_m <- (X %*% Eb_m)[idx_m, , drop = FALSE]
     sumR2_t    <- colSums(R_m * R_m)
     sumRXEb_t  <- colSums(R_m * XEb_m)
     sumpwEb2_t <- colSums(pw * Eb2_m)
@@ -328,8 +332,9 @@ SER_posterior_e_loglik.mf_individual <- function(data, params, model, l, ...) {
 compute_kl.mf_individual <- function(data, params, model, l, ...) {
   L_null <- 0
   for (m in seq_len(data$M)) {
-    R_m <- model$raw_residuals[[m]]
-    n   <- nrow(R_m)
+    idx_m <- data$na_idx[[m]]
+    R_m   <- model$raw_residuals[[m]][idx_m, , drop = FALSE]
+    n     <- length(idx_m)
     sigma2_per_pos <- mf_sigma2_per_position(data, model, m)
     sumR2_t <- colSums(R_m * R_m)
     L_null  <- L_null + sum(-0.5 * n * log(2 * pi * sigma2_per_pos) -
@@ -380,22 +385,23 @@ neg_loglik.mf_individual <- function(data, params, model, V_param, ser_stats, ..
 #' @noRd
 mf_get_ER2_per_position <- function(data, model, m) {
   X     <- data$X
-  pw    <- data$xtx_diag
+  pw    <- data$xtx_diag_list[[m]]
+  idx_m <- data$na_idx[[m]]
   T_pad <- data$T_basis[m]
 
-  # Cached running fit: model$fitted[[m]] = X %*% sum_l (alpha_l * mu_lm).
-  res_m <- data$D[[m]] - model$fitted[[m]]
+  res_m <- (data$D[[m]] - model$fitted[[m]])[idx_m, , drop = FALSE]
   rss_t <- colSums(res_m * res_m)
 
-  # Bias correction summed over l.
+  # Bias correction: sum over observed rows only so the quadratic form
+  # uses the same n_m observations as the RSS term above.
   bias_t <- numeric(T_pad)
   for (l in seq_len(model$L)) {
-    alpha_l <- model$alpha[l, ]
-    mu_lm  <- model$mu[[l]][[m]]
-    mu2_l_m <- model$mu2[[l]][[m]]
-    XEb_lm <- X %*% (alpha_l * mu_lm)
-    bias_t  <- bias_t + colSums((alpha_l * pw) * mu2_l_m) -
-               colSums(XEb_lm * XEb_lm)
+    alpha_l  <- model$alpha[l, ]
+    mu_lm    <- model$mu[[l]][[m]]
+    mu2_l_m  <- model$mu2[[l]][[m]]
+    XEb_lm   <- (X %*% (alpha_l * mu_lm))[idx_m, , drop = FALSE]
+    bias_t   <- bias_t + colSums((alpha_l * pw) * mu2_l_m) -
+                colSums(XEb_lm * XEb_lm)
   }
   rss_t + bias_t
 }
@@ -420,7 +426,7 @@ update_variance_components.mf_individual <- function(data, params, model, ...) {
   }
   for (m in seq_len(data$M)) {
     er2_t <- mf_get_ER2_per_position(data, model, m)
-    n     <- data$n
+    n     <- length(data$na_idx[[m]])
     if (method == "per_outcome") {
       model$sigma2[[m]] <- sum(er2_t) / (n * data$T_basis[m])
     } else {
@@ -453,7 +459,6 @@ update_variance_components.mf_individual <- function(data, params, model, ...) {
 # changes (i.e., after init or any prior-grid change).
 refresh_em_cache.mf_individual <- function(data, model) {
   M  <- data$M
-  pw <- data$xtx_diag
 
   sigma2_per_pos_list <- vector("list", M)
   shat2_list          <- vector("list", M)
@@ -461,6 +466,7 @@ refresh_em_cache.mf_individual <- function(data, model) {
   log_sdmat_list      <- vector("list", M)
 
   for (m in seq_len(M)) {
+    pw <- data$xtx_diag_list[[m]]
     sigma2_per_pos <- mf_sigma2_per_position(data, model, m)
     sigma2_per_pos_list[[m]] <- sigma2_per_pos
     shat2_m <- outer(1 / pw, sigma2_per_pos)
@@ -744,8 +750,9 @@ Eloglik.mf_individual <- function(data, model, ...) {
   for (m in seq_len(data$M)) {
     er2_t <- mf_get_ER2_per_position(data, model, m)
     s2_t  <- mf_sigma2_per_position(data, model, m)
-    out   <- out + sum(-0.5 * data$n * log(2 * pi * s2_t) -
-                       0.5 * er2_t / s2_t)
+    n_m <- length(data$na_idx[[m]])
+    out <- out + sum(-0.5 * n_m * log(2 * pi * s2_t) -
+                     0.5 * er2_t / s2_t)
   }
   out
 }

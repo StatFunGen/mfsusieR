@@ -38,7 +38,9 @@ get_var_y.mf_individual <- function(data, ...) {
   lapply(seq_len(data$M), function(m) {
     indx_m <- data$scale_index[[m]]
     vapply(indx_m, function(idx) {
-      as.numeric(var(as.vector(data$D[[m]][, idx, drop = FALSE])))
+      v <- as.numeric(var(as.vector(data$D[[m]][, idx, drop = FALSE]),
+                          na.rm = TRUE))
+      if (!is.finite(v) || v == 0) 1 else v
     }, numeric(1))
   })
 }
