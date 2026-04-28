@@ -63,10 +63,11 @@ distribute_mixture_weights <- function(K, null_prior_weight) {
 #' @noRd
 init_scale_mixture_prior_default <- function(Y_m,
                                              X,
-                                             prior_class     = "mixture_normal_per_scale",
-                                             groups          = NULL,
-                                             grid_multiplier = sqrt(2),
-                                             lowc_idx        = integer(0)) {
+                                             prior_class       = "mixture_normal_per_scale",
+                                             groups            = NULL,
+                                             grid_multiplier   = sqrt(2),
+                                             lowc_idx          = integer(0),
+                                             null_prior_weight = 2) {
   prior_class <- match.arg(prior_class,
                            c("mixture_normal", "mixture_normal_per_scale"))
   if (is.null(groups)) {
@@ -97,8 +98,14 @@ init_scale_mixture_prior_default <- function(Y_m,
                      outputlevel = 0,
                      gridmult    = grid_multiplier)
 
-  K <- length(t_ash$fitted_g$pi)
-  t_ash$fitted_g$pi <- c(0.8, rep(0.2 / (K - 1), K - 1))
+  # Use ash's sd-grid but discard its fitted pi: under LD the iid
+  # assumption ash makes is violated. Set the init pi from
+  # `null_prior_weight` so the same parameter drives both the
+  # ash-driven path and the user-supplied-grid path
+  # (`distribute_mixture_weights`).
+  K       <- length(t_ash$fitted_g$pi)
+  pi_null <- null_prior_weight / (K + 1)
+  t_ash$fitted_g$pi <- c(pi_null, rep((1 - pi_null) / (K - 1), K - 1))
 
   G_prior <- lapply(groups, function(idx) {
     rec <- t_ash
@@ -200,13 +207,14 @@ mf_prior_scale_mixture <- function(data,
       # Data-driven path: susieR helper -> ash. Helper
       # returns one G_prior entry per group, with `$idx` attached.
       out <- init_scale_mixture_prior_default(
-        Y_m             = data$D[[m]],
-        X               = X,
-        prior_class     = prior_class,
-        groups          = groups_m,
-        grid_multiplier = grid_multiplier,
-        lowc_idx        = if (!is.null(data$lowc_idx)) data$lowc_idx[[m]]
-                          else integer(0)
+        Y_m               = data$D[[m]],
+        X                 = X,
+        prior_class       = prior_class,
+        groups            = groups_m,
+        grid_multiplier   = grid_multiplier,
+        lowc_idx          = if (!is.null(data$lowc_idx)) data$lowc_idx[[m]]
+                            else integer(0),
+        null_prior_weight = null_prior_weight
       )
       G_prior_per_outcome[[m]] <- out$G_prior
 

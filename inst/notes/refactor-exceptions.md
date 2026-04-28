@@ -158,14 +158,25 @@ entry SHALL be blocked.
 - fsusieR/R/operation_on_prior.R:42-185 (init_prior.default,
   mixture_normal and mixture_normal_per_scale branches)
   Behavior: Per-modality data-driven prior init via ash on a
-    sample of (Bhat, Shat); replicate per scale.
-  Decision: replaced-by-`R/prior_scale_mixture.R::init_scale_mixture_prior_default`.
-  Reason: behaviour-preserving port. Calls the susieR helper
-    instead of `cal_Bhat_Shat`. Same `set.seed(1)` sequence,
-    same sample-size caps (5000 / 50000), same hardcoded
-    `c(0.8, 0.2/(K-1), ...)` mixture-weight distribution.
-    Validated bit-identical to `fsusieR::init_prior.default` at
-    tolerance `1e-12` per the C2 contract.
+    sample of (Bhat, Shat); replicate per scale. Hardcodes the
+    init pi vector to `c(0.8, 0.2/(K-1), ...)` regardless of
+    user-side prior weight parameters.
+  Decision: replaced-by-`R/prior_scale_mixture.R::init_scale_mixture_prior_default`,
+    with the init pi parameterised on `null_prior_weight`
+    (default 2) so the same parameter drives both data-driven
+    and user-supplied-grid paths.
+  Reason: behaviour-preserving port for the sd-grid (same
+    `set.seed(1)` sequence, sample-size caps 5000 / 50000, ash
+    invocation). The hardcoded `pi_null = 0.8` upstream constant
+    is replaced by `pi_null = null_prior_weight / (K + 1)`,
+    matching the formula in `distribute_mixture_weights`.
+    Default `null_prior_weight = 2` gives `pi_null ≈ 2 / (K+1)`,
+    a weaker sparsity init than upstream's 0.8 but consistent
+    with the M-step null:data balance set by
+    `mixsqp_null_penalty = 0.1`. The C2 fidelity test recovers
+    upstream bit-identity by passing
+    `null_prior_weight = 0.8 * (K + 1)` (test hack only;
+    production uses the parameterised default).
 
 - fsusieR/R/operation_on_prior.R:79-165 (lowc_wc filtering branch)
   Behavior: when `lowc_wc` (low-count wavelet coefficient
