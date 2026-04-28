@@ -110,6 +110,13 @@
 #'   posterior concentrates linearly in `M`; single-outcome fits
 #'   are unchanged.
 #'   Default 0.7.
+#' @param mixsqp_alpha_eps numeric, threshold below which a SNP's
+#'   per-effect posterior `alpha[l, j]` is dropped from the
+#'   mixsqp M-step input. The truncation error on the M-step
+#'   gradient is bounded by `sum_{j outside} alpha_j *
+#'   max_k(L_jk)`, well under floating-point precision for
+#'   typical concentrated SuSiE posteriors. Set to `0` to use
+#'   every SNP regardless of `alpha[l, j]`. Default `1e-6`.
 #' @param small_sample_correction logical. When `TRUE`, replaces
 #'   the per-variable Wakefield Normal marginal Bayes factor in
 #'   the SER step with a Johnson 2005 scaled Student-t marginal
@@ -195,6 +202,7 @@ mfsusie <- function(X, Y,
                     quantile_norm             = FALSE,
                     control_mixsqp            = NULL,
                     mixsqp_null_penalty       = 0.1,
+                    mixsqp_alpha_eps          = 1e-6,
                     model_init                = NULL,
                     small_sample_correction   = FALSE,
                     attach_smoothing_inputs   = TRUE) {
@@ -279,6 +287,7 @@ mfsusie <- function(X, Y,
     track_fit                  = track_fit,
     verbose                    = verbose,
     mixsqp_null_penalty        = mixsqp_null_penalty,
+    mixsqp_alpha_eps           = mixsqp_alpha_eps,
     control_mixsqp             = control_mixsqp,
     L_greedy                   = L_greedy,
     lbf_min                    = lbf_min,
