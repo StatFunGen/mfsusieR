@@ -167,6 +167,13 @@ ibss_initialize.mf_individual <- function(data, params) {
   model       <- c(mat_init, list(null_index = 0), fitted)
   class(model) <- if (inherits(mat_init, "susie")) model_class else "susie"
   model$converged <- FALSE
+  # Populate the per-iter M-step cache so the first SER iteration
+  # has cached `sigma2_per_pos`, `shat2`, and `sdmat`. Re-populated
+  # by `update_variance_components.mf_individual` after each
+  # sigma2 update.
+  if (inherits(data, "mf_individual")) {
+    model <- refresh_em_cache.mf_individual(data, model)
+  }
   model
 }
 
