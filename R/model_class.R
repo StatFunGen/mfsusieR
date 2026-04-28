@@ -154,6 +154,26 @@ get_posterior_moments_l.mfsusie <- function(model, l) {
   )
 }
 
+#' Per-iteration mixture-null-mass summary for the verbose row
+#'
+#' Appends `pi_null=[min, max]` to the verbose tabular row during
+#' IBSS, where the values are the smallest and largest null-component
+#' weight across all (outcome, scale) cells of `model$pi_V`. The same
+#' quantity is summarized by `summary.mfsusie()` after convergence;
+#' surfacing it per-iteration lets the user watch the mixture prior
+#' concentrate on the null component as the IBSS sweep progresses.
+#'
+#' @keywords internal
+#' @noRd
+format_extra_diag.mfsusie <- function(model) {
+  if (is.null(model$pi_V)) return("")
+  null_mass <- unlist(
+    lapply(model$pi_V, function(piVm) piVm[, 1L]),
+    use.names = FALSE)
+  if (length(null_mass) == 0L) return("")
+  sprintf("pi_null=[%.2f, %.2f]", min(null_mass), max(null_mass))
+}
+
 #' Compact verbose-row formatting for the list-of-vectors `sigma2`
 #'
 #' susieR's default `format_sigma2_summary` formats a single scalar
