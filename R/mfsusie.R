@@ -159,8 +159,8 @@
 #'   `mf_post_smooth(fit, X = X, Y = Y, ...)` instead; useful
 #'   when sharing fits where the per-individual data should
 #'   not travel with the fit.
-#' @param attach_lbf_outcome logical. When `TRUE` (default), the
-#'   fit carries `lbf_outcome`, an `L x p x M` array of per-(effect,
+#' @param attach_lbf_variable_outcome logical. When `TRUE` (default), the
+#'   fit carries `lbf_variable_outcome`, an `L x p x M` array of per-(effect,
 #'   variant, outcome) log Bayes factors, populated from the IBSS
 #'   sweep. Consumed by `mf_post_outcome_configuration(fit,
 #'   by = "outcome")` (and by `susieR::susie_post_outcome_configuration`
@@ -197,10 +197,12 @@
 #'     `attach_smoothing_inputs = TRUE` (default).}
 #'   \item{`X_eff`}{`list[L]` of per-effect alpha-weighted X
 #'     aggregates. Attached when `attach_smoothing_inputs = TRUE`.}
-#'   \item{`lbf_outcome`}{`L x p x M` array of per-(effect, variant,
-#'     outcome) log Bayes factors. Attached when
-#'     `attach_lbf_outcome = TRUE` (default). Consumed by
-#'     `mf_post_outcome_configuration(fit, by = "outcome")`.}
+#'   \item{`lbf_variable_outcome`}{`L x p x M` array of per-(effect, variant,
+#'     outcome) log Bayes factors. Parallels `lbf_variable` (which is
+#'     `L x p`, the joint composite summed across scales and outcomes);
+#'     `lbf_variable_outcome` keeps the M axis intact. Attached when
+#'     `attach_lbf_variable_outcome = TRUE` (default). Consumed by
+#'     `susie_post_outcome_configuration(fit, by = "outcome")`.}
 #' }
 #'
 #' @references
@@ -243,16 +245,16 @@ mfsusie <- function(X, Y,
                     model_init                = NULL,
                     small_sample_correction   = FALSE,
                     attach_smoothing_inputs   = TRUE,
-                    attach_lbf_outcome        = TRUE) {
+                    attach_lbf_variable_outcome        = TRUE) {
   if (!is.logical(small_sample_correction) ||
       length(small_sample_correction) != 1L ||
       is.na(small_sample_correction)) {
     stop("`small_sample_correction` must be `TRUE` or `FALSE`.")
   }
-  if (!is.logical(attach_lbf_outcome) ||
-      length(attach_lbf_outcome) != 1L ||
-      is.na(attach_lbf_outcome)) {
-    stop("`attach_lbf_outcome` must be `TRUE` or `FALSE`.")
+  if (!is.logical(attach_lbf_variable_outcome) ||
+      length(attach_lbf_variable_outcome) != 1L ||
+      is.na(attach_lbf_variable_outcome)) {
+    stop("`attach_lbf_variable_outcome` must be `TRUE` or `FALSE`.")
   }
   prior_variance_scope    <- match.arg(prior_variance_scope)
   residual_variance_scope <- match.arg(residual_variance_scope)
@@ -345,7 +347,7 @@ mfsusie <- function(X, Y,
     small_sample_correction    = small_sample_correction,
     small_sample_df            = if (small_sample_correction) data$n - 1L
                                  else NULL,
-    attach_lbf_outcome         = isTRUE(attach_lbf_outcome)
+    attach_lbf_variable_outcome         = isTRUE(attach_lbf_variable_outcome)
   )
 
   # 4. Run the susieR workhorse. All per-effect and per-iteration
