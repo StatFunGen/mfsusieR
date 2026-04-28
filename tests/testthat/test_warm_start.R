@@ -30,7 +30,10 @@ test_that("warm-started fit from a converged fit hits the convergence floor", {
   fit_cold <- fsusie(sim$Y, sim$X, L = 5,
                      verbose = FALSE)
   expect_true(fit_cold$converged)
-  expect_gte(fit_cold$niter, 4L)
+  # Cold-fit floor: at least 3 iters (PIP-difference convergence is
+  # the default and on this fixture takes 3 iters; the prior ELBO-
+  # default took 4+).
+  expect_gte(fit_cold$niter, 3L)
 
   fit_warm <- fsusie(sim$Y, sim$X, L = 5,
                      model_init = fit_cold,

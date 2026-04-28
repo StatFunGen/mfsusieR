@@ -154,7 +154,8 @@ mf_per_outcome_bhat_shat <- function(data, model, m) {
 #' Manuscript: methods/online_method.tex line 41 (cross-outcome combine)
 #' @keywords internal
 #' @noRd
-loglik.mf_individual <- function(data, params, model, V, ser_stats, l = NULL, ...) {
+loglik.mf_individual <- function(data, params, model, V, ser_stats, l = NULL,
+                                  update_alpha = TRUE, ...) {
   M <- data$M
   use_johnson <- isTRUE(params$small_sample_correction)
   df          <- params$small_sample_df
@@ -201,7 +202,12 @@ loglik.mf_individual <- function(data, params, model, V, ser_stats, l = NULL, ..
   lbf_model <- m_max + log(sum(w))
 
   if (!is.null(l)) {
-    model$alpha[l, ]        <- alpha
+    # `update_alpha = FALSE` is used by the post-iteration KL refresh
+    # in `get_objective.mfsusie`: we want a fresh per-effect lbf[l]
+    # against the iter-final pi_V, but the variational posterior's
+    # alpha[l] is part of the q_t we are evaluating against and must
+    # stay frozen during the refresh.
+    if (update_alpha) model$alpha[l, ] <- alpha
     model$lbf[l]            <- lbf_model
     model$lbf_variable[l, ] <- lbf_combined
 
@@ -627,6 +633,76 @@ update_derived_quantities.mf_individual <- function(data, params, model, ...) {
     model$fitted[[m]] <- data$X %*% postF_m
   }
   model
+}
+
+#' Refresh per-effect lbf[l] / KL[l] against the iter-final pi_V
+#'
+#' During an IBSS iteration, each effect's `model$lbf[l]` and
+#' `model$KL[l]` are computed at the moment effect l was updated --
+#' but mfsusieR's per-effect prior (`pi_V[m][s, ]`) is updated
+#' between effects via mixsqp inside the SER step (see
+#' `optimize_prior_variance.mf_individual`). When effect l+1 updates
+#' pi_V, the previously-recorded lbf[l] / KL[l] for l < l+1 are
+#' against a now-stale pi_V state. The reported per-iteration ELBO
+#' `Eloglik(state_t) - sum(model$KL)` is therefore a hybrid quantity:
+#' Eloglik against the iter-final state, KL[l] against
+#' state-when-l-was-updated. The hybrid is empirically close to the
+#' coherent variational free energy but is not strictly monotone.
+#'
+#' This refresh re-evaluates lbf[l] / lbf_variable[l] / KL[l] for
+#' each effect l using the iter-final pi_V (and the iter-final
+#' partial residual rebuilt from the frozen alpha / mu / mu2). The
+#' variational posterior alpha[l] is preserved via the
+#' `update_alpha = FALSE` flag on `loglik.mf_individual`. After the
+#' refresh, `Eloglik(data, model) - sum(model$KL)` is the coherent
+#' ELBO at iter end.
+#'
+#' Cost: ~5-10% per iter (an extra residual rebuild + SER stat
+#' recomputation per effect). Worth it to make the ELBO trajectory
+#' a defensible variational free energy rather than a hybrid.
+#'
+#' Reference: mvsusieR's `compute_multivariate_elbo_ss`
+#' (`mvsusieR/R/sufficient_stats_methods.R`) follows the same
+#' post-hoc-refresh pattern for the same reason.
+#'
+#' @keywords internal
+#' @noRd
+refresh_lbf_kl.mf_individual <- function(data, params, model) {
+  L <- nrow(model$alpha)
+  for (l in seq_len(L)) {
+    # Rebuild R_l = Y - sum_{l' != l} X * alpha_{l'} * mu_{l'} from the
+    # iter-final variational posterior.
+    model     <- compute_residuals.mf_individual(data, params, model, l)
+    ser_stats <- compute_ser_statistics.mf_individual(data, params, model, l)
+
+    # Refresh lbf[l] / lbf_variable[l] (and lbf_variable_outcome[l, , m]
+    # if attached) against the iter-final pi_V via the same loglik
+    # pipeline IBSS uses, but freeze alpha[l] -- we are evaluating the
+    # ELBO at the existing q_t, not advancing it.
+    model <- loglik.mf_individual(data, params, model, V = 1L,
+                                   ser_stats = ser_stats, l = l,
+                                   update_alpha = FALSE)
+
+    # Refresh KL[l] using the new lbf[l] and the new R_l.
+    model <- compute_kl.mf_individual(data, params, model, l)
+  }
+  model
+}
+
+#' Coherent variational free energy for the `mfsusie` model class
+#'
+#' Overrides susieR's `get_objective.default` by first refreshing
+#' per-effect lbf[l] / KL[l] against the iter-final pi_V. Without
+#' this, `Eloglik - sum(KL)` is a hybrid quantity (see
+#' `refresh_lbf_kl.mf_individual` for derivation). After the refresh
+#' the reported ELBO is a coherent variational free energy at the
+#' iter-final variational posterior and prior.
+#'
+#' @keywords internal
+#' @noRd
+get_objective.mfsusie <- function(data, params, model) {
+  model <- refresh_lbf_kl.mf_individual(data, params, model)
+  Eloglik(data, model) - sum(model$KL, na.rm = TRUE)
 }
 
 #' Class-specific extra fields stripped by cleanup_model.default
