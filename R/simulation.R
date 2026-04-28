@@ -162,3 +162,97 @@ mf_simu_ibss_per_level <- function(lev_res     = 7L,
        mix_per_scale = G_level,
        emp_pi0       = emp_pi0)
 }
+
+#' Sample a smooth random function from the vanilla IBSS prior
+#'
+#' Simpler companion to `mf_simu_ibss_per_level()`: draws all
+#' wavelet detail coefficients from a SINGLE shared
+#' mixture-of-normals (no per-scale variation). The mixture has
+#' one null component (`sd = 0`) with mass `pi0`; the remaining
+#' mass is split uniformly across `length_grid - 1` non-null
+#' components whose standard deviations are drawn from a
+#' 0-anchored cumsum of chi-squared(1) variates.
+#'
+#' Useful for quick simulation when you don't need per-scale
+#' control over the prior. The per-scale variant
+#' (`mf_simu_ibss_per_level`) better mirrors the prior fSuSiE
+#' actually infers.
+#'
+#' @param lev_res integer >= 2. Resolution: the simulated
+#'   function lives on a length-`2^lev_res` grid.
+#' @param length_grid integer >= 2. Number of mixture
+#'   components (including the null at component 1).
+#' @param pi0 numeric in `[0, 1]`. Prior probability that any
+#'   given wavelet detail coefficient is exactly zero.
+#'   Default 0.85.
+#' @return A list with components:
+#'   \describe{
+#'     \item{`sim_func`}{length-`2^lev_res` numeric vector,
+#'       the simulated function in position space.}
+#'     \item{`true_coef`}{wavelet detail coefficients used to
+#'       construct `sim_func`.}
+#'     \item{`true_g`}{the `ashr::normalmix` object
+#'       describing the shared mixture prior.}
+#'     \item{`emp_pi0`}{empirical proportion of detail
+#'       coefficients drawn from the null component (the
+#'       Monte Carlo realization of `pi0`).}
+#'   }
+#' @examples
+#' set.seed(1L)
+#' f <- mf_simu_ibss_vanilla(lev_res = 7L)
+#' length(f$sim_func)
+#' f$emp_pi0
+#'
+#' @importFrom wavethresh wd wr
+#' @importFrom ashr normalmix
+#' @importFrom stats rchisq runif rnorm
+#' @export
+mf_simu_ibss_vanilla <- function(lev_res     = 8L,
+                                 length_grid = 10L,
+                                 pi0         = 0.85) {
+  if (!is.numeric(lev_res) || length(lev_res) != 1L ||
+      !is.finite(lev_res) || lev_res < 2L) {
+    stop("`lev_res` must be a single integer >= 2.")
+  }
+  if (!is.numeric(length_grid) || length(length_grid) != 1L ||
+      !is.finite(length_grid) || length_grid < 2L) {
+    stop("`length_grid` must be a single integer >= 2.")
+  }
+  if (!is.numeric(pi0) || length(pi0) != 1L ||
+      !is.finite(pi0) || pi0 < 0 || pi0 > 1) {
+    stop("`pi0` must be a single numeric in [0, 1].")
+  }
+  lev_res     <- as.integer(lev_res)
+  length_grid <- as.integer(length_grid)
+
+  # Mixture grid of standard deviations: 0-anchored cumsum
+  # of chi-squared(1) draws.
+  grid <- c(0, cumsum(rchisq(length_grid - 1L, df = 1)))
+
+  # Mixing weights: pi0 on null, remaining mass split
+  # uniformly across non-null components after a Dirichlet-
+  # like normalization step.
+  tt     <- runif(length_grid - 1L)
+  tt     <- (1 - pi0) * tt / sum(tt)
+  pi_sim <- c(pi0, tt)
+  true_g <- ashr::normalmix(pi_sim, rep(0, length_grid), grid)
+
+  T_grid <- 2L^lev_res
+  twav   <- wavethresh::wd(rep(0, T_grid))
+
+  # Resample if every detail coefficient came back zero
+  # (the all-null case is a degenerate constant function).
+  while (sum(twav$D == 0) == length(twav$D)) {
+    clust <- sample.int(length_grid, size = length(twav$D),
+                        prob = pi_sim, replace = TRUE)
+    for (i in seq_along(twav$D)) {
+      twav$D[i] <- if (clust[i] == 1L) 0
+                   else rnorm(1, mean = 0, sd = grid[clust[i]])
+    }
+  }
+
+  list(sim_func  = wavethresh::wr(twav),
+       true_coef = twav$D,
+       true_g    = true_g,
+       emp_pi0   = sum(twav$D == 0) / length(twav$D))
+}
