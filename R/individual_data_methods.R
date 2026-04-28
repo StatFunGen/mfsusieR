@@ -325,6 +325,24 @@ compute_kl.mf_individual <- function(data, params, model, l, ...) {
   model
 }
 
+#' Negative log-likelihood for the V-optim caller
+#'
+#' Defensive override of susieR's default. The default
+#' `neg_loglik.individual` calls `loglik.individual(...)` by
+#' name (not via S3 dispatch), so if any future code path
+#' invokes `neg_loglik(data, params, ...)` on `mf_individual`
+#' data, the wrong (scalar-Gaussian) likelihood would fire.
+#' This override forces `loglik.mf_individual`. Currently the
+#' `optimize_prior_variance.mf_individual` path skips
+#' `neg_loglik` entirely; this is a regression guard.
+#'
+#' @keywords internal
+#' @noRd
+neg_loglik.mf_individual <- function(data, params, model, V_param, ser_stats, ...) {
+  V <- exp(V_param)
+  -loglik.mf_individual(data, params, model, V, ser_stats)
+}
+
 #' Per-outcome expected squared residuals
 #'
 #' Returns the length-`T_basis[m]` vector of per-position
