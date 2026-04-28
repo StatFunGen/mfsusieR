@@ -18,9 +18,23 @@ commits per section.
 
 ## Scope (seven sections)
 
-### Section 1: Fit object — no-op
+### Section 1: Diagnosis-field cleanup
 
-Decision: leave the fit object as is. Field set is acceptable.
+Almost all diagnosis fields on the `mfsusie` fit are
+shape-compatible with `susieR` (`alpha`, `lbf`,
+`lbf_variable`, `KL`, `elbo`, `niter`, `converged`,
+`pip`, `sets`). Two specific items are worth a small touch:
+
+- `V` is held at 1 across all effects because the mixture
+  weights in `pi_V` carry the per-effect prior adaptation.
+  The field is uninformative as a diagnostic. Decision:
+  retire `V` from the fit and surface a summary of `pi_V`
+  via `summary.mfsusie()` instead.
+- `sigma2` shape (`list[M]` of length-`S_m` or scalar) is
+  richer than susieR's scalar. No change to the field; just
+  document the shape clearly.
+
+The rest of the fit object stays as is.
 
 ### Section 2: Feature gap with `fsusieR` and `mvf.susie.alpha`
 
@@ -29,15 +43,44 @@ Read every exported function and parameter of `fsusieR` and
 For each, classify as `would-port-if-asked`, `out-of-scope`,
 or `port-now`. Pure investigation; no code changes here.
 
-### Section 3: Maximize susieR backbone usage
+### Section 3: Maximize susieR backbone usage (delete-or-patch discipline)
 
-Find S3 methods mfsusieR overrides. For each, decide whether
-the body meaningfully diverges from `susieR`'s default or is
-trivially redundant. Drop trivial overrides; let `susieR`'s
-default fire. Document the survivors with a one-line reason
-each. Flag anything found in `susieR` that looks redundant or
-miscalibrated for upstream discussion (no edits to `susieR`
-without explicit approval).
+For every S3 method registered for `mf_individual` or
+`mfsusie`, audit the body and classify into three buckets:
+
+- **delete-and-inherit**: the body is a trivial wrapper or
+  reproduces susieR's default. Drop the override; let
+  susieR's default fire.
+- **patch-susieR-and-delete**: the body diverges from susieR's
+  default in one small place that susieR could easily
+  parameterize via a hook or option. Open a focused susieR
+  PR adding the hook; once landed, delete the override.
+- **keep**: the body has real, irreducible mfsusieR-specific
+  logic. Document the divergence in a one-line comment in
+  the override.
+
+The first instance of `delete-and-inherit` is
+`check_convergence.mf_individual` (Section 4a). Likely
+candidates for `delete-and-inherit` from a quick scan:
+`get_cs.mf_individual`, possibly
+`compute_residuals.mf_individual` or
+`cleanup_model.mf_individual`.
+
+A likely `patch-susieR-and-delete` candidate is the
+verbose-output extension in Section 4: susieR's
+`check_convergence.default` builds a fixed-column tabular
+format. To add mfsusieR-specific diagnostic columns (max
+`pi_null` across (m, s), max `KL_l`, n_eff from alpha
+entropy) without reimplementing the entire formatter, the
+right move is a small susieR patch exposing a per-class
+`format_extra_diag(model)` generic that defaults to `""` and
+that mfsusieR overrides.
+
+For each override touched, record the decision in
+`inst/notes/sessions/<date>-s3-override-audit.md`. Anything
+found in `susieR` that looks miscalibrated or redundant
+during this scan is flagged in the same note for separate
+upstream-PR discussion.
 
 ### Section 4: Verbose output, susieR-arg parity, parameter renames
 
@@ -75,6 +118,15 @@ Verification: a unit test that asserts mfsusieR's default
 verbose output, on a small fixture, matches the structure of
 susieR's verbose output line-for-line (modulo numeric values).
 Plus the PIP-vs-ELBO convergence agreement test.
+
+Per-iter mfsusieR-specific diagnostic columns
+(`max_pi_null` across (m, s), `max_KL_l`, `n_eff` from alpha
+entropy) ride on a susieR patch in Section 3. If the susieR
+patch lands, mfsusieR overrides the new generic to inject
+those columns; if the patch is rejected or delayed, the
+mfsusieR-specific columns are not shipped (no
+reimplementing the full row formatter just to add three
+columns).
 
 `get_cs.mf_individual` (`ibss_methods.R:337-343`) is also a
 thin wrapper around `susie_get_cs`. Audit during this section:
