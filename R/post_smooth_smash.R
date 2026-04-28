@@ -55,7 +55,7 @@
       # (2 * z_crit). Then lfsr = pnorm(-|mean| / sd).
       sd_pos <- (out$cred_band[1L, ] - out$cred_band[2L, ]) /
                 (2 * z_crit)
-      lfsr_curves[[m]][[l]] <- gaussian_lfsr(out$effect_estimate,
+      lfsr_curves[[m]][[l]] <- lfsr_from_gaussian(out$effect_estimate,
                                               sd_pos)
     }
   }

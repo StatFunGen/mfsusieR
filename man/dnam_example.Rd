@@ -39,9 +39,7 @@ two CpG clusters: SNPs 1 and 9 affect cluster A (CpGs 9 to
 data(dnam_example)
 fit <- fsusie(dnam_example$Y, dnam_example$X,
               pos = dnam_example$pos, L = 15, L_greedy = 5, verbose = TRUE)
-fit_s <- mf_post_smooth(fit, method = "TI",
-                        wavelet_filter = 1L,
-                        wavelet_family = "DaubExPhase")
+fit_s <- mf_post_smooth(fit, method = "TI")
 mfsusie_plot(fit_s)
 }
 }

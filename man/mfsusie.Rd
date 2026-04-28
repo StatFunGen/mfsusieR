@@ -19,13 +19,13 @@ mfsusie(
   standardize = TRUE,
   intercept = TRUE,
   max_iter = 100,
-  tol = 0.001,
+  tol = 1e-04,
   coverage = 0.95,
   min_abs_corr = 0.5,
   L_greedy = NULL,
-  greed_lbf_cutoff = 0.1,
+  greedy_lbf_cutoff = 0.1,
   estimate_prior_variance = TRUE,
-  convergence_method = c("elbo", "pip"),
+  convergence_method = c("pip", "elbo"),
   pip_stall_window = 5L,
   estimate_residual_variance = TRUE,
   verbose = FALSE,
@@ -40,7 +40,8 @@ mfsusie(
   mixsqp_alpha_eps = 1e-06,
   model_init = NULL,
   small_sample_correction = FALSE,
-  attach_smoothing_inputs = TRUE
+  attach_smoothing_inputs = TRUE,
+  attach_lbf_variable_outcome = TRUE
 )
 }
 \arguments{
@@ -99,9 +100,9 @@ inside a credible set (CS purity threshold).}
 \item{L_greedy}{integer or \code{NULL}. When non-\code{NULL}, run susieR's
 greedy outer loop, growing the effect count from \code{L_greedy} up
 to \code{L} in linear steps until the fit saturates
-(\code{min(lbf) < greed_lbf_cutoff}).}
+(\code{min(lbf) < greedy_lbf_cutoff}).}
 
-\item{greed_lbf_cutoff}{numeric saturation threshold for the
+\item{greedy_lbf_cutoff}{numeric saturation threshold for the
 greedy outer loop. Default 0.1.}
 
 \item{estimate_prior_variance}{logical. When \code{TRUE} (default),
@@ -112,11 +113,21 @@ solver. When \code{FALSE}, hold the prior fixed at the initial
 collapsing \code{mfsusie()} to \code{susieR::susie()} for sanity
 checks.}
 
-\item{convergence_method}{one of \code{"elbo"} (default) or
-\code{"pip"}. Selects the IBSS convergence criterion. \code{"elbo"}
-stops when the change in ELBO falls below \code{tol}; \code{"pip"}
-stops when \code{max(abs(prev_alpha - alpha))} falls below
-\code{tol} (PIP-difference convergence) with stall detection.}
+\item{convergence_method}{one of \code{"pip"} (default) or
+\code{"elbo"}. Selects the IBSS convergence criterion.
+\code{"pip"} stops when \code{max(abs(prev_alpha - alpha))} falls
+below \code{tol} (PIP-difference convergence) with stall
+detection -- the default because alpha is robust to the
+small per-iteration ELBO oscillations that arise from
+mixsqp's approximate M-step (Generalized EM residual:
+\code{ELBO(t+1) >= ELBO(t) - O(eps_mixsqp * L * M * S_m)},
+Neal & Hinton 1998). \code{"elbo"} stops when the change in
+ELBO falls below \code{tol}; the per-iteration ELBO is a
+coherent variational free energy thanks to the
+\code{get_objective.mfsusie} post-iteration KL refresh
+(\code{refresh_lbf_kl.mf_individual}) which evaluates per-
+effect KL\link{l} against the iter-final pi_V rather than the
+pi_V state at the moment effect l was updated.}
 
 \item{pip_stall_window}{integer. Number of consecutive
 iterations without PIP-difference improvement after which
@@ -212,6 +223,15 @@ Set \code{FALSE} to drop these and call
 \code{mf_post_smooth(fit, X = X, Y = Y, ...)} instead; useful
 when sharing fits where the per-individual data should
 not travel with the fit.}
+
+\item{attach_lbf_variable_outcome}{logical. When \code{TRUE} (default), the
+fit carries \code{lbf_variable_outcome}, an \verb{L x p x M} array of per-(effect,
+variant, outcome) log Bayes factors, populated from the IBSS
+sweep. Consumed by \code{mf_post_outcome_configuration(fit, by = "outcome")} (and by \code{susieR::susie_post_outcome_configuration}
+directly). Set \code{FALSE} to drop these — extra storage is
+\code{L * p * M} doubles. When \code{FALSE}, recover the array by
+calling \code{mf_post_outcome_configuration(fit, X = X, Y = Y, ...)}
+with the original data.}
 }
 \value{
 A list of class \code{c("mfsusie", "susie")} carrying:
@@ -242,6 +262,12 @@ response on the padded grid. Attached when
 \code{attach_smoothing_inputs = TRUE} (default).}
 \item{\code{X_eff}}{\code{list[L]} of per-effect alpha-weighted X
 aggregates. Attached when \code{attach_smoothing_inputs = TRUE}.}
+\item{\code{lbf_variable_outcome}}{\verb{L x p x M} array of per-(effect, variant,
+outcome) log Bayes factors. Parallels \code{lbf_variable} (which is
+\verb{L x p}, the joint composite summed across scales and outcomes);
+\code{lbf_variable_outcome} keeps the M axis intact. Attached when
+\code{attach_lbf_variable_outcome = TRUE} (default). Consumed by
+\code{susie_post_outcome_configuration(fit, by = "outcome")}.}
 }
 }
 \description{

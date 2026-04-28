@@ -77,7 +77,7 @@ mf_cs_colors <- function(n_cs) {
 
 # Contiguous (start, end) runs where the credible band excludes
 # zero. Returns a list of integer index pairs into `pos`.
-affected_runs <- function(band) {
+credibly_nonzero_runs <- function(band) {
   if (is.null(band)) return(list())
   flag <- band[, 1L] > 0 | band[, 2L] < 0
   if (!any(flag)) return(list())
@@ -90,7 +90,7 @@ affected_runs <- function(band) {
 
 # Affected-region mask (logical T) for a single CS. Returns a
 # zero-length vector when band is NULL.
-.affected_mask <- function(band) {
+credibly_nonzero_mask <- function(band) {
   if (is.null(band)) return(logical(0))
   band[, 1L] > 0 | band[, 2L] < 0
 }
@@ -107,7 +107,7 @@ affected_runs <- function(band) {
   cs_l <- fit$sets$cs_index %||% seq_along(cs)
   bands <- lapply(cs_l, function(l) .credible_band(fit, l, m, smoothed))
   if (any(vapply(bands, is.null, logical(1)))) return("overlay")
-  masks <- lapply(bands, .affected_mask)
+  masks <- lapply(bands, credibly_nonzero_mask)
   if (any(vapply(masks, length, integer(1)) == 0L)) return("overlay")
   if (!any(masks[[1L]] & masks[[2L]])) return("stack")
   "overlay"
@@ -200,7 +200,7 @@ affected_runs <- function(band) {
   bar_y    <- yrange[1L]
   bar_step <- 0.03 * diff(yrange)
   for (i in seq_along(bands)) {
-    runs <- affected_runs(bands[[i]])
+    runs <- credibly_nonzero_runs(bands[[i]])
     if (length(runs) == 0L) next
     y_i <- bar_y + (i - 1L) * bar_step
     for (rg in runs) {
@@ -213,7 +213,7 @@ affected_runs <- function(band) {
 # Affected-region dots on the zero line (errorbar style).
 .overlay_affected_dots <- function(pos, bands) {
   for (i in seq_along(bands)) {
-    mask <- .affected_mask(bands[[i]])
+    mask <- credibly_nonzero_mask(bands[[i]])
     if (length(mask) == 0L || !any(mask)) next
     points(pos[mask], rep(0, sum(mask)),
            col = "black", pch = 20L, cex = 1.2)
@@ -587,12 +587,35 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
   M <- length(fit$dwt_meta$T_basis)
   K <- length(fit$sets$cs %||% list())
 
+  # Adaptive margins: shrink the top + bottom mar entries when the
+  # device is too small for the planned layout. Base R errors with
+  # "figure margins too large" when the line-based mar exceeds the
+  # cell height in inches; that error during a `plot.new()` mid-call
+  # leaves the display list partially filled, which makes downstream
+  # `replayPlot()` calls (e.g. pkgdown's reference-page builder)
+  # error with "invalid graphics state". 12pt at cex=1 is 12/72 in
+  # per line. Scale top + bottom mar uniformly so they consume at
+  # most 55% of the cell, keeping at least 30% of the original.
+  fit_mar <- function(target, n_rows = 1L) {
+    dev_h <- tryCatch(graphics::par("din")[2L],
+                      error = function(e) NA_real_)
+    if (!is.finite(dev_h) || dev_h <= 0 || n_rows < 1L) return(target)
+    line_in   <- 12 / 72
+    margin_in <- (target[1L] + target[3L]) * line_in
+    cell_h_in <- dev_h / n_rows
+    max_margin_in <- 0.55 * cell_h_in
+    if (margin_in <= max_margin_in) return(target)
+    s <- max(0.3, max_margin_in / margin_in)
+    target[c(1L, 3L)] <- target[c(1L, 3L)] * s
+    target
+  }
+
   # Optional file output: open a sized device and close it on
   # exit so the figure renders at the recommended dimensions.
   if (!is.null(save)) {
     dims <- mfsusie_plot_dimensions(fit, m = m, facet_cs = facet_cs,
                                     smooth_method = smooth_method)
-    .open_save_device(save, dims)
+    open_save_device(save, dims$width, dims$height)
     on.exit(grDevices::dev.off(), add = TRUE)
   }
 
@@ -648,12 +671,12 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
     if (facet_res == "stack" && K >= 2L) {
       layout(matrix(seq_len(K), ncol = 1L))
       on.exit(layout(1L), add = TRUE)
-      op <- par(mar = c(2.5, 4, 1.6, 4),
+      op <- par(mar = fit_mar(c(2.5, 4, 1.6, 4), n_rows = K),
                 oma = c(2.5, 0, 1.6, 0))
       on.exit(par(op), add = TRUE)
       draw_stack_cells(m, main_outer = .outcome_main(fit, m))
     } else {
-      op <- par(mar = c(3.8, 4, 1.6, 4))
+      op <- par(mar = fit_mar(c(3.8, 4, 1.6, 4), n_rows = 1L))
       on.exit(par(op), add = TRUE)
       draw_overlay_cell(m)
     }
@@ -679,7 +702,8 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
     n_effect_panels <- if (facet_res == "stack" && K >= 2L) K else 1L
     layout(matrix(seq_len(1L + n_effect_panels), ncol = 1L))
     on.exit(layout(1L), add = TRUE)
-    op <- par(mar = c(3.8, 4, 1.6, 4))
+    op <- par(mar = fit_mar(c(3.8, 4, 1.6, 4),
+                            n_rows = 1L + n_effect_panels))
     on.exit(par(op), add = TRUE)
     .draw_pip(fit, pos = pos, add_legend = add_legend)
     if (n_effect_panels == 1L) {
@@ -700,7 +724,7 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
     n_cells <- 1L + M * K
     layout(matrix(seq_len(n_cells), ncol = 1L))
     on.exit(layout(1L), add = TRUE)
-    op <- par(mar = c(3.8, 4, 1.6, 4))
+    op <- par(mar = fit_mar(c(3.8, 4, 1.6, 4), n_rows = n_cells))
     on.exit(par(op), add = TRUE)
     .draw_pip(fit, pos = pos, add_legend = add_legend)
     for (mi in seq_len(M)) {
@@ -715,7 +739,8 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
   n_panels <- M + 1L
   cols     <- ceiling(sqrt(n_panels))
   rows     <- ceiling(n_panels / cols)
-  op <- par(mfrow = c(rows, cols), mar = c(3.8, 4, 1.6, 4))
+  op <- par(mfrow = c(rows, cols),
+            mar = fit_mar(c(3.8, 4, 1.6, 4), n_rows = rows))
   on.exit(par(op), add = TRUE)
 
   .draw_pip(fit, pos = pos, add_legend = add_legend)
@@ -733,31 +758,34 @@ plot.mfsusie <- function(x, ...) {
   mfsusie_plot(x, ...)
 }
 
-# Internal: open a graphics device sized to `dims` if `save` is
-# non-NULL. Returns NULL when no device is opened. The caller is
-# responsible for `dev.off()` (typically via `on.exit`).
-.open_save_device <- function(save, dims) {
-  if (is.null(save)) return(invisible(NULL))
-  ext <- tolower(tools::file_ext(save))
+# Open a graphics device sized to (width, height) inches when `filename`
+# is non-NULL; pure file-IO dispatch by filename extension. Returns NULL
+# (invisibly) when `filename` is NULL so the caller can branch on the
+# return value. Caller is responsible for `dev.off()` (typically via
+# `on.exit`). Internal but undotted -- general-purpose enough that any
+# plot routine with a `save = ...` argument can use it.
+open_save_device <- function(filename, width, height) {
+  if (is.null(filename)) return(invisible(NULL))
+  ext <- tolower(tools::file_ext(filename))
   if (ext == "pdf") {
-    grDevices::pdf(save, width = dims$width, height = dims$height)
+    grDevices::pdf(filename, width = width, height = height)
   } else if (ext == "png") {
-    grDevices::png(save, width = dims$width, height = dims$height,
+    grDevices::png(filename, width = width, height = height,
                    units = "in", res = 150)
   } else if (ext %in% c("jpg", "jpeg")) {
-    grDevices::jpeg(save, width = dims$width, height = dims$height,
+    grDevices::jpeg(filename, width = width, height = height,
                     units = "in", res = 150, quality = 95)
   } else if (ext == "svg") {
     if (!requireNamespace("svglite", quietly = TRUE)) {
-      grDevices::svg(save, width = dims$width, height = dims$height)
+      grDevices::svg(filename, width = width, height = height)
     } else {
-      svglite::svglite(save, width = dims$width, height = dims$height)
+      svglite::svglite(filename, width = width, height = height)
     }
   } else {
     stop("`save` must end in .pdf, .png, .jpg/.jpeg, or .svg; got '",
          ext, "'.")
   }
-  invisible(save)
+  invisible(filename)
 }
 
 #' Recommended figure dimensions for `mfsusie_plot()`
@@ -1108,8 +1136,8 @@ mfsusie_plot_lfsr <- function(fit,
   # Optional file output: open a sized device and close it on
   # exit. Sizing computed by `mfsusie_plot_lfsr_dimensions()`.
   if (!is.null(save)) {
-    .open_save_device(save,
-                      mfsusie_plot_lfsr_dimensions(fit, add_legend))
+    dims <- mfsusie_plot_lfsr_dimensions(fit, add_legend)
+    open_save_device(save, dims$width, dims$height)
     on.exit(grDevices::dev.off(), add = TRUE)
   }
 

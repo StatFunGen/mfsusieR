@@ -302,12 +302,12 @@ test_that("internal helpers handle the corner cases", {
                                fit_s$smoothed$TI),
     "overlay")
 
-  # .affected_mask handles NULL
-  expect_identical(mfsusieR:::.affected_mask(NULL), logical(0))
-  # affected_runs handles all-zero flags
+  # credibly_nonzero_mask handles NULL
+  expect_identical(mfsusieR:::credibly_nonzero_mask(NULL), logical(0))
+  # credibly_nonzero_runs handles all-zero flags
   band_no_flags <- cbind(rep(-1, 5L), rep(1, 5L))
-  expect_identical(mfsusieR:::affected_runs(band_no_flags), list())
-  expect_identical(mfsusieR:::affected_runs(NULL), list())
+  expect_identical(mfsusieR:::credibly_nonzero_runs(band_no_flags), list())
+  expect_identical(mfsusieR:::credibly_nonzero_runs(NULL), list())
 })
 
 test_that("mfsusie_plot save with svg path opens svg device", {
@@ -344,8 +344,8 @@ test_that("mfsusie_plot_dimensions for tile path (M > 1 overlay)", {
 })
 
 test_that("low-level helpers cover the small-K and edge branches", {
-  # .open_save_device with NULL is a no-op.
-  expect_null(mfsusieR:::.open_save_device(NULL, list(width = 1, height = 1)))
+  # open_save_device with NULL is a no-op.
+  expect_null(mfsusieR:::open_save_device(NULL, 1, 1))
 
   # .resolve_facet K < 2 path: build an empty CS list.
   fx <- make_M1()

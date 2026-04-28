@@ -9,8 +9,8 @@ mfsusie_plot_dimensions(
   m = NULL,
   facet_cs = c("auto", "stack", "overlay"),
   smooth_method = NULL,
-  min_pip_height = 2.2,
-  min_cell_height = 2,
+  min_pip_height = 3,
+  min_cell_height = 3,
   width = 8
 )
 }
@@ -46,10 +46,17 @@ setting \code{fig.width} / \code{fig.height} in a knitr chunk so each
 panel has enough vertical space to render legibly.
 }
 \details{
-Heuristics: \code{min_pip_height} (default 1.6 in) for the PIP
-cell, \code{min_cell_height} (default 1.5 in) for each effect
-cell. The PIP cell carries 1.5x the height weight of an
-effect cell. The recommended figure width defaults to
+Sizing principle: each cell rendered by \code{mfsusie_plot()} is a
+base-graphics panel with a fixed margin overhead (top title +
+bottom axis labels = ~1.0 inch) plus the actual data plotting
+area. \code{min_cell_height} is the \strong{total} allotted height per
+cell — set it to the desired plotting area (~1.6 in) plus the
+~1.0 in margin overhead. The defaults (3.0 in per cell) leave
+~2.0 in of plot area, which is the visual sweet spot for the
+effect curve + lfsr-overlay panels emitted by TI / HMM
+smoothings. PIP and effect cells use the SAME total height so
+that the underlying \code{layout()} weights (uniform) match the
+returned \code{height}. The recommended figure width defaults to
 \code{width = 8} inches.
 }
 \examples{

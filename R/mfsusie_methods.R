@@ -418,7 +418,7 @@ mf_summarize_effects <- function(fit, smooth_method = NULL) {
       l <- cs_idx[i]
       band <- bands_m[[l]]
       if (is.null(band)) next
-      runs <- affected_runs(band)
+      runs <- credibly_nonzero_runs(band)
       for (run in runs) {
         rows[[length(rows) + 1L]] <- data.frame(
           cs_index    = as.integer(i),
@@ -455,7 +455,7 @@ mf_summarize_effects <- function(fit, smooth_method = NULL) {
 # Internal: per-position local false sign rate from a Gaussian
 # posterior summary. Returns `pnorm(-|mean| / sd)`, with sd
 # floored at machine epsilon to avoid divide-by-zero.
-gaussian_lfsr <- function(mean, sd) {
+lfsr_from_gaussian <- function(mean, sd) {
   sd <- pmax(sd, .Machine$double.eps)
   stats::pnorm(-abs(mean) / sd)
 }
@@ -686,7 +686,7 @@ mf_post_smooth <- function(fit,
           factor      = threshold_factor)
 
       effect_curves[[m]][[l]] <-
-        .invert_packed_curve(matrix(shrunk_w, nrow = 1L), meta, m)
+        dwt_invert_packed(matrix(shrunk_w, nrow = 1L), meta, m)
       # Position-space variance: Var(pos[t]) = sum_k W^T_{t,k}^2
       # * var_w[k]. The previous formula
       # `abs(invert_dwt(sqrt(var_w)))` mistakes the linear
@@ -699,7 +699,7 @@ mf_post_smooth <- function(fit,
       mean_pos <- effect_curves[[m]][[l]]
       credible_bands[[m]][[l]] <- cbind(mean_pos - z_crit * sd_pos,
                                         mean_pos + z_crit * sd_pos)
-      lfsr_curves[[m]][[l]] <- gaussian_lfsr(mean_pos, sd_pos)
+      lfsr_curves[[m]][[l]] <- lfsr_from_gaussian(mean_pos, sd_pos)
     }
   }
   list(effect_curves  = effect_curves,
@@ -746,7 +746,7 @@ mf_post_smooth <- function(fit,
       effect_curves[[m]][[l]]  <- out$effect_estimate
       credible_bands[[m]][[l]] <- cbind(out$cred_band[2L, ],   # low
                                         out$cred_band[1L, ])   # up
-      lfsr_curves[[m]][[l]] <- gaussian_lfsr(out$effect_estimate,
+      lfsr_curves[[m]][[l]] <- lfsr_from_gaussian(out$effect_estimate,
                                               out$fitted_sd)
     }
   }
@@ -786,7 +786,7 @@ mf_post_smooth <- function(fit,
     # Alpha-weighted aggregate per-position wavelet coefficient
     # across SNPs. `mu[[l]][[m]]` is p x T_basis.
     mu_w_agg <- as.numeric(fit$alpha[l, ] %*% fit$mu[[l]][[m]])
-    eff_pos  <- .invert_packed_curve(matrix(mu_w_agg, nrow = 1L),
+    eff_pos  <- dwt_invert_packed(matrix(mu_w_agg, nrow = 1L),
                                       meta, m)
     if (length(eff_pos) > T_pos) eff_pos <- eff_pos[seq_len(T_pos)]
     eff_pos_raw <- eff_pos * csd_m[seq_along(eff_pos)]
@@ -952,7 +952,7 @@ scalewise_soft_threshold <- function(coef_vec, sd, scale_index,
 
 # Use the existing mf_invert_dwt machinery to bring a length-T_basis
 # packed wavelet vector back to position space.
-.invert_packed_curve <- function(D_packed_row, meta, m) {
+dwt_invert_packed <- function(D_packed_row, meta, m) {
   inverted <- mf_invert_dwt(
     D_packed      = D_packed_row,
     column_center = rep(0, ncol(D_packed_row)),
