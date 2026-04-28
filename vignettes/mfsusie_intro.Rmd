@@ -67,32 +67,43 @@ fit$pip[multiomic_example$causal_snps]
 # Post-hoc per-outcome causal-configuration assessment
 
 For each credible set, ask which outcomes share the causal
-variant. `susie_post_outcome_configuration(fit, by = "outcome")`
-runs two complementary post-hoc analyses on the joint mfsusie
-fit and returns one row per CS:
+variant. `susie_post_outcome_configuration(fit, by = "outcome",
+method = ...)` runs one of two complementary post-hoc analyses
+on the joint mfsusie fit; pick the one you want via `method` and
+call again to get the other:
 
-- The **SuSiEx** combinatorial enumeration assigns a posterior
-  probability to each of the `2^M` binary "which outcomes
-  share the causal" patterns, plus a per-outcome marginal
-  causality probability.
-- The **coloc pairwise ABF** reports the standard H0/H1/H2/H3/H4
-  posteriors for every pair of outcomes.
+- `method = "susiex"` (default) -- combinatorial enumeration:
+  posterior probability of each of the `2^M` binary
+  "which-outcomes-share-the-causal" patterns, plus a per-outcome
+  marginal probability of being active. One list element per CS
+  index shared across all outcomes (so for `M` outcomes that
+  share `K` CSes, `length(configs$susiex) == K`).
+- `method = "coloc_pairwise"` -- standard H0/H1/H2/H3/H4 coloc
+  posteriors for every outcome pair x CS pair (one data.frame).
 
-```{r post-config}
-configs <- susieR::susie_post_outcome_configuration(fit, by = "outcome")
-```
-
-The SuSiEx output for the first CS:
+`summary()` tidies either result into a colour-coded table:
+green for active / shared, yellow for ambiguous, dim for
+below-threshold. By default it filters to rows that show signal
+(pass `signal_only = FALSE` to see everything).
 
 ```{r post-config-susiex}
-configs$susiex[[1L]]$posthoc      # per-outcome marginal causality
-configs$susiex[[1L]]$config_prob  # 2^M configuration probabilities
+configs <- susieR::susie_post_outcome_configuration(fit, by = "outcome",
+                                                    method = "susiex")
+summary(configs)
 ```
 
-The pairwise coloc output (one row per outcome pair × CS-pair):
-
 ```{r post-config-coloc}
-head(configs$coloc_pairwise)
+pairwise <- susieR::susie_post_outcome_configuration(fit, by = "outcome",
+                                                    method = "coloc_pairwise")
+summary(pairwise)
+```
+
+Index the raw objects directly when you need full per-CS detail:
+
+```{r post-config-raw}
+configs$susiex[[1L]]$marginal_prob # per-outcome marginal P(active)
+configs$susiex[[1L]]$config_prob   # 2^M configuration probabilities
+head(pairwise$coloc_pairwise)      # raw coloc data.frame
 ```
 
 ## Inspecting the fit

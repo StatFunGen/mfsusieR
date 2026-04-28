@@ -13,7 +13,7 @@
 #
 # The coloc branch was independently verified bit-for-bit against
 # `coloc::coloc.bf_bf` during development; we don't re-run that check here
-# (would add a Suggests dependency on coloc for nothing — the math is a
+# (would add a Suggests dependency on coloc for nothing -- the math is a
 # verbatim port of `coloc:::combine.abf`).
 
 # -----------------------------------------------------------------------------
@@ -76,10 +76,12 @@ test_that("susiex_configurations matches legacy posthoc_multfsusie on a hand-bui
 
   out <- susieR::susie_post_outcome_configuration(
     fit, by = "outcome",
-    methods = "susiex",
+    method = "susiex",
     cs_only = FALSE)
 
   expect_length(out$susiex, L)
+  expect_s3_class(out, "susie_post_outcome_configuration")
+  expect_identical(attr(out, "method"), "susiex")
 
   # Reference per CS: pull (alpha_l, t(lbf_arr[l, , ])) so that the per-trait
   # rows of `logBF_trait_snp` are length-J SNP vectors per outcome.
@@ -93,9 +95,12 @@ test_that("susiex_configurations matches legacy posthoc_multfsusie on a hand-bui
                  info = sprintf("logBF_trait, CS %d", l))
     expect_equal(got$config_prob, ref$config_prob, tolerance = 1e-12,
                  info = sprintf("config_prob, CS %d", l))
-    expect_equal(unname(got$posthoc), unname(ref$posthoc),
+    # `marginal_prob` in the susieR API is what the legacy reference
+    # called `posthoc`: per-trait marginal P(active) summed across the
+    # 2^N configuration ensemble.
+    expect_equal(unname(got$marginal_prob), unname(ref$posthoc),
                  tolerance = 1e-12,
-                 info = sprintf("posthoc, CS %d", l))
+                 info = sprintf("marginal_prob, CS %d", l))
     # The configs grid is a column-permutation invariant; both should be
     # bit-equal because both build it via expand.grid().
     expect_equal(unname(got$configs), unname(ref$configs),
@@ -128,26 +133,32 @@ test_that("susie_post_outcome_configuration on a real mfsusie fit returns the do
                info = "lbf_variable_outcome should be attached by default.")
   expect_equal(dim(fit$lbf_variable_outcome), c(3L, p, M))
 
-  out <- susieR::susie_post_outcome_configuration(fit, by = "outcome")
-  expect_named(out, c("susiex", "coloc_pairwise"), ignore.order = TRUE)
-
-  # SuSiEx: at least one CS with all-outcomes-causal as the dominant config.
-  expect_true(length(out$susiex) >= 1L)
-  any_all_causal <- vapply(out$susiex, function(e) {
-    all(e$posthoc >= 0.5)
+  # SuSiEx run: at least one CS with all-outcomes-causal as the dominant
+  # config. With single-method output, only `$susiex` is present.
+  out_susiex <- susieR::susie_post_outcome_configuration(
+    fit, by = "outcome", method = "susiex")
+  expect_named(out_susiex, "susiex")
+  expect_null(out_susiex$coloc_pairwise)
+  expect_true(length(out_susiex$susiex) >= 1L)
+  any_all_causal <- vapply(out_susiex$susiex, function(e) {
+    all(e$marginal_prob >= 0.5)
   }, logical(1L))
   expect_true(any(any_all_causal),
               info = "At least one CS should mark all M outcomes as causal under the planted shared signal.")
 
-  # Coloc pairwise: PP.H4 (shared causal) should dominate for matched (l, l)
-  # pairs. With M = 3 outcomes and 2 surviving CSs, choose(3, 2) * (#CS_pairs)
-  # rows total.
-  expect_s3_class(out$coloc_pairwise, "data.frame")
-  expect_named(out$coloc_pairwise,
+  # Coloc pairwise run: PP.H4 (shared causal) should dominate for matched
+  # (l, l) pairs. With M = 3 outcomes and 2 surviving CSs, choose(3, 2) x
+  # (#CS_pairs) rows total.
+  out_coloc <- susieR::susie_post_outcome_configuration(
+    fit, by = "outcome", method = "coloc_pairwise")
+  expect_named(out_coloc, "coloc_pairwise")
+  expect_null(out_coloc$susiex)
+  expect_s3_class(out_coloc$coloc_pairwise, "data.frame")
+  expect_named(out_coloc$coloc_pairwise,
                c("trait1", "trait2", "l1", "l2", "hit1", "hit2",
                  "PP.H0", "PP.H1", "PP.H2", "PP.H3", "PP.H4"),
                ignore.order = TRUE)
-  matched <- subset(out$coloc_pairwise, l1 == l2)
+  matched <- subset(out_coloc$coloc_pairwise, l1 == l2)
   expect_true(all(matched$PP.H4 > 0.5),
               info = "Diagonal coloc-pairs should be H4-dominated for the planted shared causal.")
 })
