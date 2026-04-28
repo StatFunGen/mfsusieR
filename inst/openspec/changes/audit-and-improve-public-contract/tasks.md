@@ -4,22 +4,9 @@ Each section below produces its own commit. Sections are
 ordered to land independent / read-only audits first, then
 commit-shaped fixes.
 
-## 1. Fit-field trim and documentation
+## 1. Fit-field trim and documentation -- NO-OP
 
-- [ ] 1.1 Enumerate every field on a fresh `mfsusie()` fit on
-  the `practical_dataset` fixture; record names, classes, and
-  size.
-- [ ] 1.2 Cross-reference each field with `susieR::susie()`
-  output and `mvsusieR::mvsusie()` output.
-- [ ] 1.3 Classify each field: keep / drop / move-to-summary /
-  rename. Record decisions in a table inside
-  `inst/notes/sessions/<date>-fit-field-audit.md`.
-- [ ] 1.4 Apply the decisions: edit `R/mfsusie.R` (return-value
-  block), `R/ibss_methods.R` (`cleanup_model.mf_individual`),
-  any S3 method that constructs the fit. Update tests that
-  read removed fields.
-- [ ] 1.5 Roxygen: every kept field gets a one-line description
-  in the `@return` block of `mfsusie()`.
+Decision: fit object stays as is. No tasks.
 
 ## 2. Feature gap with `fsusieR` / `mvf.susie.alpha`
 
@@ -45,18 +32,70 @@ commit-shaped fixes.
   or redundant during the review; surface in the audit note
   for separate upstream-PR discussion.
 
-## 4. Useful verbose output
+## 4. Verbose output, susieR-arg parity, parameter renames
 
-- [ ] 4.1 Read `susieR`'s per-iter verbose output. Read
-  `fsusieR::susiF` and `mvf.susie.alpha::multfsusie`'s
-  per-iter prints.
-- [ ] 4.2 Distill into a per-iter line for mfsusieR. Suggested
-  format: `iter K | elbo=… | max_alpha_diff=… | sigma2_range=… [| MB=…]`.
-- [ ] 4.3 Add `convergence_metric = c("pip_diff", "elbo")`
-  argument to `mfsusie()`. Default `"pip_diff"` (current).
-  Plumb through to `check_convergence`.
-- [ ] 4.4 Add a unit test on a standard fixture: PIP-based
-  and ELBO-based convergence agree within 2 iterations.
+### 4a. Inherit susieR's check_convergence machinery
+
+- [ ] 4a.1 Delete `check_convergence.mf_individual` from
+  `R/ibss_methods.R`. The susieR `check_convergence.default`
+  fires for `mf_individual` data.
+- [ ] 4a.2 Run `devtools::test()` to verify nothing depends on
+  the removed override. Fix any test that relied on the
+  monotone-ELBO assumption (susieR also gives that, but with
+  a warning rather than silent stop).
+- [ ] 4a.3 Drive a small fixture with `verbose = TRUE` and
+  capture the output. Confirm it shows the susieR tabular
+  format including `mem`, `V`, `delta` columns.
+
+### 4b. Expose susieR args on the public API
+
+- [ ] 4b.1 Add `convergence_method = c("elbo", "pip")` to
+  `mfsusie()`. Default `"elbo"` (matches susieR). Forward to
+  `params$convergence_method`.
+- [ ] 4b.2 Add `pip_stall_window = 5` to `mfsusie()`. Forward
+  to `params$pip_stall_window`.
+- [ ] 4b.3 Add `estimate_residual_variance = TRUE`. Forward
+  to `params$estimate_residual_variance`. Verify
+  `update_model_variance.mf_individual` honours the flag
+  (currently always estimates).
+- [ ] 4b.4 Roxygen: document each of the three new args.
+
+### 4c. Convergence-metric agreement test
+
+- [ ] 4c.1 Add a unit test on a standard fixture that runs
+  the same fit twice (`convergence_method = "elbo"` and
+  `"pip"`) and asserts they reach the same posterior within
+  `tol = 1e-6` on `pip` and `tol = 1e-3` on `elbo`, and that
+  the iteration counts differ by at most 2.
+
+### 4d. Rename: mixture_weight_method -> estimate_prior_variance
+
+- [ ] 4d.1 Add `estimate_prior_variance = TRUE` to
+  `mfsusie()`. `TRUE` enables mixsqp (current default);
+  `FALSE` skips the M-step and keeps pi at init values.
+- [ ] 4d.2 Wire to existing internal logic: when
+  `estimate_prior_variance = FALSE` set
+  `params$estimate_prior_method = "none"` (skip the M-step).
+- [ ] 4d.3 Deprecate `mixture_weight_method` via
+  `lifecycle::deprecate_warn()`. Map old values:
+  `"mixsqp"` -> `TRUE`, `"none"` -> `FALSE`. Keep working for
+  one minor version.
+- [ ] 4d.4 Update vignettes that reference the old name.
+
+### 4e. Rename: lbf_min -> greed_lbf_cutoff
+
+- [ ] 4e.1 Add `greed_lbf_cutoff = 0.1` to `mfsusie()`. Forward
+  to the existing internal logic that consumed `lbf_min`.
+- [ ] 4e.2 Deprecate `lbf_min` via `lifecycle::deprecate_warn()`.
+- [ ] 4e.3 Update vignettes that reference `lbf_min`.
+
+### 4f. Audit get_cs wrapper
+
+- [ ] 4f.1 Read `get_cs.mf_individual` (R/ibss_methods.R:337).
+  If the body is just `susie_get_cs(...)` with no
+  customization, drop the override and let
+  `get_cs.default` fire.
+- [ ] 4f.2 Re-test; expect 0 failures.
 
 ## 5. HMM credible band
 
