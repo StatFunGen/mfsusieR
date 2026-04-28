@@ -189,6 +189,13 @@ plot_dims_hm <- mfsusie_plot_dimensions(fit_hmm)
 mfsusie_plot(fit_hmm)   # picks HMM (the only smoother on the fit)
 ```
 
+```{r tuning-smash-defaults, include = FALSE}
+# Fallback values so the next chunk's fig.* expressions resolve
+# even when smashr is unavailable (the chunk body is gated by
+# `eval`, but knitr always evaluates fig.width / fig.height).
+plot_dims_sm <- list(width = 8, height = 6)
+```
+
 ```{r tuning-smash, eval = requireNamespace("smashr", quietly = TRUE)}
 fit_smash <- mf_post_smooth(fit, method = "smash")
 plot_dims_sm <- mfsusie_plot_dimensions(fit_smash)
