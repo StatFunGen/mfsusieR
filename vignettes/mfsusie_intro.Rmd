@@ -16,6 +16,20 @@ knitr::opts_chunk$set(
   fig.width = 8, fig.height = 6, fig.align = "center", dpi = 110,
   out.width = "100%"
 )
+
+# Colour-rendering pipeline for `summary()` output.
+#
+# `crayon::has_color()` returns FALSE under knitr, so `summary(configs)`
+# would emit plain text and lose its visual encoding (green = active,
+# yellow = ambiguous, etc.). Force-enable crayon so the summary always
+# emits ANSI SGR escapes, then wire up `fansi::set_knit_hooks` (when
+# available) to convert those escapes into HTML <span> styling. The
+# fallback path (no fansi) keeps the plain-text output -- still readable,
+# just monochrome.
+if (requireNamespace("fansi", quietly = TRUE)) {
+  options(crayon.enabled = TRUE)
+  fansi::set_knit_hooks(knitr::knit_hooks)
+}
 ```
 
 `mfsusie()` extends `fsusie()` from one functional response to
@@ -91,6 +105,12 @@ configs <- susieR::susie_post_outcome_configuration(fit, by = "outcome",
                                                     method = "susiex")
 summary(configs)
 ```
+
+For the `coloc_pairwise` analysis the table has one row per
+(outcome pair) x (CS pair), which on a 4-outcome fit with 3 shared
+CSes means `choose(4, 2) * 3 * 3 = 54` rows. We pass
+`signal_only = TRUE` (the default) so H0-dominant rows drop out
+and we see only the pairs that carry colocalisation evidence:
 
 ```{r post-config-coloc}
 pairwise <- susieR::susie_post_outcome_configuration(fit, by = "outcome",

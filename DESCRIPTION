@@ -39,6 +39,7 @@ Suggests:
     rmarkdown,
     reshape2,
     smashr,
+    fansi,
     Gviz,
     GenomicFeatures,
     GenomicRanges,
