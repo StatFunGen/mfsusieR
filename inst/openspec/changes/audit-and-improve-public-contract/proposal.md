@@ -49,10 +49,19 @@ section B) identified specific gaps. Three port-now items:
   Yuan 2024 post-hoc causal-configuration helper (next
   bullet); both take `fit` and return diagnostic summaries
   off the existing `credible_bands` and `alpha` fields.
-- **Yuan 2024 post-hoc causal configurations**
-  (`posthoc = TRUE` in mvf.susie.alpha). 2^L combinations
-  of credible-set effects; for L ≤ 15 implement in pure R,
-  port to C++ only if a real fixture measures slow.
+- **`susie_get_configurations()` in susieR** (replacing
+  the mfsusieR-only Yuan 2024 helper). Generic post-hoc
+  utility taking a list of N susie/mvsusie/mfsusie fits and
+  returning the joint posterior over per-fit causal-set
+  configurations. Subsumes `coloc::coloc.bf_bf` for the
+  N = 2 case (with `marginalization = "uniform"`,
+  `hypothesis_grid = "pairwise"`) and the Yuan 2024 N ≥ 3
+  case (with default `marginalization = "alpha"`,
+  `hypothesis_grid = "full_lattice"`). Implementation in
+  susieR (staged in working tree, user reviews and commits);
+  S3 methods in mvsusieR and mfsusieR translate per-fit
+  shapes into the generic's expected `(lbf_variable, alpha,
+  sets)` triple.
 - **`simu_IBSS_ash_vanilla` simulation helper** (fsusieR).
   Port into the existing `data-raw/` simulation
   conventions, same way other fsusieR simulation helpers
