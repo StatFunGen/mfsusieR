@@ -145,16 +145,23 @@ mf_fit_hmm <- function(x, sd,
   idx_comp <- which(colMeans(prob) > thresh)
   if (!(1L %in% idx_comp)) idx_comp <- c(1L, idx_comp)
 
-  # First ash refinement seeds x_post.
-  ash_obj <- vector("list", length(idx_comp))
-  x_post  <- numeric(T_pos)
+  # First ash refinement seeds x_post and x_post_sd. The
+  # second moment is accumulated by law of total variance over
+  # the state mixture; the null state contributes zero.
+  ash_obj   <- vector("list", length(idx_comp))
+  x_post    <- numeric(T_pos)
+  x_post_m2 <- numeric(T_pos)
   for (i in 2L:length(idx_comp)) {
     mu_ash <- mu[idx_comp[i]]
     weight <- prob[, idx_comp[i]]
     ash_obj[[i]] <- ash(x, sd, weight = weight, mode = mu_ash,
                         mixcompdist = "normal")
-    x_post <- x_post + weight * ash_obj[[i]]$result$PosteriorMean
+    pm_i  <- ash_obj[[i]]$result$PosteriorMean
+    psd_i <- ash_obj[[i]]$result$PosteriorSD
+    x_post    <- x_post    + weight * pm_i
+    x_post_m2 <- x_post_m2 + weight * (psd_i^2 + pm_i^2)
   }
+  x_post_sd <- sqrt(pmax(x_post_m2 - x_post^2, 0))
   prob <- prob[, idx_comp, drop = FALSE]
   K    <- length(idx_comp)
   P    <- P[idx_comp, idx_comp, drop = FALSE]
@@ -218,11 +225,22 @@ mf_fit_hmm <- function(x, sd,
 
     ash_obj <- vector("list", K)
     x_post  <- numeric(T_pos)
+    # Per-position posterior second moment for the credible band
+    # via law of total variance. State 1 (null) has point mass at 0,
+    # contributes 0 to both mean and second moment. For k >= 2 the
+    # state's ash refinement gives PosteriorMean and PosteriorSD;
+    # second moment per state is sd^2 + mean^2.
+    x_post_m2 <- numeric(T_pos)
     for (k in 2L:K) {
       ash_obj[[k]] <- ash(x, sd, weight = prob[, k], mode = mu[k],
                           mixcompdist = "normal")
-      x_post <- x_post + prob[, k] * ash_obj[[k]]$result$PosteriorMean
+      pm_k  <- ash_obj[[k]]$result$PosteriorMean
+      psd_k <- ash_obj[[k]]$result$PosteriorSD
+      x_post    <- x_post    + prob[, k] * pm_k
+      x_post_m2 <- x_post_m2 + prob[, k] * (psd_k^2 + pm_k^2)
     }
+    x_post_var <- pmax(x_post_m2 - x_post^2, 0)
+    x_post_sd  <- sqrt(x_post_var)
 
     # Baum-Welch transition update. Re-emit against the freshly
     # refit `ash_obj`: the xi accumulator depends on post-refit
@@ -256,13 +274,14 @@ mf_fit_hmm <- function(x, sd,
   ll_null <- sum(dnorm(X, mean = 0, sd = sd, log = TRUE))
   log_BF  <- ll_hmm - ll_null
 
-  list(prob   = prob,
-       x_post = x_post,
-       lfsr   = lfsr_est,
-       mu     = mu,
-       ll_hmm = ll_hmm,
-       ll_null = ll_null,
-       log_BF = log_BF)
+  list(prob     = prob,
+       x_post   = x_post,
+       x_post_sd = x_post_sd,
+       lfsr     = lfsr_est,
+       mu       = mu,
+       ll_hmm   = ll_hmm,
+       ll_null  = ll_null,
+       log_BF   = log_BF)
 }
 
 #' Univariate HMM regression of a position-space response on one
@@ -295,7 +314,8 @@ mf_univariate_hmm_regression <- function(Y, X, halfK = 20L) {
   }
 
   s <- mf_fit_hmm(x = est, sd = sds, halfK = halfK)
-  list(effect_estimate = s$x_post * csd_Y / csd_X,
+  list(effect_estimate = s$x_post    * csd_Y / csd_X,
+       effect_sd       = s$x_post_sd * csd_Y / csd_X,
        lfsr            = s$lfsr,
        lBF             = s$log_BF)
 }
