@@ -19,11 +19,19 @@ extern "C" SEXP _mfsusieR_mixture_posterior_per_scale_cpp(SEXP bhat, SEXP shat, 
     return cpp11::as_sexp(mixture_posterior_per_scale_cpp(cpp11::as_cpp<cpp11::decay_t<doubles_matrix<>>>(bhat), cpp11::as_cpp<cpp11::decay_t<doubles_matrix<>>>(shat), cpp11::as_cpp<cpp11::decay_t<doubles>>(sd_grid), cpp11::as_cpp<cpp11::decay_t<doubles>>(pi_grid), cpp11::as_cpp<cpp11::decay_t<double>>(v_scale)));
   END_CPP11
 }
+// posterior_mixture.cpp
+doubles_matrix<> mf_em_log_likelihood_per_scale_cpp(doubles bvec, doubles_matrix<> sdmat, doubles_matrix<> log_sdmat);
+extern "C" SEXP _mfsusieR_mf_em_log_likelihood_per_scale_cpp(SEXP bvec, SEXP sdmat, SEXP log_sdmat) {
+  BEGIN_CPP11
+    return cpp11::as_sexp(mf_em_log_likelihood_per_scale_cpp(cpp11::as_cpp<cpp11::decay_t<doubles>>(bvec), cpp11::as_cpp<cpp11::decay_t<doubles_matrix<>>>(sdmat), cpp11::as_cpp<cpp11::decay_t<doubles_matrix<>>>(log_sdmat)));
+  END_CPP11
+}
 
 extern "C" {
 static const R_CallMethodDef CallEntries[] = {
-    {"_mfsusieR_mixture_log_bf_per_scale_cpp",    (DL_FUNC) &_mfsusieR_mixture_log_bf_per_scale_cpp,    5},
-    {"_mfsusieR_mixture_posterior_per_scale_cpp", (DL_FUNC) &_mfsusieR_mixture_posterior_per_scale_cpp, 5},
+    {"_mfsusieR_mf_em_log_likelihood_per_scale_cpp", (DL_FUNC) &_mfsusieR_mf_em_log_likelihood_per_scale_cpp, 3},
+    {"_mfsusieR_mixture_log_bf_per_scale_cpp",       (DL_FUNC) &_mfsusieR_mixture_log_bf_per_scale_cpp,       5},
+    {"_mfsusieR_mixture_posterior_per_scale_cpp",    (DL_FUNC) &_mfsusieR_mixture_posterior_per_scale_cpp,    5},
     {NULL, NULL, 0}
 };
 }

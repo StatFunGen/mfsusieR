@@ -55,15 +55,17 @@ mf_em_likelihood_per_scale <- function(bhat_slice, shat_slice, sd_grid,
     sdmat     <- sqrt(outer(svec^2, sd_grid^2, "+"))
     log_sdmat <- log(sdmat)
   }
-  log_L <- dnorm(outer(bvec, rep(0, K), "-") / sdmat, log = TRUE) -
-           log_sdmat
+  log_L <- mf_em_log_likelihood_per_scale_cpp(bvec, sdmat, log_sdmat)
 
   # NA imputation for ill-conditioned Shat (port-fidelity).
-  log_L <- apply(log_L, 2, function(col) {
-    na <- is.na(col)
-    if (any(na)) col[na] <- median(col, na.rm = TRUE)
-    col
-  })
+  # Common case has no NAs; skip the imputation entirely. When NAs
+  # are present, replace each per-column with the column median in
+  # a vectorised pass instead of iterating R-level over columns.
+  nas <- is.na(log_L)
+  if (any(nas)) {
+    col_med <- apply(log_L, 2L, median, na.rm = TRUE)
+    log_L[nas] <- col_med[col(log_L)[nas]]
+  }
   L <- exp(log_L)
 
   if (is_ebmvfr) L else rbind(c(100, rep(0, K - 1)), L)
