@@ -39,13 +39,24 @@
 #' @keywords internal
 #' @noRd
 mf_em_likelihood_per_scale <- function(bhat_slice, shat_slice, sd_grid,
-                                       is_ebmvfr = FALSE) {
+                                       is_ebmvfr = FALSE,
+                                       sdmat_cache = NULL,
+                                       log_sdmat_cache = NULL) {
   bvec <- as.numeric(bhat_slice)
-  svec <- as.numeric(shat_slice)
   K    <- length(sd_grid)
 
-  sdmat <- sqrt(outer(svec^2, sd_grid^2, "+"))
-  log_L <- dnorm(outer(bvec, rep(0, K), "-") / sdmat, log = TRUE) - log(sdmat)
+  if (!is.null(sdmat_cache) && !is.null(log_sdmat_cache)) {
+    # Loop-invariant fast path: caller pre-built sdmat once per
+    # (m, s) per IBSS iter and cached it on `model$em_cache`.
+    sdmat     <- sdmat_cache
+    log_sdmat <- log_sdmat_cache
+  } else {
+    svec <- as.numeric(shat_slice)
+    sdmat     <- sqrt(outer(svec^2, sd_grid^2, "+"))
+    log_sdmat <- log(sdmat)
+  }
+  log_L <- dnorm(outer(bvec, rep(0, K), "-") / sdmat, log = TRUE) -
+           log_sdmat
 
   # NA imputation for ill-conditioned Shat (port-fidelity).
   log_L <- apply(log_L, 2, function(col) {

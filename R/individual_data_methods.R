@@ -408,6 +408,62 @@ update_variance_components.mf_individual <- function(data, params, model, ...) {
       model$sigma2[[m]] <- sigma2_per_scale
     }
   }
+  refresh_em_cache.mf_individual(data, model)
+}
+
+# Recompute the per-iter M-step cache after sigma2 changes.
+# Cached quantities are invariant across the L-effect loop within
+# one IBSS iteration; rebuilding them per effect is L-fold
+# redundant.
+#
+# Cache contents per outcome m:
+#   $sigma2_per_pos[[m]]   -- broadcast of model$sigma2[[m]] to a
+#                             length-T_basis[m] vector
+#   $shat2[[m]]            -- p x T_basis[m] = outer(1/xtx_diag,
+#                             sigma2_per_pos)
+#   $sdmat[[m]][[s]]       -- (p*|idx_s|) x K matrix used by
+#                             mf_em_likelihood_per_scale
+#   $log_sdmat[[m]][[s]]   -- log of $sdmat[[m]][[s]]
+#
+# The (m, s) entries depend on the G_prior layout (groups), so
+# they are rebuilt only when the group structure or sd-grid
+# changes (i.e., after init or any prior-grid change).
+refresh_em_cache.mf_individual <- function(data, model) {
+  M  <- data$M
+  pw <- data$xtx_diag
+
+  sigma2_per_pos_list <- vector("list", M)
+  shat2_list          <- vector("list", M)
+  sdmat_list          <- vector("list", M)
+  log_sdmat_list      <- vector("list", M)
+
+  for (m in seq_len(M)) {
+    sigma2_per_pos <- mf_sigma2_per_position(data, model, m)
+    sigma2_per_pos_list[[m]] <- sigma2_per_pos
+    shat2_m <- outer(1 / pw, sigma2_per_pos)
+    shat2_list[[m]] <- shat2_m
+
+    G_m       <- model$G_prior[[m]]
+    sdmat_m     <- vector("list", length(G_m))
+    log_sdmat_m <- vector("list", length(G_m))
+    for (s in seq_along(G_m)) {
+      idx     <- G_m[[s]]$idx
+      sd_grid <- G_m[[s]]$fitted_g$sd
+      svec_s  <- as.numeric(sqrt(shat2_m[, idx, drop = FALSE]))
+      sdmat   <- sqrt(outer(svec_s^2, sd_grid^2, "+"))
+      sdmat_m[[s]]     <- sdmat
+      log_sdmat_m[[s]] <- log(sdmat)
+    }
+    sdmat_list[[m]]     <- sdmat_m
+    log_sdmat_list[[m]] <- log_sdmat_m
+  }
+
+  model$em_cache <- list(
+    sigma2_per_pos = sigma2_per_pos_list,
+    shat2          = shat2_list,
+    sdmat          = sdmat_list,
+    log_sdmat      = log_sdmat_list
+  )
   model
 }
 
@@ -454,10 +510,13 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
   control    <- params$control_mixsqp %||% list()
   zeta_l     <- model$alpha[l, ]
 
+  cache <- model$em_cache
   for (m in seq_len(data$M)) {
     bhat_m <- ser_stats$betahat[[m]]
     shat_m <- sqrt(ser_stats$shat2[[m]])
     G_m    <- model$G_prior[[m]]
+    cache_m_sdmat     <- if (is.null(cache)) NULL else cache$sdmat[[m]]
+    cache_m_log_sdmat <- if (is.null(cache)) NULL else cache$log_sdmat[[m]]
     # Uniform group loop: each G_prior entry holds the column
     # indices it covers (`$idx`). For `per_outcome` there is one
     # group spanning every wavelet column (one mixsqp solve over
@@ -467,9 +526,11 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
       idx     <- G_m[[s]]$idx
       sd_grid <- G_m[[s]]$fitted_g$sd
       L_mat <- mf_em_likelihood_per_scale(
-        bhat_m[, idx, drop = FALSE],
-        shat_m[, idx, drop = FALSE],
-        sd_grid)
+        bhat_slice      = bhat_m[, idx, drop = FALSE],
+        shat_slice      = shat_m[, idx, drop = FALSE],
+        sd_grid         = sd_grid,
+        sdmat_cache     = cache_m_sdmat[[s]],
+        log_sdmat_cache = cache_m_log_sdmat[[s]])
       new_pi <- mf_em_m_step_per_scale(
         L_mat, zeta_l, idx_size = length(idx),
         mixsqp_null_penalty = mixsqp_null_penalty,
