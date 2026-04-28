@@ -53,7 +53,7 @@ test_that("mfsusie() argument list contains the canonical public-API names", {
   required <- c("X", "Y", "pos", "L", "prior_variance_grid",
                 "null_prior_weight", "residual_variance_scope",
                 "max_iter", "tol",
-                "L_greedy", "greed_lbf_cutoff",
+                "L_greedy", "greedy_lbf_cutoff",
                 "estimate_prior_variance",
                 "estimate_residual_variance",
                 "convergence_method", "pip_stall_window")
