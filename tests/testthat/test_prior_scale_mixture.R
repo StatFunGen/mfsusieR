@@ -109,10 +109,24 @@ test_that("data-driven init matches fsusieR::init_prior.default at 1e-12", {
   Y_m <- matrix(rnorm(n * T_basis), nrow = n)
   scale_index <- mfsusieR:::gen_wavelet_indx(log2(T_basis))
 
-  ours <- mfsusieR:::init_scale_mixture_prior_default(
+  # Production mfsusieR sets the init pi from `null_prior_weight`
+  # via `pi_null = null_prior_weight / (K + 1)`. Upstream fsusieR
+  # hardcodes `pi_null = 0.8`. To make the comparison bit-fidelity
+  # at `tol = 1e-12`, set `null_prior_weight = 0.8 * (K + 1)` so
+  # the formula recovers exactly the upstream vector. K depends on
+  # the ash sd-grid which depends on the data, so we call once to
+  # discover K, then recall with the matched weight.
+  probe <- mfsusieR:::init_scale_mixture_prior_default(
     Y_m = Y_m, X = X,
     prior_class = "mixture_normal_per_scale",
     groups      = scale_index
+  )
+  K <- length(probe$G_prior[[1]]$fitted_g$pi)
+  ours <- mfsusieR:::init_scale_mixture_prior_default(
+    Y_m = Y_m, X = X,
+    prior_class       = "mixture_normal_per_scale",
+    groups            = scale_index,
+    null_prior_weight = 0.8 * (K + 1)
   )
   ref <- fsusieR::init_prior(
     Y = Y_m, X = X, prior = "mixture_normal_per_scale",
