@@ -4,6 +4,36 @@ Each section below produces its own commit. Sections are
 ordered to land independent / read-only audits first, then
 commit-shaped fixes.
 
+## 0. Workflow rule -- 3-auditor review per code-change subsection
+
+After every code-change subsection commits (any subsection
+under sections 1, 3, 4, 5, 6, 7), spawn three fresh-context
+Agent reviewers in parallel:
+
+- **Auditor 1 (numerical correctness)**: read the modified
+  R code and the corresponding susieR default. Confirm
+  byte-equivalence where the change is delete-and-inherit;
+  for non-trivial edits, confirm the new code matches the
+  manuscript or audit-derivation that justifies it. Report
+  findings under 200 words.
+- **Auditor 2 (API surface)**: read the public-facing
+  roxygen, vignettes, and any reference test affected.
+  Confirm no silent semantic shift in user-visible behavior;
+  flag any rename or default change that is not documented.
+  Report findings under 200 words.
+- **Auditor 3 (test-suite integrity)**: read the modified
+  tests. Confirm tolerances and assertions still mean what
+  they claim; flag any test that relaxes a contract without
+  documentation. Report findings under 200 words.
+
+Address every finding before proceeding to the next
+subsection. If a finding requires an OpenSpec scope change,
+update the proposal/spec/tasks before continuing.
+
+The audit-only sections (§2 feature parity, §3a S3-override
+audit, §6.1 perf re-measurement) are read-only and skip the
+3-auditor step.
+
 ## 1. Diagnosis-field cleanup
 
 - [ ] 1.1 Retire `V` from the fit object (held at 1, not
@@ -150,20 +180,22 @@ commit-shaped fixes.
   4g.3 and document the gap in
   `inst/notes/refactor-exceptions.md`.
 
-## 5. HMM credible band
+## 5. HMM credible band -- drop gating, document
 
-- [ ] 5.1 Read the manuscript section on HMM smoothing
-  (fsusie methods). Derive the per-position credible band
-  formula from the mixture posterior.
-- [ ] 5.2 Compare derived formula to `fsusieR::fit_hmm`'s band
-  output and to `mfsusieR::mf_post_smooth(method = "HMM")`'s
-  current band output on a fixed seed.
-- [ ] 5.3 If our formula diverges from the derivation, fix.
-  If both upstream and our formula match the derivation but
-  the band is genuinely wide, document the band semantics in
-  the roxygen + vignette and stop suppressing display.
-- [ ] 5.4 Update any visualization gating that hides the band
-  unconditionally.
+Per the audit, mfsusieR's HMM band formula is correct (proper
+law-of-total-variance); the suppression was unjustified.
+
+- [ ] 5.1 Identify the visualization gating that hides the
+  HMM credible band display.
+- [ ] 5.2 Remove the gating; populate the band normally.
+- [ ] 5.3 Add a one-paragraph roxygen note in
+  `mf_post_smooth()` explaining the band derivation
+  (`var_w = mu2_w - mean_w^2`, inverse-DWT via `W_inv^2`,
+  `qnorm((1+level)/2)` multiplier for `1-α` coverage).
+- [ ] 5.4 Add a unit test that asserts the HMM band from a
+  small fixture has `lower <= mean <= upper` everywhere and
+  approximate `1-α` coverage on the manuscript's reference
+  case.
 
 ## 6. Performance and convergence
 
