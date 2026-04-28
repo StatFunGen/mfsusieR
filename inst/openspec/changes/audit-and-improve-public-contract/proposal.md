@@ -138,16 +138,22 @@ Out of scope for this section:
   workload).
 - Other susieR args beyond the four named above.
 
-### Section 5: HMM credible band
+### Section 5: HMM credible band — drop gating, document
 
-Re-derive the per-position credible band for HMM smoothing
-from the manuscript's posterior-mixture formula. Compare
-against `fsusieR::fit_hmm`'s band shape. If our band is
-genuinely wider than the manuscript implies, it is a bug;
-fix the formula. If both packages produce a wide band, the
-manuscript band is correct as derived but the visualization
-is misleading — in that case, document the band semantics
-clearly and stop suppressing it.
+Per the `2026-04-28-audit-findings.md` audit (B3): mfsusieR's
+HMM band formula is mathematically correct. It uses the
+proper law of total variance for the wavelet posterior
+(`var_w = mu2_w - mean_w^2`), inverse-DWT projects to
+position-space via `W_inv^2`, and uses `qnorm((1+level)/2)`
+for the requested coverage. The "wide band" complaint that
+suppressed display was a false signal — it conflated
+mfsusieR's band with fsusieR's bug-affected DWT-band path
+(which aggregates SDs linearly under alpha rather than
+variances, then uses a 3-sigma multiplier instead of `1-α`).
+
+Action reduced to: drop the gating that hides the HMM band,
+add a one-paragraph roxygen note explaining the band
+semantics, no formula change.
 
 ### Section 6: Performance and convergence on the heavy fixture
 
