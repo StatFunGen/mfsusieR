@@ -56,16 +56,14 @@ get_cs                     <- NULL
     "update_derived_quantities",
     "update_model_variance",
     "Eloglik",
-    "get_objective",
     "track_ibss_fit",
-    "check_convergence",
     "trim_null_effects",
     # one-shot init / finalize
     "get_var_y",
     "initialize_susie_model",
     "initialize_fitted",
     "ibss_initialize",
-    "cleanup_model",
+    "cleanup_extra_fields",
     # post-fit accessors
     "get_scale_factors",
     "get_intercept",
@@ -82,7 +80,12 @@ get_cs                     <- NULL
   mfsusie_generics <- c(
     "get_posterior_mean_l",
     "get_posterior_mean_sum",
-    "get_posterior_moments_l"
+    "get_posterior_moments_l",
+    # Verbose-row formatting hook used by check_convergence.default
+    # so the per-iteration line shows the list-of-vectors sigma2 in a
+    # compact, fixed-width form rather than the default scalar
+    # `sprintf("%.4f", model$sigma2)` (which would crash here).
+    "format_sigma2_summary"
   )
   for (g in mfsusie_generics) {
     method_fn <- get(paste0(g, ".mfsusie"), envir = pkg_ns)

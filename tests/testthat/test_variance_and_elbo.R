@@ -165,12 +165,17 @@ test_that("Eloglik aggregates per-modality, per-position log-likelihood", {
   expect_equal(out, expected, tolerance = 1e-12)
 })
 
-test_that("get_objective returns Eloglik - sum(KL) + entropy_correction", {
+test_that("get_objective dispatches to susieR's default and returns Eloglik - sum(KL)", {
+  # mfsusieR no longer overrides get_objective; the standard branch in
+  # susieR's `get_objective.default` computes
+  # `Eloglik(data, model) - sum(model$KL, na.rm = TRUE)` and dispatches
+  # `Eloglik` per class, so `Eloglik.mf_individual` still fires.
   data  <- make_data_for_ev()
   model <- make_model_with_post(data)
   model$KL <- runif(model$L, 0.1, 1)
+  class(data) <- c("mf_individual", "individual")
 
-  out <- mfsusieR:::get_objective.mf_individual(data, list(), model)
+  out <- susieR:::get_objective(data, list(use_NIG = FALSE), model)
 
   el <- mfsusieR:::Eloglik.mf_individual(data, model)
   expect_equal(out, el - sum(model$KL), tolerance = 1e-12)
@@ -178,9 +183,12 @@ test_that("get_objective returns Eloglik - sum(KL) + entropy_correction", {
 
 # ---- S3 registration on susieR namespace ---------------------
 
-test_that("update_variance_components / update_model_variance / Eloglik / get_objective registered on susieR generics", {
+test_that("update_variance_components / update_model_variance / Eloglik registered on susieR generics", {
+  # `get_objective` was deliberately removed from the per-class
+  # registration list when the trivial mfsusieR override was deleted in
+  # favour of dispatching to susieR's `get_objective.default`.
   for (g in c("update_variance_components", "update_model_variance",
-              "Eloglik", "get_objective")) {
+              "Eloglik")) {
     method_fn <- getS3method(g, "mf_individual",
                              optional = TRUE,
                              envir = asNamespace("susieR"))
@@ -214,6 +222,7 @@ test_that("Eloglik with per-scale sigma2 broadcasts via mf_sigma2_per_position",
 test_that("get_objective with per-scale sigma2 + non-uniform model$pi", {
   data  <- make_data_for_ev()
   model <- make_model_with_post(data)
+  class(data) <- c("mf_individual", "individual")
   for (m in seq_len(data$M)) {
     S_m <- length(data$scale_index[[m]])
     model$sigma2[[m]] <- seq_len(S_m) * 0.1
@@ -223,7 +232,7 @@ test_that("get_objective with per-scale sigma2 + non-uniform model$pi", {
   model$pi <- model$pi / sum(model$pi)
   model$KL <- runif(model$L, 0.1, 1)
 
-  out <- mfsusieR:::get_objective.mf_individual(data, list(), model)
+  out <- susieR:::get_objective(data, list(use_NIG = FALSE), model)
   expect_true(is.finite(out))
 
   el <- mfsusieR:::Eloglik.mf_individual(data, model)
@@ -248,7 +257,8 @@ test_that("M = 1 single modality: variance / Eloglik / objective all return fini
   el <- mfsusieR:::Eloglik.mf_individual(data, model)
   expect_true(is.finite(el))
 
-  obj <- mfsusieR:::get_objective.mf_individual(data, list(), model)
+  class(data) <- c("mf_individual", "individual")
+  obj <- susieR:::get_objective(data, list(use_NIG = FALSE), model)
   expect_true(is.finite(obj))
 })
 

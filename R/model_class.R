@@ -154,6 +154,28 @@ get_posterior_moments_l.mfsusie <- function(model, l) {
   )
 }
 
+#' Compact verbose-row formatting for the list-of-vectors `sigma2`
+#'
+#' susieR's default `format_sigma2_summary` formats a single scalar
+#' via `sprintf("%.4f", model$sigma2)`; mfsusieR's `sigma2` is a
+#' length-`M` list of either scalars (per-outcome scope) or
+#' length-`S_m` vectors (per-(scale, outcome) scope), so the default
+#' would crash. We collapse to a min/median/max summary for readable
+#' fixed-width verbose output.
+#'
+#' @keywords internal
+#' @noRd
+format_sigma2_summary.mfsusie <- function(model) {
+  vals <- unlist(model$sigma2, use.names = FALSE)
+  if (length(vals) == 0L) return("(empty)")
+  if (length(vals) <= 5L) {
+    paste0("[", paste(sprintf("%.3f", vals), collapse = ", "), "]")
+  } else {
+    sprintf("[%.3f, %.3f, %.3f]",
+            min(vals), stats::median(vals), max(vals))
+  }
+}
+
 #' Per-effect posterior mean curves (alpha-weighted mu)
 #'
 #' Returns a list of length M where element m is a `p x T_basis[m]`

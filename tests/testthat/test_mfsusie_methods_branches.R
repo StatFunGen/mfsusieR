@@ -182,8 +182,12 @@ test_that("mfsusie_plot emits a hint when multiple smoothings are stacked on the
   fit   <- build_small_fit()
   fit_s <- mf_post_smooth(fit, method = "TI")
   fit_s <- mf_post_smooth(fit_s, method = "HMM")
-  msg <- capture.output(mfsusie_plot(fit_s), type = "message")
-  expect_true(any(grepl("Other smoothings on this fit", msg)))
+  # testthat edition 3 captures the message stream itself; using
+  # `capture.output(..., type = "message")` returns an empty vector
+  # because testthat's reporter intercepts first. `expect_message()`
+  # is the idiomatic check.
+  expect_message(mfsusie_plot(fit_s),
+                 regexp = "Other smoothings on this fit")
 })
 
 test_that("mfsusie_plot_lfsr errors with a clean message when no HMM smoothing is on the fit", {
