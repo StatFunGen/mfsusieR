@@ -85,7 +85,10 @@ get_cs                     <- NULL
     # so the per-iteration line shows the list-of-vectors sigma2 in a
     # compact, fixed-width form rather than the default scalar
     # `sprintf("%.4f", model$sigma2)` (which would crash here).
-    "format_sigma2_summary"
+    "format_sigma2_summary",
+    # Extra diagnostic appended to the verbose row: per-iteration
+    # mixture-null-mass summary across (outcome, scale).
+    "format_extra_diag"
   )
   for (g in mfsusie_generics) {
     method_fn <- get(paste0(g, ".mfsusie"), envir = pkg_ns)
