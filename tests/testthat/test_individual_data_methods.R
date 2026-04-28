@@ -447,18 +447,10 @@ test_that("compute_kl identity: KL[l] == -lbf[l] - L_null + L_post", {
 
 # ---- neg_loglik wrapper ----------------------------------------------
 
-test_that("neg_loglik.mf_individual exponentiates V_param and negates loglik", {
-  data <- make_data()
-  model <- make_model_with_prior(data)
-  model <- mfsusieR:::compute_residuals.mf_individual(data, NULL, model, 1)
-  ser <- mfsusieR:::compute_ser_statistics.mf_individual(data, NULL, model, 1)
-
-  V_param <- log(0.7)
-  out <- mfsusieR:::neg_loglik.mf_individual(data, NULL, model, V_param, ser)
-  expected_V <- exp(V_param)
-  expected <- -mfsusieR:::loglik.mf_individual(data, NULL, model, expected_V, ser, l = NULL)
-  expect_equal(out, expected, tolerance = 1e-12)
-})
+# `neg_loglik` for `mf_individual` data dispatches via class
+# inheritance to `neg_loglik.individual` (susieR), which has
+# byte-equivalent body (`-loglik(...)` with V <- exp(V_param)).
+# No mfsusieR-specific override needed.
 
 # ---- .onLoad: S3 methods are registered on susieR's namespace -------
 
@@ -467,7 +459,7 @@ test_that("S3 methods on mf_individual are registered on susieR's generics", {
   # via `getS3method`, not top-level `exists`. Using
   # `optional = TRUE` so a missing entry returns NULL instead of erroring.
   for (g in c("compute_residuals", "compute_ser_statistics",
-              "calculate_posterior_moments", "loglik", "neg_loglik",
+              "calculate_posterior_moments", "loglik",
               "compute_kl", "SER_posterior_e_loglik",
               "update_fitted_values", "initialize_susie_model")) {
     method_fn <- getS3method(g, "mf_individual",

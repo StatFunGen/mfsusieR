@@ -240,8 +240,10 @@ test_that("get_alpha_l returns the l-th row of alpha", {
   model <- mfsusieR:::initialize_susie_model.mf_individual(data, params, var_y)
 
   # Mutate alpha to verify the accessor returns the actual row.
+  # `get_alpha_l` falls through to susieR's default for `mfsusie`
+  # model class -- no mfsusieR-specific override.
   model$alpha[2, ] <- seq_len(data$p)
-  expect_equal(mfsusieR:::get_alpha_l.mfsusie(model, 2),
+  expect_equal(susieR:::get_alpha_l.default(model, 2),
                seq_len(data$p), tolerance = 0)
 })
 
@@ -318,9 +320,11 @@ test_that("get_prior_variance_l returns the l-th entry of V", {
   var_y <- make_var_y(data$M, data$T_basis)
   model <- mfsusieR:::initialize_susie_model.mf_individual(data, params, var_y)
 
-  expect_identical(mfsusieR:::get_prior_variance_l.mfsusie(model, 1), 1)
+  # `get_prior_variance_l` falls through to susieR's default
+  # for the `mfsusie` model class.
+  expect_identical(susieR:::get_prior_variance_l.default(model, 1), 1)
   model$V[2] <- 7
-  expect_identical(mfsusieR:::get_prior_variance_l.mfsusie(model, 2), 7)
+  expect_identical(susieR:::get_prior_variance_l.default(model, 2), 7)
 })
 
 test_that("set_prior_variance_l updates V[l] and returns the model", {
@@ -329,7 +333,8 @@ test_that("set_prior_variance_l updates V[l] and returns the model", {
   var_y <- make_var_y(data$M, data$T_basis)
   model <- mfsusieR:::initialize_susie_model.mf_individual(data, params, var_y)
 
-  m1 <- mfsusieR:::set_prior_variance_l.mfsusie(model, 2, 5)
+  # `set_prior_variance_l` falls through to susieR's default.
+  m1 <- susieR:::set_prior_variance_l.default(model, 2, 5)
   expect_identical(m1$V[2], 5)
   expect_identical(m1$V[c(1, 3)], rep(1, 2))     # other effects unchanged
   expect_identical(class(m1), c("mfsusie", "susie"))

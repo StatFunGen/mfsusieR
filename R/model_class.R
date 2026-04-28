@@ -132,12 +132,6 @@ initialize_susie_model.mf_individual <- function(data, params, var_y, ...) {
 
 #' @keywords internal
 #' @noRd
-get_alpha_l.mfsusie <- function(model, l) {
-  model$alpha[l, ]
-}
-
-#' @keywords internal
-#' @noRd
 get_posterior_moments_l.mfsusie <- function(model, l) {
   list(
     mu  = model$mu[[l]],
@@ -182,15 +176,3 @@ get_posterior_mean_sum.mfsusie <- function(model) {
   out
 }
 
-#' @keywords internal
-#' @noRd
-get_prior_variance_l.mfsusie <- function(model, l) {
-  model$V[l]
-}
-
-#' @keywords internal
-#' @noRd
-set_prior_variance_l.mfsusie <- function(model, l, V) {
-  model$V[l] <- V
-  model
-}

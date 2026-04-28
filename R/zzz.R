@@ -46,7 +46,6 @@ get_cs                     <- NULL
     "compute_ser_statistics",
     "optimize_prior_variance",
     "loglik",
-    "neg_loglik",
     "calculate_posterior_moments",
     "compute_kl",
     "SER_posterior_e_loglik",
@@ -59,10 +58,8 @@ get_cs                     <- NULL
     "get_objective",
     "track_ibss_fit",
     "check_convergence",
-    "validate_prior",
     "trim_null_effects",
     # one-shot init / finalize
-    "configure_data",
     "get_var_y",
     "initialize_susie_model",
     "initialize_fitted",
@@ -72,7 +69,6 @@ get_cs                     <- NULL
     "get_scale_factors",
     "get_intercept",
     "get_fitted",
-    "get_cs",
     "get_variable_names",
     "get_zscore"
   )
@@ -83,12 +79,9 @@ get_cs                     <- NULL
 
   # Register S3 accessors for the `mfsusie` model class.
   mfsusie_generics <- c(
-    "get_alpha_l",
     "get_posterior_mean_l",
     "get_posterior_mean_sum",
-    "get_posterior_moments_l",
-    "get_prior_variance_l",
-    "set_prior_variance_l"
+    "get_posterior_moments_l"
   )
   for (g in mfsusie_generics) {
     method_fn <- get(paste0(g, ".mfsusie"), envir = pkg_ns)

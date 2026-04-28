@@ -325,19 +325,6 @@ compute_kl.mf_individual <- function(data, params, model, l, ...) {
   model
 }
 
-#' Negative log-likelihood for the V-optim caller
-#'
-#' Mirrors `neg_loglik.individual`. Converts the optim
-#' parameter from log-scale to V (per `compute_ser_statistics`'s
-#' `optim_scale = "log"`) and returns `-loglik(...)`.
-#'
-#' @keywords internal
-#' @noRd
-neg_loglik.mf_individual <- function(data, params, model, V_param, ser_stats, ...) {
-  V <- exp(V_param)
-  -loglik.mf_individual(data, params, model, V, ser_stats)
-}
-
 #' Per-outcome expected squared residuals
 #'
 #' Returns the length-`T_basis[m]` vector of per-position
