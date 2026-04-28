@@ -341,6 +341,99 @@ print.summary.mfsusie <- function(x, ...) {
   }
   invisible(x)
 }
+
+# ---- summarize_effects (affected-region accessor) ------------
+
+#' Per-(CS, outcome) regions where the credible band excludes zero
+#'
+#' Given an `mfsusie` fit that has been post-smoothed via
+#' `mf_post_smooth()`, returns one row per `(CS, outcome,
+#' contiguous-run)` triple identifying the position ranges
+#' where the smoothed credible band excludes zero. Useful as a
+#' compact diagnostic for "where on the curve does this CS act
+#' on this outcome?".
+#'
+#' @param fit an `mfsusie` / `fsusie()` fit. The fit must
+#'   carry post-smoothed credible bands; call
+#'   `mf_post_smooth(fit, method = ...)` first.
+#' @param smooth_method optional name of the smoother to read
+#'   from `fit$smoothed`. When `NULL` (default) the smoother
+#'   priority order is used: `"TI" > "smash" > "HMM" >
+#'   "scalewise"`.
+#' @return A data frame with columns
+#'   \describe{
+#'     \item{`cs_index`}{integer, the credible-set index
+#'       (1..length(fit$sets$cs_index)).}
+#'     \item{`outcome`}{integer, the outcome index `m`.}
+#'     \item{`start`, `end`}{integer position indices
+#'       defining the contiguous run on the
+#'       `T_basis[m]`-position grid where the band excludes
+#'       zero.}
+#'     \item{`n_positions`}{integer, run length
+#'       (`end - start + 1`).}
+#'   }
+#'   When no CS has any band-excludes-zero run, returns an
+#'   empty data frame with the same columns.
+#' @examples
+#' \donttest{
+#' set.seed(1L)
+#' n <- 100; p <- 20; T_m <- 32L
+#' X <- matrix(rnorm(n * p), n)
+#' beta <- numeric(p); beta[3] <- 1.2
+#' shape <- exp(-((seq_len(T_m) - T_m / 2)^2) / (2 * 6^2))
+#' Y <- X %*% (matrix(beta, p, 1) %*% matrix(shape, 1, T_m)) +
+#'        matrix(rnorm(n * T_m, sd = 0.3), n)
+#' fit <- fsusie(Y, X, L = 1, verbose = FALSE)
+#' fit_s <- mf_post_smooth(fit, method = "TI")
+#' mf_summarize_effects(fit_s)
+#' }
+#' @export
+mf_summarize_effects <- function(fit, smooth_method = NULL) {
+  if (!inherits(fit, "mfsusie")) {
+    stop("`fit` must be an `mfsusie` (or `fsusie`) fit object.")
+  }
+  picked <- .pick_smooth_method(fit, smooth_method)
+  if (is.null(picked)) {
+    stop("`fit` has no post-smoothed credible bands. Run ",
+         "`mf_post_smooth(fit, method = ...)` first.")
+  }
+  smoothed <- fit$smoothed[[picked]]
+  bands    <- smoothed$credible_bands
+  cs_idx   <- fit$sets$cs_index %||% integer(0L)
+  M        <- length(bands)
+
+  empty <- data.frame(
+    cs_index    = integer(0L),
+    outcome     = integer(0L),
+    start       = integer(0L),
+    end         = integer(0L),
+    n_positions = integer(0L)
+  )
+  if (length(cs_idx) == 0L) return(empty)
+
+  rows <- list()
+  for (m in seq_len(M)) {
+    bands_m <- bands[[m]]
+    for (i in seq_along(cs_idx)) {
+      l <- cs_idx[i]
+      band <- bands_m[[l]]
+      if (is.null(band)) next
+      runs <- affected_runs(band)
+      for (run in runs) {
+        rows[[length(rows) + 1L]] <- data.frame(
+          cs_index    = as.integer(i),
+          outcome     = as.integer(m),
+          start       = as.integer(run[1L]),
+          end         = as.integer(run[2L]),
+          n_positions = as.integer(run[2L] - run[1L] + 1L)
+        )
+      }
+    }
+  }
+  if (length(rows) == 0L) return(empty)
+  do.call(rbind, rows)
+}
+
 # Post-processing of effect curves on an `mfsusie` fit.
 #
 # `mf_post_smooth(fit)` returns the fit with three new slots:
