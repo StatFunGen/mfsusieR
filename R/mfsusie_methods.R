@@ -362,7 +362,7 @@ print.summary.mfsusie <- function(x, ...) {
 # Internal: per-position local false sign rate from a Gaussian
 # posterior summary. Returns `pnorm(-|mean| / sd)`, with sd
 # floored at machine epsilon to avoid divide-by-zero.
-.gaussian_lfsr <- function(mean, sd) {
+gaussian_lfsr <- function(mean, sd) {
   sd <- pmax(sd, .Machine$double.eps)
   stats::pnorm(-abs(mean) / sd)
 }
@@ -587,7 +587,7 @@ mf_post_smooth <- function(fit,
       var_w  <- pmax(mu2_w - mean_w^2, 0)
 
       shrunk_w <- if (T_m == 1L) mean_w else
-        .scalewise_soft_threshold(mean_w, sd = sqrt(var_w),
+        scalewise_soft_threshold(mean_w, sd = sqrt(var_w),
           scale_index = meta$scale_index[[m]],
           T_basis    = T_m,
           factor      = threshold_factor)
@@ -606,7 +606,7 @@ mf_post_smooth <- function(fit,
       mean_pos <- effect_curves[[m]][[l]]
       credible_bands[[m]][[l]] <- cbind(mean_pos - z_crit * sd_pos,
                                         mean_pos + z_crit * sd_pos)
-      lfsr_curves[[m]][[l]] <- .gaussian_lfsr(mean_pos, sd_pos)
+      lfsr_curves[[m]][[l]] <- gaussian_lfsr(mean_pos, sd_pos)
     }
   }
   list(effect_curves  = effect_curves,
@@ -647,13 +647,13 @@ mf_post_smooth <- function(fit,
       iso_pos <- Y_pos - .other_effects_pos(fit, m, exclude = l)
       x_eff   <- fit$X_eff[[l]]
 
-      out <- .univariate_ti_regression(iso_pos, x_eff,
+      out <- univariate_ti_regression(iso_pos, x_eff,
                                        wavelet_filter, wavelet_family,
                                        z_crit)
       effect_curves[[m]][[l]]  <- out$effect_estimate
       credible_bands[[m]][[l]] <- cbind(out$cred_band[2L, ],   # low
                                         out$cred_band[1L, ])   # up
-      lfsr_curves[[m]][[l]] <- .gaussian_lfsr(out$effect_estimate,
+      lfsr_curves[[m]][[l]] <- gaussian_lfsr(out$effect_estimate,
                                               out$fitted_sd)
     }
   }
@@ -709,7 +709,7 @@ mf_post_smooth <- function(fit,
 # cycle-spinning average for the point estimate. Returns
 # `effect_estimate` (length T_pos) and `cred_band` (2 x T_pos:
 # row 1 "up", row 2 "low").
-.univariate_ti_regression <- function(Y_pos, x_eff,
+univariate_ti_regression <- function(Y_pos, x_eff,
                                       filter_number, family,
                                       z_crit) {
   # Per-column SD normalisation: scale Y (per position) and X
@@ -842,7 +842,7 @@ mf_post_smooth <- function(fit,
 
 # Soft-threshold the packed wavelet vector per scale at
 # `factor * sd * sqrt(2 log T)`.
-.scalewise_soft_threshold <- function(coef_vec, sd, scale_index,
+scalewise_soft_threshold <- function(coef_vec, sd, scale_index,
                                       T_basis, factor) {
   out <- coef_vec
   T_eff <- T_basis

@@ -304,10 +304,10 @@ test_that("internal helpers handle the corner cases", {
 
   # .affected_mask handles NULL
   expect_identical(mfsusieR:::.affected_mask(NULL), logical(0))
-  # .affected_runs handles all-zero flags
+  # affected_runs handles all-zero flags
   band_no_flags <- cbind(rep(-1, 5L), rep(1, 5L))
-  expect_identical(mfsusieR:::.affected_runs(band_no_flags), list())
-  expect_identical(mfsusieR:::.affected_runs(NULL), list())
+  expect_identical(mfsusieR:::affected_runs(band_no_flags), list())
+  expect_identical(mfsusieR:::affected_runs(NULL), list())
 })
 
 test_that("mfsusie_plot save with svg path opens svg device", {

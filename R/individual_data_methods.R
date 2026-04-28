@@ -520,7 +520,7 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
   # mixsqp input. Truncation error is bounded by
   # `sum_{j outside} alpha_j * max_k(L_jk)`, well under floating-
   # point precision for typical concentrated posteriors. Set
-  # `mixsqp_alpha_eps = 0` to recover the full p-SNP behaviour.
+  # `mixsqp_alpha_eps = 0` to recover the full p-SNP behavior.
   alpha_eps <- params$mixsqp_alpha_eps %||% 1e-6
   keep_idx  <- if (alpha_eps > 0) which(zeta_l > alpha_eps)
                else seq_along(zeta_l)

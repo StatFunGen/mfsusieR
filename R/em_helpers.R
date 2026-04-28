@@ -57,7 +57,9 @@ mf_em_likelihood_per_scale <- function(bhat_slice, shat_slice, sd_grid,
   }
   log_L <- mf_em_log_likelihood_per_scale_cpp(bvec, sdmat, log_sdmat)
 
-  # NA imputation for ill-conditioned Shat (port-fidelity).
+  # NA imputation for ill-conditioned Shat: replace each NA
+  # column with the column median so mixsqp never sees an NA
+  # row weight.
   # Common case has no NAs; skip the imputation entirely. When NAs
   # are present, replace each per-column with the column median in
   # a vectorised pass instead of iterating R-level over columns.

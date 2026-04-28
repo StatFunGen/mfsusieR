@@ -138,12 +138,12 @@ test_that("mf_cs_colors honors n_cs = 0 and small palettes", {
   expect_true(length(unique(pal)) >= 4L)
 })
 
-test_that(".affected_runs and .affected_mask handle non-empty bands", {
+test_that("affected_runs and .affected_mask handle non-empty bands", {
   # A band where (lower > 0) OR (upper < 0) at a contiguous run.
   band <- cbind(
     c(-1,  0.1, 0.2, 0.3,  0,  -0.5, -0.4),
     c( 0,  0.5, 0.6, 0.7,  0,  -0.1, -0.05))
-  runs <- mfsusieR:::.affected_runs(band)
+  runs <- mfsusieR:::affected_runs(band)
   expect_length(runs, 2L)
   expect_equal(runs[[1L]], c(2L, 4L))
   expect_equal(runs[[2L]], c(6L, 7L))

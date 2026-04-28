@@ -77,7 +77,7 @@ mf_cs_colors <- function(n_cs) {
 
 # Contiguous (start, end) runs where the credible band excludes
 # zero. Returns a list of integer index pairs into `pos`.
-.affected_runs <- function(band) {
+affected_runs <- function(band) {
   if (is.null(band)) return(list())
   flag <- band[, 1L] > 0 | band[, 2L] < 0
   if (!any(flag)) return(list())
@@ -200,7 +200,7 @@ mf_cs_colors <- function(n_cs) {
   bar_y    <- yrange[1L]
   bar_step <- 0.03 * diff(yrange)
   for (i in seq_along(bands)) {
-    runs <- .affected_runs(bands[[i]])
+    runs <- affected_runs(bands[[i]])
     if (length(runs) == 0L) next
     y_i <- bar_y + (i - 1L) * bar_step
     for (rg in runs) {
@@ -1112,7 +1112,7 @@ mfsusie_plot_lfsr <- function(fit,
   }
   per_outcome_truth <- normalize_truth(truth, M)
 
-  # Top-margin strip holds the size + colour legend (under the
+  # Top-margin strip holds the size + color legend (under the
   # title). The panel mar reserves an extra ~3 lines on top
   # when the legend is enabled.
   # Top-margin lines: when the legend strip is shown, reserve

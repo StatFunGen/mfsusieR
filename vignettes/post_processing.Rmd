@@ -21,7 +21,7 @@ knitr::opts_chunk$set(
 ## Why post-process
 
 `mfsusie()` and `fsusie()` fit the model in the wavelet domain. The
-per-effect posterior is summarised by `coef(fit)`, which inverts the
+per-effect posterior is summarized by `coef(fit)`, which inverts the
 wavelet representation back to position space. The raw inverse curve
 is correct but visually wiggly: small fine-scale wavelet coefficients
 contribute pointwise noise that obscures the underlying shape, and
