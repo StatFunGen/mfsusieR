@@ -510,6 +510,18 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
   control    <- params$control_mixsqp %||% list()
   zeta_l     <- model$alpha[l, ]
 
+  # Adaptive variant subsetting: drop SNPs where the SuSiE per-
+  # effect posterior alpha is below `mixsqp_alpha_eps` from the
+  # mixsqp input. Truncation error is bounded by
+  # `sum_{j outside} alpha_j * max_k(L_jk)`, well under floating-
+  # point precision for typical concentrated posteriors. Set
+  # `mixsqp_alpha_eps = 0` to recover the full p-SNP behaviour.
+  alpha_eps <- params$mixsqp_alpha_eps %||% 1e-6
+  keep_idx  <- if (alpha_eps > 0) which(zeta_l > alpha_eps)
+               else seq_along(zeta_l)
+  if (length(keep_idx) < 1L) keep_idx <- which.max(zeta_l)
+  zeta_keep <- zeta_l[keep_idx]
+
   cache <- model$em_cache
   for (m in seq_len(data$M)) {
     bhat_m <- ser_stats$betahat[[m]]
@@ -525,14 +537,34 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
     for (s in seq_along(G_m)) {
       idx     <- G_m[[s]]$idx
       sd_grid <- G_m[[s]]$fitted_g$sd
+      bhat_sub <- bhat_m[keep_idx, idx, drop = FALSE]
+      shat_sub <- shat_m[keep_idx, idx, drop = FALSE]
+      sdmat_sub <- if (!is.null(cache_m_sdmat[[s]])) {
+        # The cached sdmat is laid out in column-major order over
+        # (j = 1..p, t in idx). Restrict to rows corresponding to
+        # `keep_idx`. The full sdmat is `(p * |idx|) x K`; the
+        # subset is `(length(keep_idx) * |idx|) x K`.
+        p_full <- length(zeta_l)
+        row_keep <- as.vector(outer(keep_idx,
+                                    (seq_along(idx) - 1L) * p_full,
+                                    "+"))
+        cache_m_sdmat[[s]][row_keep, , drop = FALSE]
+      } else NULL
+      log_sdmat_sub <- if (!is.null(cache_m_log_sdmat[[s]])) {
+        p_full <- length(zeta_l)
+        row_keep <- as.vector(outer(keep_idx,
+                                    (seq_along(idx) - 1L) * p_full,
+                                    "+"))
+        cache_m_log_sdmat[[s]][row_keep, , drop = FALSE]
+      } else NULL
       L_mat <- mf_em_likelihood_per_scale(
-        bhat_slice      = bhat_m[, idx, drop = FALSE],
-        shat_slice      = shat_m[, idx, drop = FALSE],
+        bhat_slice      = bhat_sub,
+        shat_slice      = shat_sub,
         sd_grid         = sd_grid,
-        sdmat_cache     = cache_m_sdmat[[s]],
-        log_sdmat_cache = cache_m_log_sdmat[[s]])
+        sdmat_cache     = sdmat_sub,
+        log_sdmat_cache = log_sdmat_sub)
       new_pi <- mf_em_m_step_per_scale(
-        L_mat, zeta_l, idx_size = length(idx),
+        L_mat, zeta_keep, idx_size = length(idx),
         mixsqp_null_penalty = mixsqp_null_penalty,
         control_mixsqp = control)
       model$G_prior[[m]][[s]]$fitted_g$pi <- new_pi

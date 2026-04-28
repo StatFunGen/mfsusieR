@@ -34,6 +34,7 @@ mfsusie(
   quantile_norm = FALSE,
   control_mixsqp = NULL,
   mixsqp_null_penalty = 0.1,
+  mixsqp_alpha_eps = 1e-06,
   model_init = NULL,
   small_sample_correction = FALSE,
   attach_smoothing_inputs = TRUE
@@ -153,6 +154,13 @@ null:data balance stays invariant as the per-effect SNP
 posterior concentrates linearly in \code{M}; single-outcome fits
 are unchanged.
 Default 0.7.}
+
+\item{mixsqp_alpha_eps}{numeric, threshold below which a SNP's
+per-effect posterior \code{alpha[l, j]} is dropped from the
+mixsqp M-step input. The truncation error on the M-step
+gradient is bounded by \verb{sum_\{j outside\} alpha_j * max_k(L_jk)}, well under floating-point precision for
+typical concentrated SuSiE posteriors. Set to \code{0} to use
+every SNP regardless of \code{alpha[l, j]}. Default \code{1e-6}.}
 
 \item{model_init}{optional \code{mfsusie} fit object from a prior
 call. When supplied, the IBSS loop is seeded from the
