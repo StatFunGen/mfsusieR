@@ -63,15 +63,75 @@ identified the gaps. This section ports them.
 - [ ] 2a.2 Roxygen + a unit test on a fixture with known
   causal SNPs at known positions.
 
-### 2b. Yuan 2024 post-hoc causal configurations
+### 2b. `susie_get_configurations()` in susieR (stage, user commits)
 
-- [ ] 2b.1 New function `mf_posthoc_configurations(fit, ...)`
-  that takes a fit and returns posterior probability over
-  the 2^L causal configurations.
-- [ ] 2b.2 Implement in pure R first.
-- [ ] 2b.3 If a real fixture measures slow at typical L
-  (say > 100 ms), evaluate cpp11 port. For L <= 15 expect
-  pure R sufficient.
+Generic susie-side utility that subsumes
+`coloc::coloc.bf_bf` (N=2 pairwise) and Yuan 2024 (N>=3
+full lattice). Stages in `~/GIT/susieR/`; user reviews and
+commits manually (matches the §3d susieR-patch workflow).
+
+Signature:
+
+```r
+susie_get_configurations(
+  fits,                          # list of N: full fits or
+                                 # list(lbf_variable, alpha?, sets?)
+  variable_map     = NULL,
+  cs_only          = TRUE,
+  pairwise_priors  = list(p_single = 1e-4, p_shared = 5e-6),
+  marginalization  = c("alpha", "uniform"),
+  hypothesis_grid  = c("pairwise", "full_lattice"),
+  max_lattice      = NULL
+)
+```
+
+- [ ] 2b.1 Implement `susie_get_configurations()` and
+  `susie_get_configurations.default` in
+  `~/GIT/susieR/R/`. Pure R, ~150 LOC.
+- [ ] 2b.2 Lightweight input contract: each list element is
+  either a full susie/mvsusie/mfsusie fit OR a list with
+  required `$lbf_variable` (L x p), optional `$alpha`
+  (required if `marginalization = "alpha"`), optional
+  `$sets` (must follow susieR's exact format: `$cs` is a
+  named list with `L<i>` names; `$cs_index` is an integer
+  vector). The `$sets` field is REQUIRED when
+  `cs_only = TRUE`; the function errors out otherwise.
+- [ ] 2b.3 Per-fit fallback for `marginalization`: if a fit
+  lacks `$alpha` but the global setting is `"alpha"`, the
+  function uses `"uniform"` for THAT fit only with a
+  `warning_message` naming the fit.
+- [ ] 2b.4 N=2 default: `hypothesis_grid = "pairwise"`,
+  emitting a coloc-style summary with `PP.H0..PP.H4`
+  columns. Reproduces `coloc::coloc.bf_bf` to floating-
+  point in golden-value tests.
+- [ ] 2b.5 N>=3 default: `hypothesis_grid = "full_lattice"`,
+  emitting a `2^N` per-tuple posterior matrix with column
+  names `H0..H_(2^N-1)`.
+- [ ] 2b.6 `max_lattice = NULL`: defaults to 20 internally.
+  When `length(fits) > max_lattice`, emit a
+  `warning_message` prompting the user to set the parameter
+  to confirm intent (any value >= N silences the warning).
+- [ ] 2b.7 Add unit tests in
+  `~/GIT/susieR/tests/testthat/test_susie_get_configurations.R`
+  covering: N=2 coloc parity, N>=3 lattice shape,
+  lightweight-input mode, per-fit alpha fallback,
+  cs_only error when sets absent, max_lattice warning.
+- [ ] 2b.8 Run `~/GIT/susieR` test suite; expect no
+  regressions. STAGE ONLY. Do not commit. User reviews.
+
+### 2b'. mfsusieR S3 method for the generic
+
+After user commits the susieR change:
+
+- [ ] 2b'.1 Add `susie_get_configurations.mfsusie()` (or
+  similar dispatch class) in
+  `R/mfsusie_methods.R`. Body: extract `lbf_variable`,
+  `alpha` (alpha-weighted aggregate over outcomes if needed),
+  and `sets` from the mfsusie fit; delegate to the susieR
+  generic's default via `NextMethod()`.
+- [ ] 2b'.2 Run mfsusieR test suite + 3-auditor humanize
+  step.
+- [ ] 2b'.3 Commit.
 
 ### 2c. `simu_IBSS_ash_vanilla` simulation helper
 

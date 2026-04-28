@@ -121,6 +121,51 @@ functional for one minor version.
 - **AND** the fit SHALL run as if `greed_lbf_cutoff = 0.3` had
   been passed.
 
+### Requirement: `susie_get_configurations()` SHALL be the canonical multi-fit configuration utility
+
+`susieR::susie_get_configurations()` SHALL accept a list of N
+susie-family fits (or lightweight `list(lbf_variable, alpha,
+sets)` triples) and return a posterior over per-fit
+causal-set configurations. Defaults SHALL be
+`marginalization = "alpha"`, `cs_only = TRUE`, and
+`hypothesis_grid = "pairwise"` for N=2 / `"full_lattice"`
+for N>=3. The `cs_only = TRUE` path SHALL error out when a
+fit's `sets` field is absent. The function SHALL reproduce
+`coloc::coloc.bf_bf` at floating-point precision when called
+with `marginalization = "uniform"` and
+`hypothesis_grid = "pairwise"` on two-fit input.
+
+#### Scenario: drop-in for coloc.bf_bf at N=2
+
+- **WHEN** a user runs
+  `susie_get_configurations(list(fit1, fit2),
+   marginalization = "uniform")` with two susie fits
+- **THEN** the returned `summary` data frame SHALL contain
+  columns `PP.H0`, `PP.H1`, `PP.H2`, `PP.H3`, `PP.H4`,
+  matching `coloc::coloc.bf_bf(fit1$lbf_variable[fit1$sets$cs_index, ],
+  fit2$lbf_variable[fit2$sets$cs_index, ])` at
+  `tol = 1e-12`.
+
+#### Scenario: full lattice at N>=3 via Yuan 2024
+
+- **WHEN** a user runs
+  `susie_get_configurations(list(fit1, fit2, fit3))`
+  on three susie fits each carrying `alpha`
+- **THEN** the returned `configurations` matrix SHALL be
+  `2^3 = 8` rows by ntuples columns
+- **AND** column names SHALL be `H0`, `H1`, ..., `H7`
+  encoding the 3-bit binary configuration.
+
+#### Scenario: cs_only error when sets absent
+
+- **WHEN** a user calls
+  `susie_get_configurations(list(list(lbf_variable = LBF,
+   alpha = A)), cs_only = TRUE)` with no `sets` field on
+  the lightweight input
+- **THEN** the function SHALL stop with an error message
+  naming the fit and explaining the `sets` field is
+  required for `cs_only = TRUE`.
+
 ### Requirement: HMM smoother SHALL return a credible band
 
 `mf_post_smooth(method = "HMM")` SHALL populate
