@@ -41,6 +41,14 @@ jobs:
           GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
         run: pixi run --environment ${{ matrix.environment }} --manifest-path /tmp/pixi/pixi.toml R -e 'remotes::install_github("stephenslab/susieR", upgrade = "never")'
 
+      - name: Install coloc (CI-only, for cross-check tests)
+        # coloc is intentionally NOT in DESCRIPTION Suggests; it is
+        # used only by the susie_post_outcome_configuration pairwise
+        # cross-check test, which is skipped when coloc is unavailable.
+        env:
+          GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+        run: pixi run --environment ${{ matrix.environment }} --manifest-path /tmp/pixi/pixi.toml R -e 'install.packages("coloc", repos = "https://cloud.r-project.org")'
+
       - name: Run unit tests
         run: pixi run --environment ${{ matrix.environment }} --manifest-path /tmp/pixi/pixi.toml devtools_test
 
@@ -81,6 +89,11 @@ jobs:
         env:
           GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
         run: pixi run --environment ${{ matrix.environment }} --manifest-path /tmp/pixi/pixi.toml R -e 'remotes::install_github("stephenslab/susieR", upgrade = "never")'
+
+      - name: Install coloc (CI-only, for cross-check tests)
+        env:
+          GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+        run: pixi run --environment ${{ matrix.environment }} --manifest-path /tmp/pixi/pixi.toml R -e 'install.packages("coloc", repos = "https://cloud.r-project.org")'
 
       - name: Run unit tests
         run: pixi run --environment ${{ matrix.environment }} --manifest-path /tmp/pixi/pixi.toml devtools_test
