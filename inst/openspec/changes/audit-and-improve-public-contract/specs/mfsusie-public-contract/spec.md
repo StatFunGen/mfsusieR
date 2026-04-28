@@ -2,12 +2,16 @@
 
 ## ADDED Requirements
 
-### Requirement: trivial S3 overrides SHALL be removed
+### Requirement: every S3 override SHALL fall into one of three classes
 
-Each S3 method registered for `mf_individual` or `mfsusie` SHALL be retained only when its body materially diverges from
-`susieR`'s default for that generic. Methods whose body
-reproduces or trivially wraps the default SHALL be removed and
-the generic SHALL fall through to `susieR`'s default.
+Every `*.mf_individual` or `*.mfsusie` S3 override SHALL be
+classified as `delete-and-inherit` (drop the override; susieR's
+default fires), `patch-susieR-and-delete` (open an upstream
+hook in susieR, then delete the override once the upstream
+patch lands), or `keep` (real, irreducible divergence;
+documented with a one-line rationale comment in the body).
+Overrides whose body trivially wraps the default SHALL NOT
+remain in the codebase.
 
 #### Scenario: a removed override defers to susieR's default
 
@@ -18,6 +22,20 @@ the generic SHALL fall through to `susieR`'s default.
   `g.default()` from susieR
 - **AND** the resulting `mfsusie()` fit on the standard test
   fixtures SHALL be byte-identical to the pre-removal fit.
+
+### Requirement: the `V` field SHALL be retired from the fit object
+
+`mfsusie()` SHALL NOT carry a `V` field on the returned object.
+Per-effect prior adaptation in mfsusieR is in the mixture
+weights `pi_V`; the scalar `V` was held at 1 for all effects
+and provided no diagnostic value. `summary.mfsusie()` SHALL
+provide a one-line summary of `pi_V` (e.g., null-component
+mass quantiles across (m, s) groups) instead.
+
+#### Scenario: V field absent
+
+- **WHEN** the user calls `names(mfsusie(X, Y, ...))`
+- **THEN** `"V"` SHALL NOT be in the returned names.
 
 ### Requirement: `verbose = TRUE` SHALL emit susieR's per-iteration tabular output
 

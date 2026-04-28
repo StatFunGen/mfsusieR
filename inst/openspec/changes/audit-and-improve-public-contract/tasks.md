@@ -4,9 +4,18 @@ Each section below produces its own commit. Sections are
 ordered to land independent / read-only audits first, then
 commit-shaped fixes.
 
-## 1. Fit-field trim and documentation -- NO-OP
+## 1. Diagnosis-field cleanup
 
-Decision: fit object stays as is. No tasks.
+- [ ] 1.1 Retire `V` from the fit object (held at 1, not
+  informative). Update `cleanup_model.mf_individual` to
+  not carry it, and update any test that asserts on
+  `fit$V`.
+- [ ] 1.2 Add a `summary.mfsusie()` line that summarizes
+  `pi_V` (e.g., per-(m, s) null mass min/median/max). One
+  line of output, useful for diagnosing prior collapse.
+- [ ] 1.3 Document `sigma2` shape (`list[M]` of
+  length-`S_m`, or scalar when `residual_variance_scope =
+  "per_outcome"`) in the `mfsusie()` `@return` block.
 
 ## 2. Feature gap with `fsusieR` / `mvf.susie.alpha`
 
@@ -20,17 +29,45 @@ Decision: fit object stays as is. No tasks.
   with the table; classify each gap as `port-now` /
   `port-if-asked` / `out-of-scope`. No code change here.
 
-## 3. Trim trivial S3 overrides
+## 3. Maximize susieR backbone (delete-or-patch)
 
-- [ ] 3.1 List every `*.mf_individual` and `*.mfsusie` S3
-  method registered in `R/zzz.R`. For each, identify whether
-  the body diverges from `susieR`'s default or just calls
-  super-equivalent code.
-- [ ] 3.2 For trivial overrides, drop the override. Re-test;
-  expect 1188 PASS unchanged.
-- [ ] 3.3 List anything in `susieR` that looks miscalibrated
-  or redundant during the review; surface in the audit note
-  for separate upstream-PR discussion.
+### 3a. Audit S3 overrides
+
+- [ ] 3a.1 List every `*.mf_individual` and `*.mfsusie` S3
+  method registered in `R/zzz.R`.
+- [ ] 3a.2 For each, classify as `delete-and-inherit`
+  (trivial wrapper / reproduces default),
+  `patch-susieR-and-delete` (small divergence that susieR
+  could parameterize via a hook), or `keep` (real
+  divergence).
+- [ ] 3a.3 Record decisions in
+  `inst/notes/sessions/<date>-s3-override-audit.md` with
+  one-line rationales.
+
+### 3b. Apply delete-and-inherit
+
+- [ ] 3b.1 For each override classified as
+  `delete-and-inherit`, drop the override. Confirm
+  `devtools::test()` passes.
+- [ ] 3b.2 Verify on a fixture that the susieR default
+  produces byte-identical output to the pre-deletion
+  override.
+
+### 3c. Plan patch-susieR-and-delete
+
+- [ ] 3c.1 For each override classified as
+  `patch-susieR-and-delete`, write a one-paragraph susieR
+  patch sketch (what generic / option to add upstream).
+- [ ] 3c.2 Attach to a tracking note for separate upstream
+  coordination per the CLAUDE.md `feature/L_greedy`
+  pattern. Do NOT edit susieR in this change without
+  explicit user approval.
+
+### 3d. Document survivors
+
+- [ ] 3d.1 For each override classified as `keep`, add a
+  one-line comment at the top of the body stating the
+  divergence reason.
 
 ## 4. Verbose output, susieR-arg parity, parameter renames
 
@@ -96,6 +133,22 @@ Decision: fit object stays as is. No tasks.
   customization, drop the override and let
   `get_cs.default` fire.
 - [ ] 4f.2 Re-test; expect 0 failures.
+
+### 4g. Per-iter extra-diag columns (depends on susieR patch)
+
+- [ ] 4g.1 Sketch the susieR patch: add a
+  `format_extra_diag(model)` generic called from
+  `check_convergence.default` that returns extra columns
+  (default empty string).
+- [ ] 4g.2 Coordinate with user on susieR PR.
+- [ ] 4g.3 Once the susieR patch lands, override
+  `format_extra_diag.mfsusie()` to return columns:
+  `max_pi_null` (largest null-component mass across (m, s)),
+  `max_KL_l`, and `n_eff` from alpha entropy. Each one
+  number per iter.
+- [ ] 4g.4 If the susieR patch is rejected or delayed, drop
+  4g.3 and document the gap in
+  `inst/notes/refactor-exceptions.md`.
 
 ## 5. HMM credible band
 
