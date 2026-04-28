@@ -123,13 +123,13 @@ affected_runs <- function(band) {
   pur  <- fit$sets$purity
   parts <- character()
   if (!is.null(cov) && length(cov) == 1L && is.finite(cov))
-    parts <- c(parts, sprintf("coverage %g%%", 100 * cov))
+    parts <- c(parts, sprintf("%g%% CS", 100 * cov))
   pur_min <- if (is.data.frame(pur) && "min.abs.corr" %in% colnames(pur))
     suppressWarnings(min(pur$min.abs.corr, na.rm = TRUE)) else NA_real_
   if (is.finite(pur_min))
-    parts <- c(parts, sprintf("min |r| %.2f", pur_min))
+    parts <- c(parts, sprintf("min(|r|)=%.2f", pur_min))
   if (length(parts) > 0L)
-    sprintf("%s\n(%s)", base, paste(parts, collapse = ", "))
+    sprintf("%s (%s)", base, paste(parts, collapse = ", "))
   else
     base
 }
@@ -646,38 +646,40 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
     if (m < 1L || m > M) stop(sprintf("`m` must be in 1..%d.", M))
     facet_res <- resolve_facet_for(m)
     if (facet_res == "stack" && K >= 2L) {
-      layout(matrix(seq_len(K), ncol = 1L), heights = rep(1, K))
+      layout(matrix(seq_len(K), ncol = 1L))
       on.exit(layout(1L), add = TRUE)
-      op <- par(mar = c(2.5, 4, 1.8, 4),
-                oma = c(2.5, 0, 1.8, 0))
+      op <- par(mar = c(2.5, 4, 1.6, 4),
+                oma = c(2.5, 0, 1.6, 0))
       on.exit(par(op), add = TRUE)
       draw_stack_cells(m, main_outer = .outcome_main(fit, m))
     } else {
-      op <- par(mar = c(4, 4, 2.5, 4))
+      op <- par(mar = c(3.8, 4, 1.6, 4))
       on.exit(par(op), add = TRUE)
       draw_overlay_cell(m)
     }
     return(invisible(NULL))
   }
 
-  # Spacing policy: in any layout that combines a PIP cell with
-  # effect cells, the PIP cell is allocated 1.5x the height of a
-  # single effect cell. The PIP cell carries more axis content
-  # (the variable axis, the CS legend, the threshold line) than
-  # an effect cell and looks visibly squeezed at equal weight,
-  # especially when the effect region is split into K stacked
-  # CS panels.
-  pip_weight <- 1.5
+  # Layout policy: every cell -- PIP and effect alike -- gets the
+  # same vertical share. `mfsusie_plot_dimensions()` returns a
+  # height = `n_cells * min_cell_height`, and uniform layout
+  # weights make that heuristic match what `layout()` actually
+  # delivers (so each cell really gets `min_cell_height` of
+  # space, not less). Per-panel margins (`mar`) are kept tight so
+  # the data plotting area receives ~2/3 of the cell, with the
+  # remaining ~1/3 spent on title + axis labels. Title cell-axis
+  # content lives in the panel; the per-CS color legend is moved
+  # to the figure top via `oma` + `mtext` rather than competing
+  # with data inside any single panel.
 
   # M = 1: PIP on top, effect region below. Effect region is
   # one overlay cell or K stacked cells per the facet resolver.
   if (M == 1L) {
     facet_res       <- resolve_facet_for(1L)
     n_effect_panels <- if (facet_res == "stack" && K >= 2L) K else 1L
-    layout(matrix(seq_len(1L + n_effect_panels), ncol = 1L),
-           heights = c(pip_weight, rep(1.0, n_effect_panels)))
+    layout(matrix(seq_len(1L + n_effect_panels), ncol = 1L))
     on.exit(layout(1L), add = TRUE)
-    op <- par(mar = c(4, 4, 2.5, 4))
+    op <- par(mar = c(3.8, 4, 1.6, 4))
     on.exit(par(op), add = TRUE)
     .draw_pip(fit, pos = pos, add_legend = add_legend)
     if (n_effect_panels == 1L) {
@@ -696,10 +698,9 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
   #   else: tiled grid, PIP in the top-left slot, M overlay cells.
   if (facet_cs == "stack" && K >= 2L) {
     n_cells <- 1L + M * K
-    layout(matrix(seq_len(n_cells), ncol = 1L),
-           heights = c(pip_weight, rep(1.0, M * K)))
+    layout(matrix(seq_len(n_cells), ncol = 1L))
     on.exit(layout(1L), add = TRUE)
-    op <- par(mar = c(4, 4, 2.5, 4))
+    op <- par(mar = c(3.8, 4, 1.6, 4))
     on.exit(par(op), add = TRUE)
     .draw_pip(fit, pos = pos, add_legend = add_legend)
     for (mi in seq_len(M)) {
@@ -714,7 +715,7 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
   n_panels <- M + 1L
   cols     <- ceiling(sqrt(n_panels))
   rows     <- ceiling(n_panels / cols)
-  op <- par(mfrow = c(rows, cols), mar = c(4, 4, 2.5, 4))
+  op <- par(mfrow = c(rows, cols), mar = c(3.8, 4, 1.6, 4))
   on.exit(par(op), add = TRUE)
 
   .draw_pip(fit, pos = pos, add_legend = add_legend)
@@ -769,10 +770,17 @@ plot.mfsusie <- function(x, ...) {
 #' setting `fig.width` / `fig.height` in a knitr chunk so each
 #' panel has enough vertical space to render legibly.
 #'
-#' Heuristics: `min_pip_height` (default 1.6 in) for the PIP
-#' cell, `min_cell_height` (default 1.5 in) for each effect
-#' cell. The PIP cell carries 1.5x the height weight of an
-#' effect cell. The recommended figure width defaults to
+#' Sizing principle: each cell rendered by `mfsusie_plot()` is a
+#' base-graphics panel with a fixed margin overhead (top title +
+#' bottom axis labels = ~1.0 inch) plus the actual data plotting
+#' area. `min_cell_height` is the **total** allotted height per
+#' cell — set it to the desired plotting area (~1.6 in) plus the
+#' ~1.0 in margin overhead. The defaults (3.0 in per cell) leave
+#' ~2.0 in of plot area, which is the visual sweet spot for the
+#' effect curve + lfsr-overlay panels emitted by TI / HMM
+#' smoothings. PIP and effect cells use the SAME total height so
+#' that the underlying `layout()` weights (uniform) match the
+#' returned `height`. The recommended figure width defaults to
 #' `width = 8` inches.
 #'
 #' @param fit a fit returned by `mfsusie()` or `fsusie()`.
@@ -803,8 +811,8 @@ mfsusie_plot_dimensions <- function(fit, m = NULL,
                                     facet_cs = c("auto", "stack",
                                                  "overlay"),
                                     smooth_method = NULL,
-                                    min_pip_height = 2.2,
-                                    min_cell_height = 2.0,
+                                    min_pip_height = 3.0,
+                                    min_cell_height = 3.0,
                                     width = 8) {
   if (!inherits(fit, "mfsusie")) {
     stop("`fit` must be an `mfsusie` (or `fsusie`) fit object.")
@@ -837,17 +845,26 @@ mfsusie_plot_dimensions <- function(fit, m = NULL,
     n_cells <- 1L + M * K
     has_pip <- TRUE
   } else {
-    # Tiled grid layout: ceiling(sqrt(M+1)) x ceiling((M+1)/cols)
+    # Tiled grid layout: ceiling(sqrt(M+1)) x ceiling((M+1)/cols).
+    # Width: just `width` in (panels share the figure width via
+    # mfrow); horizontal overhead per panel is dominated by the
+    # left-axis label, which fits within the column.
     n_panels <- M + 1L
     cols     <- ceiling(sqrt(n_panels))
     rows     <- ceiling(n_panels / cols)
     return(list(
-      width   = max(width, cols * min_cell_height),
-      height  = max(min_cell_height, rows * min_cell_height),
+      width   = width,
+      height  = rows * min_cell_height,
       n_cells = n_panels))
   }
 
   effect_cells <- n_cells - as.integer(has_pip)
+  # Uniform per-cell height: the layout in `mfsusie_plot` uses
+  # uniform weights, so the heuristic must too. Returning a height
+  # of `n_cells * min_cell_height` means each cell actually
+  # receives `min_cell_height` of vertical space (was the earlier
+  # bug: `pip_weight = 1.5` skewed layout, so every effect cell
+  # received less than `min_cell_height`).
   height <- (if (has_pip) min_pip_height else 0) +
             effect_cells * min_cell_height
   list(width = width, height = height, n_cells = n_cells)
@@ -878,11 +895,15 @@ mfsusie_plot_lfsr_dimensions <- function(fit, add_legend = TRUE) {
   K    <- length(fit$sets$cs %||% list())
   cols <- ceiling(sqrt(M))
   rows <- ceiling(M / cols)
-  width  <- max(6, 4 * cols)
-  # Extra header strip when legend is on: title (~1 line) +
-  # legend row (~1 line) + spacing -> ~2.5 in.
-  height <- max(3, 0.6 * max(K, 1L) * rows +
-                  (if (isTRUE(add_legend)) 2.5 else 1))
+  # Legend now lives in the right margin (one column-equivalent
+  # of horizontal space, about 2.0 in) instead of the top margin,
+  # so we trade vertical for horizontal real estate.
+  legend_width <- if (isTRUE(add_legend)) 2.0 else 0
+  width  <- max(6, 4 * cols) + legend_width
+  # Per-CS row deserves about 0.9 in vertical space so bubbles
+  # have room to grow at high `-log10(lfsr)` without overlapping
+  # neighboring CS rows. Title + bottom axis adds ~1.5 in.
+  height <- max(3, 0.9 * max(K, 1L) * rows + 1.5)
   list(width = width, height = height, cols = cols, rows = rows)
 }
 
@@ -935,11 +956,10 @@ mfsusie_plot_lfsr_dimensions <- function(fit, add_legend = TRUE) {
        ylim = c(0.5, K + 0.5),
        xlab = "outcome position", ylab = "credible set",
        yaxt = "n", main = "", las = 1)
-  # Title sits above the legend strip so neither overlaps the
-  # plot box. `mtext` uses margin-line coordinates: line = 4 is
-  # the top of the reserved top margin, line = 1.2 is the strip
-  # between the panel and the title used by the legend rows.
-  mtext(main, side = 3L, line = 4.0, cex = 1.05, font = 2L)
+  # Title sits close to the plot box (line = 0.6) -- the legend
+  # has been moved to the right margin (see below) so the top
+  # margin is reserved only for the title.
+  mtext(main, side = 3L, line = 0.6, cex = 1.05, font = 2L)
   axis(2, at = seq_len(K), labels = paste0("CS", seq_len(K)),
        las = 1)
   abline(h = seq_len(K), lty = 3, col = "grey85")
@@ -971,27 +991,26 @@ mfsusie_plot_lfsr_dimensions <- function(fit, add_legend = TRUE) {
   }
 
   if (add_legend) {
-    # Both legends sit horizontally just below the title and
-    # ABOVE the plot box, in the reserved top margin. `xpd = NA`
-    # lets `legend()` draw beyond the panel; positioning uses
-    # `par("cxy")` (character size in user coordinates) so the
-    # offset is measured in margin lines, not panel fractions.
+    # Both legends are stacked vertically in the right margin,
+    # outside the plot box. `xpd = NA` lets `legend()` draw
+    # beyond the panel; the x-anchor sits one character-width
+    # past the right edge of the data area, so the legend
+    # column does not collide with the bubble grid.
     op_xpd <- par(xpd = NA); on.exit(par(op_xpd), add = TRUE)
     usr <- par("usr")
     cxy <- par("cxy")
-    x_left  <- usr[1L]
-    x_mid   <- usr[1L] + 0.55 * (usr[2L] - usr[1L])
-    # Bottom of the legend rests ~1.4 char-heights above the
-    # top of the panel; the title sits ~2.6 char-heights above
-    # that (at line = 4.0).
-    y_above <- usr[4L] + 1.4 * cxy[2L]
+    x_legend <- usr[2L] + 1.0 * cxy[1L]
+    # Top legend (size encoding) anchored at the top of the
+    # panel; the threshold/truth legend sits two rows below.
+    y_top    <- usr[4L]
+    y_thresh <- usr[4L] - 4.0 * cxy[2L]
 
     size_breaks <- c(1.3, round(cex_max / 2, 1), cex_max)
-    legend(x = x_left, y = y_above,
+    legend(x = x_legend, y = y_top, xjust = 0, yjust = 1,
            legend = sprintf("-log10(lfsr) = %g", size_breaks),
            pch = 1L, pt.cex = .lfsr_cex(size_breaks, cex_max),
            pt.lwd = 2.0, col = "black", bty = "n", cex = 0.75,
-           horiz = TRUE)
+           title = "size", title.adj = 0)
 
     color_label <- if (!is.null(truth_mask) &&
                        any(!vapply(truth_mask, is.null, logical(1L))))
@@ -999,11 +1018,11 @@ mfsusie_plot_lfsr_dimensions <- function(fit, add_legend = TRUE) {
     else
       c(sprintf("lfsr <= %g", lfsr_threshold),
         sprintf("lfsr > %g",  lfsr_threshold))
-    legend(x = x_mid, y = y_above,
+    legend(x = x_legend, y = y_thresh, xjust = 0, yjust = 1,
            legend = color_label,
            pch = 1L, pt.cex = 1.4, pt.lwd = 2.0,
            col = c(pal[1L], "grey60"), bty = "n", cex = 0.75,
-           horiz = TRUE)
+           title = "color", title.adj = 0)
   }
 }
 
@@ -1112,18 +1131,18 @@ mfsusie_plot_lfsr <- function(fit,
   }
   per_outcome_truth <- normalize_truth(truth, M)
 
-  # Top-margin strip holds the size + color legend (under the
-  # title). The panel mar reserves an extra ~3 lines on top
-  # when the legend is enabled.
-  # Top-margin lines: when the legend strip is shown, reserve
-  # enough room for (a) the title at line 4.0, (b) the legend
-  # row at ~1.4 char-heights above the panel, plus a small pad.
-  # When no legend, the title sits at line 1 and only ~2.5 lines
-  # of margin are needed.
-  top_mar <- if (isTRUE(add_legend)) 6.5 else 2.5
+  # Title is rendered close to the plot box (~0.6 lines from
+  # panel top in `.draw_lfsr_bubble`), so the top margin only
+  # needs to cover the title height plus a small pad. The size
+  # and color legends now live OUTSIDE the panel in the right
+  # margin (see `.draw_lfsr_bubble`); reserving 10 lines on the
+  # right gives the legend column enough horizontal room without
+  # squeezing the bubble grid.
+  top_mar   <- 2.5
+  right_mar <- if (isTRUE(add_legend)) 10 else 2
 
   if (M == 1L) {
-    op <- par(mar = c(4, 5, top_mar, 2))
+    op <- par(mar = c(4, 5, top_mar, right_mar))
     on.exit(par(op), add = TRUE)
     .draw_lfsr_bubble(fit, m = 1L,
                       lfsr_threshold = lfsr_threshold,
@@ -1136,7 +1155,7 @@ mfsusie_plot_lfsr <- function(fit,
 
   cols <- ceiling(sqrt(M))
   rows <- ceiling(M / cols)
-  op <- par(mfrow = c(rows, cols), mar = c(4, 5, top_mar, 2))
+  op <- par(mfrow = c(rows, cols), mar = c(4, 5, top_mar, right_mar))
   on.exit(par(op), add = TRUE)
   for (mi in seq_len(M)) {
     .draw_lfsr_bubble(fit, m = mi,
