@@ -23,9 +23,14 @@ mfsusie(
   coverage = 0.95,
   min_abs_corr = 0.5,
   L_greedy = NULL,
-  lbf_min = 0.1,
-  mixture_weight_method = c("mixsqp", "none"),
+  greed_lbf_cutoff = 0.1,
+  estimate_prior_variance = TRUE,
+  convergence_method = c("elbo", "pip"),
+  pip_stall_window = 5L,
+  estimate_residual_variance = TRUE,
   verbose = FALSE,
+  lbf_min = NULL,
+  mixture_weight_method = NULL,
   track_fit = FALSE,
   max_padded_log2 = 10,
   wavelet_filter_number = 10,
@@ -96,18 +101,42 @@ inside a credible set (CS purity threshold).}
 \item{L_greedy}{integer or \code{NULL}. When non-\code{NULL}, run susieR's
 greedy outer loop, growing the effect count from \code{L_greedy} up
 to \code{L} in linear steps until the fit saturates
-(\code{min(lbf) < lbf_min}).}
+(\code{min(lbf) < greed_lbf_cutoff}).}
 
-\item{lbf_min}{numeric saturation threshold for the greedy outer
-loop. Default 0.1.}
+\item{greed_lbf_cutoff}{numeric saturation threshold for the
+greedy outer loop. Default 0.1. Replaces the older \code{lbf_min}
+argument; \code{lbf_min} still works with a deprecation warning
+for one minor version.}
 
-\item{mixture_weight_method}{one of \code{"mixsqp"} (default) or
-\code{"none"}. \code{"mixsqp"} runs the per-effect empirical-Bayes
-update of the mixture weights \code{pi_V[[m]]} per
-(outcome, scale) using the \code{mixsqp} solver. \code{"none"} holds
-the prior fixed at the initial \code{prior_variance_grid} /
-\code{null_prior_weight}; useful when collapsing \code{mfsusie()} to
-\code{susieR::susie()} for sanity checks.}
+\item{estimate_prior_variance}{logical. When \code{TRUE} (default),
+run the per-effect empirical-Bayes update of the mixture
+weights \code{pi_V[[m]]} per (outcome, scale) using the \code{mixsqp}
+solver. When \code{FALSE}, hold the prior fixed at the initial
+\code{prior_variance_grid} / \code{null_prior_weight}; useful when
+collapsing \code{mfsusie()} to \code{susieR::susie()} for sanity
+checks. Replaces the older \code{mixture_weight_method}
+argument; the old name still works with a deprecation
+warning for one minor version (\code{"mixsqp"} -> \code{TRUE},
+\code{"none"} -> \code{FALSE}).}
+
+\item{convergence_method}{one of \code{"elbo"} (default) or
+\code{"pip"}. Selects the IBSS convergence criterion. \code{"elbo"}
+stops when the change in ELBO falls below \code{tol}; \code{"pip"}
+stops when \code{max(abs(prev_alpha - alpha))} falls below
+\code{tol} (PIP-difference convergence) with stall detection.}
+
+\item{pip_stall_window}{integer. Number of consecutive
+iterations without PIP-difference improvement after which
+the PIP-based convergence path declares convergence even
+when \code{tol} has not been reached. Default 5. Only consulted
+when \code{convergence_method = "pip"} (or when ELBO produces
+non-finite values and the PIP fallback fires).}
+
+\item{estimate_residual_variance}{logical. When \code{TRUE}
+(default), update \code{sigma2} per IBSS iteration via
+\code{update_variance_components}. When \code{FALSE}, hold \code{sigma2}
+at the initial value across iterations; useful for
+sensitivity analysis.}
 
 \item{verbose}{logical.}
 

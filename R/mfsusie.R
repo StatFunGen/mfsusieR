@@ -63,16 +63,37 @@
 #' @param L_greedy integer or `NULL`. When non-`NULL`, run susieR's
 #'   greedy outer loop, growing the effect count from `L_greedy` up
 #'   to `L` in linear steps until the fit saturates
-#'   (`min(lbf) < lbf_min`).
-#' @param lbf_min numeric saturation threshold for the greedy outer
-#'   loop. Default 0.1.
-#' @param mixture_weight_method one of `"mixsqp"` (default) or
-#'   `"none"`. `"mixsqp"` runs the per-effect empirical-Bayes
-#'   update of the mixture weights `pi_V[[m]]` per
-#'   (outcome, scale) using the `mixsqp` solver. `"none"` holds
-#'   the prior fixed at the initial `prior_variance_grid` /
-#'   `null_prior_weight`; useful when collapsing `mfsusie()` to
-#'   `susieR::susie()` for sanity checks.
+#'   (`min(lbf) < greed_lbf_cutoff`).
+#' @param greed_lbf_cutoff numeric saturation threshold for the
+#'   greedy outer loop. Default 0.1. Replaces the older `lbf_min`
+#'   argument; `lbf_min` still works with a deprecation warning
+#'   for one minor version.
+#' @param estimate_prior_variance logical. When `TRUE` (default),
+#'   run the per-effect empirical-Bayes update of the mixture
+#'   weights `pi_V[[m]]` per (outcome, scale) using the `mixsqp`
+#'   solver. When `FALSE`, hold the prior fixed at the initial
+#'   `prior_variance_grid` / `null_prior_weight`; useful when
+#'   collapsing `mfsusie()` to `susieR::susie()` for sanity
+#'   checks. Replaces the older `mixture_weight_method`
+#'   argument; the old name still works with a deprecation
+#'   warning for one minor version (`"mixsqp"` -> `TRUE`,
+#'   `"none"` -> `FALSE`).
+#' @param convergence_method one of `"elbo"` (default) or
+#'   `"pip"`. Selects the IBSS convergence criterion. `"elbo"`
+#'   stops when the change in ELBO falls below `tol`; `"pip"`
+#'   stops when `max(abs(prev_alpha - alpha))` falls below
+#'   `tol` (PIP-difference convergence) with stall detection.
+#' @param pip_stall_window integer. Number of consecutive
+#'   iterations without PIP-difference improvement after which
+#'   the PIP-based convergence path declares convergence even
+#'   when `tol` has not been reached. Default 5. Only consulted
+#'   when `convergence_method = "pip"` (or when ELBO produces
+#'   non-finite values and the PIP fallback fires).
+#' @param estimate_residual_variance logical. When `TRUE`
+#'   (default), update `sigma2` per IBSS iteration via
+#'   `update_variance_components`. When `FALSE`, hold `sigma2`
+#'   at the initial value across iterations; useful for
+#'   sensitivity analysis.
 #' @param verbose logical.
 #' @param track_fit logical, retain a per-iteration tracking list on
 #'   the fit. Default `FALSE`.
@@ -196,9 +217,14 @@ mfsusie <- function(X, Y,
                     coverage                  = 0.95,
                     min_abs_corr              = 0.5,
                     L_greedy                  = NULL,
-                    lbf_min                   = 0.1,
-                    mixture_weight_method     = c("mixsqp", "none"),
+                    greed_lbf_cutoff          = 0.1,
+                    estimate_prior_variance   = TRUE,
+                    convergence_method        = c("elbo", "pip"),
+                    pip_stall_window          = 5L,
+                    estimate_residual_variance = TRUE,
                     verbose                   = FALSE,
+                    lbf_min                   = NULL,
+                    mixture_weight_method     = NULL,
                     track_fit                 = FALSE,
                     max_padded_log2           = 10,
                     wavelet_filter_number     = 10,
@@ -218,14 +244,45 @@ mfsusie <- function(X, Y,
   }
   prior_variance_scope    <- match.arg(prior_variance_scope)
   residual_variance_scope <- match.arg(residual_variance_scope)
-  mixture_weight_method   <- match.arg(mixture_weight_method)
-  # Translate the public choice to susieR's internal vocabulary.
-  # susieR's `single_effect_regression.default` skips the
-  # per-effect prior update entirely when `estimate_prior_method
-  # == "none"`; "mixsqp" routes through our mfsusieR override
-  # `optimize_prior_variance.mf_individual`, which runs the
-  # mixsqp M step on `pi_V` per (outcome, scale).
-  estimate_prior_method <- if (mixture_weight_method == "mixsqp") "optim" else "none"
+  convergence_method      <- match.arg(convergence_method)
+
+  # Deprecation shim: `mixture_weight_method` was renamed to
+  # `estimate_prior_variance` (TRUE/FALSE). Honor the old name
+  # for one minor version with a `lifecycle::deprecate_warn`.
+  if (!is.null(mixture_weight_method)) {
+    if (requireNamespace("lifecycle", quietly = TRUE)) {
+      lifecycle::deprecate_warn(
+        when    = "0.2.0",
+        what    = "mfsusie(mixture_weight_method)",
+        with    = "mfsusie(estimate_prior_variance)",
+        details = "Map: 'mixsqp' -> TRUE; 'none' -> FALSE."
+      )
+    }
+    mixture_weight_method   <- match.arg(mixture_weight_method,
+                                         choices = c("mixsqp", "none"))
+    estimate_prior_variance <- (mixture_weight_method == "mixsqp")
+  }
+
+  # Deprecation shim: `lbf_min` was renamed to
+  # `greed_lbf_cutoff`.
+  if (!is.null(lbf_min)) {
+    if (requireNamespace("lifecycle", quietly = TRUE)) {
+      lifecycle::deprecate_warn(
+        when = "0.2.0",
+        what = "mfsusie(lbf_min)",
+        with = "mfsusie(greed_lbf_cutoff)"
+      )
+    }
+    greed_lbf_cutoff <- lbf_min
+  }
+
+  # Translate `estimate_prior_variance` to susieR's internal
+  # vocabulary. susieR's `single_effect_regression.default` skips
+  # the per-effect prior update entirely when
+  # `estimate_prior_method == "none"`; `"optim"` routes through
+  # our mfsusieR override `optimize_prior_variance.mf_individual`,
+  # which runs the mixsqp M step on `pi_V` per (outcome, scale).
+  estimate_prior_method <- if (isTRUE(estimate_prior_variance)) "optim" else "none"
 
   # The wavelet basis needs at least 4 sampled positions per curve.
   # 1 position routes to the scalar (degenerate) path; 2 or 3
@@ -277,9 +334,11 @@ mfsusie <- function(X, Y,
     cross_outcome_prior        = cross_outcome_prior,
     residual_variance          = residual_variance,
     residual_variance_scope    = residual_variance_scope,
-    estimate_residual_variance = TRUE,
+    estimate_residual_variance = isTRUE(estimate_residual_variance),
     estimate_prior_variance    = (estimate_prior_method != "none"),
     estimate_prior_method      = estimate_prior_method,   # forwarded to single_effect_regression scaffolding
+    convergence_method         = convergence_method,
+    pip_stall_window           = pip_stall_window,
     check_null_threshold       = 0,
     prior_tol                  = 1e-9,
     max_iter                   = max_iter,
@@ -295,7 +354,7 @@ mfsusie <- function(X, Y,
     mixsqp_alpha_eps           = mixsqp_alpha_eps,
     control_mixsqp             = control_mixsqp,
     L_greedy                   = L_greedy,
-    lbf_min                    = lbf_min,
+    lbf_min                    = greed_lbf_cutoff,
     refine                     = FALSE,
     unmappable_effects         = "none",
     residual_variance_lowerbound = 0,
