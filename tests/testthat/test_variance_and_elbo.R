@@ -459,7 +459,16 @@ test_that("mfsusie ELBO is non-decreasing post-iter-1 at machine precision (<= 1
     matrix(rep(eta, T_m), nrow = n) + matrix(rnorm(n * T_m, sd = 0.3), nrow = n)
   })
 
-  fit <- mfsusie(X, Y, L = 5, max_iter = 50, verbose = FALSE)
+  # max_iter = 200 because this small-n, under-determined fixture
+  # (n=40, J=10, L=5, only 2 true signals) is the slow-convergence
+  # regime: each iter improves ELBO by O(0.03) so settling below
+  # tol = 1e-4 takes ~120 iters. The slow geometric decay is inherent
+  # to the mixsqp-driven mixture-prior M-step on small data; cf the
+  # ELBO trace `0.0317, 0.0305, 0.0293, 0.0282, ...`. Convergence is
+  # correct, just slow; we want max_iter > niter so the convergence
+  # warning doesn't fire and so the monotonicity check has real data
+  # past the iter-1 transient.
+  fit <- mfsusie(X, Y, L = 5, max_iter = 200, verbose = FALSE)
 
   # Need at least three iterations to make the post-iter-1 check
   # meaningful (drop the first diff, then test the remainder).

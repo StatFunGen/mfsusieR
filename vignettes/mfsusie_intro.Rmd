@@ -64,6 +64,37 @@ length(fit$sets$cs)
 fit$pip[multiomic_example$causal_snps]
 ```
 
+# Post-hoc per-outcome causal-configuration assessment
+
+For each credible set, ask which outcomes share the causal
+variant. `susie_post_outcome_configuration(fit, by = "outcome")`
+runs two complementary post-hoc analyses on the joint mfsusie
+fit and returns one row per CS:
+
+- The **SuSiEx** combinatorial enumeration assigns a posterior
+  probability to each of the `2^M` binary "which outcomes
+  share the causal" patterns, plus a per-outcome marginal
+  causality probability.
+- The **coloc pairwise ABF** reports the standard H0/H1/H2/H3/H4
+  posteriors for every pair of outcomes.
+
+```{r post-config}
+configs <- susieR::susie_post_outcome_configuration(fit, by = "outcome")
+```
+
+The SuSiEx output for the first CS:
+
+```{r post-config-susiex}
+configs$susiex[[1L]]$posthoc      # per-outcome marginal causality
+configs$susiex[[1L]]$config_prob  # 2^M configuration probabilities
+```
+
+The pairwise coloc output (one row per outcome pair × CS-pair):
+
+```{r post-config-coloc}
+head(configs$coloc_pairwise)
+```
+
 ## Inspecting the fit
 
 `mfsusie_plot()` shows everything in one call: PIPs in the

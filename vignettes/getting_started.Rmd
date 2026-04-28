@@ -141,6 +141,25 @@ matplot(t(pr[[1L]][seq_len(4L), ]), type = "l", lty = 1,
         main = "predict.mfsusie() on outcome 1")
 ```
 
+## Inspecting a fit
+
+`summary()` prints a one-screen overview of any `mfsusie` /
+`fsusie` fit: dimensions, IBSS iterations and convergence, the
+final ELBO, the credible-set table (per-CS size, purity, lead
+SNP), top PIPs, and the mixture-prior null-mass summary across
+all `(outcome, scale)` cells.
+
+```{r summary-fsusie}
+summary(fit_f)
+```
+
+The same call works on the multi-outcome fit and shows the same
+structure with the per-outcome `T_basis`:
+
+```{r summary-mfsusie}
+summary(fit_m)
+```
+
 ## Numerical equivalence with `susieR::susie`
 
 When `Y` is scalar, the prior collapses to a single Gaussian component,
