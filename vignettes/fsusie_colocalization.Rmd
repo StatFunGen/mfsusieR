@@ -125,7 +125,7 @@ res_distinct$summary
 - For multi-outcome colocalization across more than two
   outcomes, see [the multi-outcome intro](mfsusie_intro.html),
   which fits all outcomes jointly and avoids the post-hoc
-  combine. The disadvantage is that it would subject to mfSuSiE modelling
+  combine. The disadvantage is that it would subject to mfSuSiE modeling
   assumptions and not as modular as integrating SuSiE Suite fits.
 
 ## Session info
