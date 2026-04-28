@@ -272,8 +272,13 @@ position-space curve plus a pointwise credible band:
 - `"HMM"` — discrete-state hidden Markov model on per-position
   regression estimates with hub-and-spoke transitions and ash
   refinement at each EM iteration. The smoothed curve is the
-  posterior mean; the band uses `abs(eff) / qnorm(1 - lfsr)` as
-  a pointwise SD.
+  posterior mean. The pointwise SD is computed via the law of
+  total variance over the HMM state mixture:
+  `Var(pos[t]) = sum_k prob[t, k] * (sd_kt^2 + mean_kt^2)
+  - (sum_k prob[t, k] * mean_kt)^2`, where `prob[t, k]` is the
+  forward-backward state probability and `(mean_kt, sd_kt)` are
+  the per-state ash posterior moments. Band as
+  `mean_pos +/- z(level) * sqrt(Var(pos))`.
 - `"smash"` — `smashr::smash.gaus` empirical-Bayes wavelet
   shrinkage on the per-position regression estimate of the
   effect against the lead variable. The credible band uses
