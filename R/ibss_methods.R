@@ -259,6 +259,12 @@ cleanup_model.mf_individual <- function(data, params, model, ...) {
   # `params$model_init$fitted` to warm-start a follow-up fit
   # without recomputing one IBSS sweep. Removing it costs an
   # extra iteration on every warm-start call.
+  #
+  # `model$V` is stripped: held at 1 across all effects because
+  # the mixture weights in `pi_V` carry the per-effect prior
+  # adaptation, so V is uninformative as a diagnostic. Use
+  # `summary(fit)` for a useful prior-shape summary.
+  model$V                  <- NULL
   model$residuals          <- NULL
   model$fitted_without_l   <- NULL
   model$raw_residuals      <- NULL
