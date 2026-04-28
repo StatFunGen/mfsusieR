@@ -2,25 +2,6 @@
 
 ## ADDED Requirements
 
-### Requirement: fit object SHALL expose a documented and trimmed field set
-
-`mfsusie()` SHALL return a list whose every field has a
-one-line description in the `@return` roxygen of `mfsusie()`.
-Fields that duplicate information available from a base
-`susie()` field, or that are derivable from other fields
-without measurable cost, SHALL be removed. Fields that are
-mfsusieR-specific extensions SHALL be flagged as such in the
-roxygen.
-
-#### Scenario: documented field set
-
-- **WHEN** a user runs `mfsusie(X, Y, ...)` and reads
-  `?mfsusie`
-- **THEN** every field in the returned object SHALL appear in
-  the `@return` documentation with a one-line description
-- **AND** any field not present in `susieR::susie()`'s output
-  SHALL be flagged as an mfsusieR extension.
-
 ### Requirement: trivial S3 overrides SHALL be removed
 
 Each S3 method registered for `mf_individual` or `mfsusie` SHALL be retained only when its body materially diverges from
@@ -38,33 +19,89 @@ the generic SHALL fall through to `susieR`'s default.
 - **AND** the resulting `mfsusie()` fit on the standard test
   fixtures SHALL be byte-identical to the pre-removal fit.
 
-### Requirement: `verbose = TRUE` SHALL print per-iteration diagnostics
+### Requirement: `verbose = TRUE` SHALL emit susieR's per-iteration tabular output
 
-When `mfsusie(verbose = TRUE)` is called, the IBSS loop SHALL
-print one line per iteration containing at minimum the
-iteration number, ELBO, and maximum per-effect alpha change.
+`mfsusie()` SHALL inherit susieR's `check_convergence.default`
+verbose output. Per-iteration lines SHALL include at minimum
+the iteration number, ELBO, ELBO delta, sigma2 summary, peak
+memory, and prior-variance summary, in tabular form. The
+existing `check_convergence.mf_individual` override SHALL be
+removed.
 
-#### Scenario: per-iter verbose output
+#### Scenario: tabular per-iter output
 
 - **WHEN** `mfsusie(X, Y, verbose = TRUE)` is called
-- **THEN** for each IBSS iteration `k`, exactly one line SHALL
-  be printed of the form
-  `iter k | elbo=<value> | max_alpha_diff=<value> [...]`
-- **AND** the iteration number SHALL be printed before the
+- **THEN** for each IBSS iteration the printed output SHALL
+  include the columns `iter`, `ELBO`, `delta`, `sigma2`,
+  `mem`, `V` (in that order)
+- **AND** the header row SHALL be printed once before the
   iteration body executes.
 
-### Requirement: `convergence_metric` SHALL select between PIP-diff and ELBO
+### Requirement: convergence behaviour SHALL be selectable
 
-`mfsusie()` SHALL accept a `convergence_metric` argument with
-values `"pip_diff"` (default) and `"elbo"`. The IBSS loop SHALL
-stop when the chosen metric falls below `tol`.
+`mfsusie()` SHALL accept `convergence_method = c("elbo", "pip")`
+(default `"elbo"`) and `pip_stall_window` (default `5`),
+forwarding both to `params`. The susieR scaffold's PIP-based
+fallback path with stall detection SHALL be reachable.
 
-#### Scenario: ELBO-based convergence on a standard fixture
+#### Scenario: PIP-based convergence reaches same posterior as ELBO
 
-- **WHEN** the user runs `mfsusie(X, Y, convergence_metric =
-  "elbo", tol = 1e-3)`
-- **THEN** the fit SHALL converge in a number of iterations
-  that differs from the PIP-diff-based fit by at most 2
+- **WHEN** the user runs `mfsusie(X, Y, convergence_method =
+  "pip")` and again with `convergence_method = "elbo"` on a
+  standard fixture
+- **THEN** the two fits SHALL agree on `pip` within
+  `1e-6` and on the final `elbo` within `1e-3`
+- **AND** the iteration counts SHALL differ by at most 2.
+
+### Requirement: `estimate_residual_variance` SHALL be user-controllable
+
+`mfsusie()` SHALL accept `estimate_residual_variance` (default
+`TRUE`). When `FALSE`, `update_model_variance` SHALL leave
+`model$sigma2` at its initial value across all IBSS iterations.
+
+#### Scenario: fixed sigma2 with FALSE
+
+- **WHEN** the user runs `mfsusie(X, Y,
+  estimate_residual_variance = FALSE, residual_variance =
+  s2_init)`
+- **THEN** the final fit's `sigma2` SHALL be byte-identical to
+  `s2_init` for every outcome.
+
+### Requirement: `mixture_weight_method` SHALL be replaced by `estimate_prior_variance`
+
+`mfsusie()` SHALL accept `estimate_prior_variance` (default
+`TRUE`) replacing the previous `mixture_weight_method`
+argument. `TRUE` SHALL enable the mixsqp M-step (former
+`"mixsqp"`); `FALSE` SHALL skip the M-step and hold mixture
+weights at their init values (former `"none"`). The old
+argument SHALL emit a `lifecycle::deprecate_warn()` and remain
+functional for one minor version with the obvious value
+mapping.
+
+#### Scenario: deprecation warning on old argument
+
+- **WHEN** the user calls `mfsusie(X, Y, mixture_weight_method
+  = "mixsqp")`
+- **THEN** a `lifecycle::deprecate_warn()` SHALL fire pointing
+  at `estimate_prior_variance`
+- **AND** the fit SHALL run as if `estimate_prior_variance =
+  TRUE` had been passed.
+
+### Requirement: `lbf_min` SHALL be renamed to `greed_lbf_cutoff`
+
+`mfsusie()` SHALL accept `greed_lbf_cutoff` (default `0.1`)
+replacing `lbf_min`. The renamed argument SHALL gate the
+L-greedy outer loop the same way `lbf_min` did. `lbf_min`
+SHALL emit a `lifecycle::deprecate_warn()` and remain
+functional for one minor version.
+
+#### Scenario: deprecation warning on old argument
+
+- **WHEN** the user calls `mfsusie(X, Y, lbf_min = 0.3)`
+- **THEN** a `lifecycle::deprecate_warn()` SHALL fire pointing
+  at `greed_lbf_cutoff`
+- **AND** the fit SHALL run as if `greed_lbf_cutoff = 0.3` had
+  been passed.
 
 ### Requirement: HMM smoother SHALL return a credible band
 

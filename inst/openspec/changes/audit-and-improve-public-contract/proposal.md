@@ -18,20 +18,9 @@ commits per section.
 
 ## Scope (seven sections)
 
-### Section 1: Trim and document the fit object
+### Section 1: Fit object — no-op
 
-Walk every field on a typical `mfsusie` fit. For each field,
-decide:
-- Keep as is (with one-line description in the return-value
-  roxygen).
-- Remove (redundant with `susieR`'s base shape, derivable from
-  other fields, or never read by any public method or vignette).
-- Move to `summary(fit)` (informational, not a fit-state field).
-- Rename (current name diverges from `susieR`'s convention).
-
-Result: a smaller, susieR-shape-compatible fit object with a
-documented field set. Fields that are mfsusieR-specific are
-clearly flagged as extensions.
+Decision: leave the fit object as is. Field set is acceptable.
 
 ### Section 2: Feature gap with `fsusieR` and `mvf.susie.alpha`
 
@@ -50,14 +39,52 @@ each. Flag anything found in `susieR` that looks redundant or
 miscalibrated for upstream discussion (no edits to `susieR`
 without explicit approval).
 
-### Section 4: Useful verbose output and convergence diagnostics
+### Section 4: Verbose output, susieR-arg parity, parameter renames
 
-Currently `verbose = TRUE` prints essentially nothing
-per-iteration. `susieR` prints ELBO and max alpha change.
-Match that, optionally adding peak memory if cheap. Offer
-`convergence_metric = c("pip_diff", "elbo")` and add a unit
-test that the two stopping criteria agree on standard
-fixtures within an iteration or two of each other.
+`mfsusie()` overrides `check_convergence.mf_individual` with a
+trivial body (`R/ibss_methods.R:227`) that hardcodes ELBO-only
+convergence and prints nothing per iteration. This bypasses
+susieR's rich `check_convergence.default` which already
+provides:
+
+- per-iter tabular output (iter, ELBO, delta, sigma2, mem, V)
+- monotone-ELBO check with warning on decrease
+- PIP-difference convergence path with stall detection
+- selectable `convergence_method = c("elbo", "pip")`
+- `pip_stall_window` for non-monotone PIP detection
+- mem-used reporting via `mem_used_gb()`
+
+Plan:
+
+1. Delete `check_convergence.mf_individual`. susieR's default
+   fires.
+2. Expose `convergence_method` and `pip_stall_window` on
+   `mfsusie()`. Default `"elbo"` (matches susieR).
+3. Expose `estimate_residual_variance`. Default `TRUE`.
+4. Rename internal parameter `mixture_weight_method = c("mixsqp",
+   "none")` to `estimate_prior_variance = c(TRUE, FALSE)`.
+   `TRUE` -> mixsqp (current default); `FALSE` -> fix pi at
+   the init values (matches susieR's
+   `estimate_prior_variance = FALSE` semantics for the mixture
+   prior). Keeps `mixture_weight_method` working for one
+   minor version with a `lifecycle::deprecate_warn`.
+5. Rename `lbf_min` to `greed_lbf_cutoff` for clarity (it
+   gates the L-greedy outer loop). Same deprecation pattern.
+
+Verification: a unit test that asserts mfsusieR's default
+verbose output, on a small fixture, matches the structure of
+susieR's verbose output line-for-line (modulo numeric values).
+Plus the PIP-vs-ELBO convergence agreement test.
+
+`get_cs.mf_individual` (`ibss_methods.R:337-343`) is also a
+thin wrapper around `susie_get_cs`. Audit during this section:
+keep if our wrapper customization is doing real work, drop
+otherwise.
+
+Out of scope for this section:
+- `compute_univariate_zscore` (not useful for our typical
+  workload).
+- Other susieR args beyond the four named above.
 
 ### Section 5: HMM credible band
 
