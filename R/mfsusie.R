@@ -63,8 +63,8 @@
 #' @param L_greedy integer or `NULL`. When non-`NULL`, run susieR's
 #'   greedy outer loop, growing the effect count from `L_greedy` up
 #'   to `L` in linear steps until the fit saturates
-#'   (`min(lbf) < greed_lbf_cutoff`).
-#' @param greed_lbf_cutoff numeric saturation threshold for the
+#'   (`min(lbf) < greedy_lbf_cutoff`).
+#' @param greedy_lbf_cutoff numeric saturation threshold for the
 #'   greedy outer loop. Default 0.1.
 #' @param estimate_prior_variance logical. When `TRUE` (default),
 #'   run the per-effect empirical-Bayes update of the mixture
@@ -227,7 +227,7 @@ mfsusie <- function(X, Y,
                     coverage                  = 0.95,
                     min_abs_corr              = 0.5,
                     L_greedy                  = NULL,
-                    greed_lbf_cutoff          = 0.1,
+                    greedy_lbf_cutoff          = 0.1,
                     estimate_prior_variance   = TRUE,
                     convergence_method        = c("elbo", "pip"),
                     pip_stall_window          = 5L,
@@ -338,7 +338,7 @@ mfsusie <- function(X, Y,
     mixsqp_alpha_eps           = mixsqp_alpha_eps,
     control_mixsqp             = control_mixsqp,
     L_greedy                   = L_greedy,
-    lbf_min                    = greed_lbf_cutoff,
+    greedy_lbf_cutoff                    = greedy_lbf_cutoff,
     refine                     = FALSE,
     unmappable_effects         = "none",
     residual_variance_lowerbound = 0,
