@@ -177,11 +177,6 @@ ibss_initialize.mf_individual <- function(data, params) {
   model
 }
 
-# ---- validate_prior --------------------------------------------
-
-#' Per-iteration prior sanity check (no-op for `mf_individual`)
-#'
-#' susieR's `validate_prior.default` checks the scalar `V[l]` is
 # ---- track_ibss_fit --------------------------------------------
 
 #' IBSS iteration tracking (no-op by default)

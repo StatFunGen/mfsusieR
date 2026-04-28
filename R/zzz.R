@@ -46,6 +46,7 @@ get_cs                     <- NULL
     "compute_ser_statistics",
     "optimize_prior_variance",
     "loglik",
+    "neg_loglik",
     "calculate_posterior_moments",
     "compute_kl",
     "SER_posterior_e_loglik",
