@@ -133,7 +133,7 @@ test_that("mfsusie() works with M = 1 single-modality input", {
 
 test_that("mfsusie(L_greedy = K) runs without error and respects the saturation bound", {
   toy <- make_toy_smoke()
-  fit <- mfsusie(toy$X, toy$Y, L = 8, L_greedy = 2, lbf_min = 0.1,
+  fit <- mfsusie(toy$X, toy$Y, L = 8, L_greedy = 2, greed_lbf_cutoff = 0.1,
                  max_iter = 30, verbose = FALSE)
   # The greedy outer loop trims L; final number of effects must be in [L_greedy, L].
   expect_true(nrow(fit$alpha) >= 2L)

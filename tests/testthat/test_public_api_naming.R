@@ -53,10 +53,30 @@ test_that("mfsusie() argument list contains the canonical public-API names", {
   required <- c("X", "Y", "pos", "L", "prior_variance_grid",
                 "null_prior_weight", "residual_variance_scope",
                 "max_iter", "tol",
-                "L_greedy", "lbf_min")
+                "L_greedy", "greed_lbf_cutoff",
+                "estimate_prior_variance",
+                "estimate_residual_variance",
+                "convergence_method", "pip_stall_window")
   args <- formalArgs(mfsusie)
   missing_args <- setdiff(required, args)
   expect_identical(missing_args, character(0),
                    info = sprintf("Missing canonical args: %s",
                                   paste(missing_args, collapse = ", ")))
+})
+
+test_that("deprecated mfsusie() args (mixture_weight_method, lbf_min) emit deprecate_warn", {
+  skip_if_not_installed("lifecycle")
+  set.seed(1L)
+  X <- matrix(rnorm(20 * 4), 20, 4)
+  Y <- list(matrix(rnorm(20 * 16), 20, 16))
+  expect_warning(
+    mfsusie(X, Y, L = 2, max_iter = 5,
+            mixture_weight_method = "mixsqp", verbose = FALSE),
+    "mixture_weight_method"
+  )
+  expect_warning(
+    mfsusie(X, Y, L = 2, max_iter = 5,
+            lbf_min = 0.2, verbose = FALSE),
+    "lbf_min"
+  )
 })

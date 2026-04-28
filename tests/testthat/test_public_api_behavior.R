@@ -33,7 +33,7 @@ test_that("mfsusie() is silent for 1 column or >= 4 columns", {
   y <- as.numeric(X %*% beta + rnorm(n, sd = 0.3))
   expect_no_message(suppressMessages(
     mfsusie(X, list(matrix(y, ncol = 1)), L = 2,
-            prior_variance_grid = 0.2, mixture_weight_method = "none",
+            prior_variance_grid = 0.2, estimate_prior_variance = FALSE,
             max_iter = 5, verbose = FALSE)),
     message = "columns")
 

@@ -52,7 +52,7 @@ c1_fit_pair <- function(X, y, L = 5, V = 0.2) {
     prior_variance_scope     = "per_outcome",
     null_prior_weight        = 0,
     residual_variance_scope = "per_outcome",
-    mixture_weight_method    = "none",
+    estimate_prior_variance = FALSE,
     L_greedy                 = NULL,
     max_iter = 100, tol = 1e-8,
     verbose = FALSE
