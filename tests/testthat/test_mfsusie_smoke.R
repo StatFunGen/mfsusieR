@@ -92,7 +92,11 @@ test_that("mfsusie() fit fields contain no NaN / NA in alpha, mu, mu2, pip, elbo
     }
   }
   expect_false(any(is.na(fit$pip)))
-  expect_false(any(is.na(fit$elbo)))
+  # `fit$elbo[1]` is intentionally `NA_real_` (the iter-1 ELBO is
+  # computed against the initial sigma2 = var(Y) before its first
+  # M-step and is masked so plotters / `diff()` paths see only
+  # comparable values). Check the post-iter-1 entries for NA.
+  expect_false(any(is.na(fit$elbo[-1L])))
 })
 
 # ---- Y_grid + X_eff are attached by default --------------------

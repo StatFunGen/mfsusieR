@@ -81,6 +81,12 @@ get_cs                     <- NULL
     "get_posterior_mean_l",
     "get_posterior_mean_sum",
     "get_posterior_moments_l",
+    # Override susieR's `get_objective.default` to first refresh per-
+    # effect lbf[l] / KL[l] against the iter-final pi_V before the
+    # ELBO read. Without the refresh, the per-iteration ELBO is a
+    # hybrid quantity (Eloglik at iter-final state, KL[l] at state-
+    # when-l-was-updated). See `refresh_lbf_kl.mf_individual`.
+    "get_objective",
     # Verbose-row formatting hook used by check_convergence.default
     # so the per-iteration line shows the list-of-vectors sigma2 in a
     # compact, fixed-width form rather than the default scalar

@@ -73,11 +73,21 @@
 #'   `prior_variance_grid` / `null_prior_weight`; useful when
 #'   collapsing `mfsusie()` to `susieR::susie()` for sanity
 #'   checks.
-#' @param convergence_method one of `"elbo"` (default) or
-#'   `"pip"`. Selects the IBSS convergence criterion. `"elbo"`
-#'   stops when the change in ELBO falls below `tol`; `"pip"`
-#'   stops when `max(abs(prev_alpha - alpha))` falls below
-#'   `tol` (PIP-difference convergence) with stall detection.
+#' @param convergence_method one of `"pip"` (default) or
+#'   `"elbo"`. Selects the IBSS convergence criterion.
+#'   `"pip"` stops when `max(abs(prev_alpha - alpha))` falls
+#'   below `tol` (PIP-difference convergence) with stall
+#'   detection -- the default because alpha is robust to the
+#'   small per-iteration ELBO oscillations that arise from
+#'   mixsqp's approximate M-step (Generalized EM residual:
+#'   `ELBO(t+1) >= ELBO(t) - O(eps_mixsqp * L * M * S_m)`,
+#'   Neal & Hinton 1998). `"elbo"` stops when the change in
+#'   ELBO falls below `tol`; the per-iteration ELBO is a
+#'   coherent variational free energy thanks to the
+#'   `get_objective.mfsusie` post-iteration KL refresh
+#'   (`refresh_lbf_kl.mf_individual`) which evaluates per-
+#'   effect KL[l] against the iter-final pi_V rather than the
+#'   pi_V state at the moment effect l was updated.
 #' @param pip_stall_window integer. Number of consecutive
 #'   iterations without PIP-difference improvement after which
 #'   the PIP-based convergence path declares convergence even
@@ -229,7 +239,7 @@ mfsusie <- function(X, Y,
                     L_greedy                  = NULL,
                     greedy_lbf_cutoff          = 0.1,
                     estimate_prior_variance   = TRUE,
-                    convergence_method        = c("elbo", "pip"),
+                    convergence_method        = c("pip", "elbo"),
                     pip_stall_window          = 5L,
                     estimate_residual_variance = TRUE,
                     verbose                   = FALSE,
@@ -360,6 +370,16 @@ mfsusie <- function(X, Y,
   #    work dispatches to the .mf_individual / .mfsusie S3 methods
   #    registered by `.onLoad`.
   fit <- susie_workhorse(data, params)
+
+  # Mask the iter-1 ELBO. mfsusie initialises sigma2 = var(Y) and
+  # does the first closed-form M-step at the end of iter 1; the
+  # iter-1 ELBO is computed against the inflated initial sigma2 and
+  # therefore sits well above iter-2's value. Marking it `NA_real_`
+  # keeps it out of `diff(fit$elbo)` plots / downstream consumers
+  # that don't already drop the leading element. `tail(fit$elbo, 1)`
+  # (used by `susie_get_objective`, refinement loops, etc.) is
+  # unaffected.
+  if (length(fit$elbo) >= 1L) fit$elbo[1] <- NA_real_
 
   # 5. Attach the smoothing inputs unless the caller opted out.
   #    `Y_grid[[m]]` is the post-remap, position-space Y on the

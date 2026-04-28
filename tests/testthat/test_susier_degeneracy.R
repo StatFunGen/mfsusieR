@@ -45,6 +45,10 @@ c1_fit_pair <- function(X, y, L = 5, V = 0.2) {
                          estimate_residual_variance = TRUE,
                          verbose                    = FALSE,
                          max_iter = 100, tol = 1e-8)
+  # Match susieR's default convergence rule (ELBO) so iter counts and
+  # final fits are bit-comparable. mfsusie's default is `"pip"` because
+  # alpha is robust to mixsqp's GEM residual; for the susieR-degeneracy
+  # contract we want apple-to-apple ELBO convergence.
   fit_m <- mfsusieR::mfsusie(
     X, list(matrix(y, ncol = 1)),
     L                        = L,
@@ -53,6 +57,7 @@ c1_fit_pair <- function(X, y, L = 5, V = 0.2) {
     null_prior_weight        = 0,
     residual_variance_scope = "per_outcome",
     estimate_prior_variance = FALSE,
+    convergence_method       = "elbo",
     L_greedy                 = NULL,
     max_iter = 100, tol = 1e-8,
     verbose = FALSE
