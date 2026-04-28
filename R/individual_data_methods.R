@@ -629,6 +629,31 @@ update_derived_quantities.mf_individual <- function(data, params, model, ...) {
   model
 }
 
+#' Class-specific extra fields stripped by cleanup_model.default
+#'
+#' susieR's `cleanup_model.default` strips a standard set of
+#' temporary fields (`runtime`, `residuals`, `fitted_without_l`,
+#' `residual_variance`, ...) and unions in whatever this generic
+#' returns. mfsusieR adds `model$V` to the strip list because the
+#' length-L scalar prior coefficient is held at 1 throughout IBSS:
+#' the per-effect adaptation lives in the per-(scale, outcome)
+#' mixture weights `pi_V[[m]]`, not in V. Keeping V on the fit
+#' would mislead users into thinking it carries information.
+#'
+#' `model$fitted` (the wavelet-domain running fit, list of length
+#' M) is intentionally NOT stripped: it is consumed by
+#' `ibss_initialize.mf_individual` via `params$model_init$fitted`
+#' to warm-start a follow-up call, saving one IBSS sweep.
+#'
+#' `raw_residuals` is stripped one rung up the dispatch chain by
+#' `cleanup_model.individual`, so it does not appear here.
+#'
+#' @keywords internal
+#' @noRd
+cleanup_extra_fields.mf_individual <- function(data) {
+  c("V")
+}
+
 #' Aggregate expected log-likelihood across outcomes
 #'
 #' Mirrors `Eloglik.individual`:
@@ -647,26 +672,6 @@ Eloglik.mf_individual <- function(data, model, ...) {
                        0.5 * er2_t / s2_t)
   }
   out
-}
-
-#' ELBO for an `mf_individual` fit
-#'
-#' Mirrors `get_objective.individual`:
-#' `ELBO = Eloglik - sum_l KL_l`. The per-effect KL stored in
-#' `model$KL[l]` (set by `compute_kl.mf_individual`) already
-#' contains both the Gaussian component
-#' (`KL(q(beta_l|gamma_l) || p(beta_l|gamma_l))`) and the
-#' categorical mixture component
-#' (`KL(q(gamma_l) || p(gamma_l))`), so no separate entropy
-#' correction is needed here.
-#'
-#' @references
-#' Manuscript: methods/online_method.tex (ELBO aggregate).
-#' @keywords internal
-#' @noRd
-get_objective.mf_individual <- function(data, params, model, ...) {
-  Eloglik.mf_individual(data, model) -
-    if (all(is.na(model$KL))) 0 else sum(model$KL, na.rm = TRUE)
 }
 
 #' Fold the per-effect posterior into the running fit

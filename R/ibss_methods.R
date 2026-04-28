@@ -200,24 +200,6 @@ track_ibss_fit.mf_individual <- function(data, params, model, tracking, iter, el
   tracking
 }
 
-# ---- check_convergence -----------------------------------------
-
-#' Convergence check on ELBO change between iterations
-#'
-#' Mirrors susieR's default: declares convergence when
-#' `abs(elbo[iter+1] - elbo[iter]) < params$tol`.
-#'
-#' @keywords internal
-#' @noRd
-check_convergence.mf_individual <- function(data, params, model, elbo, iter) {
-  if (iter > 0L && is.finite(elbo[iter]) && is.finite(elbo[iter + 1L])) {
-    if (abs(elbo[iter + 1L] - elbo[iter]) < params$tol) {
-      model$converged <- TRUE
-    }
-  }
-  model
-}
-
 # ---- trim_null_effects ----------------------------------------
 
 #' Drop effects with negligible posterior mass (no-op)
@@ -241,37 +223,6 @@ trim_null_effects.mf_individual <- function(data, params, model) {
 # than trying to register an `ibss_finalize.mf_individual` method.
 # Per-outcome residual attachment happens in the public `mfsusie()`
 # wrapper after `susie_workhorse` returns.
-
-# ---- cleanup_model --------------------------------------------
-
-#' Strip per-iteration ephemeral fields from the fit
-#'
-#' Called by `ibss_finalize`. Removes the per-effect residual
-#' caches that were used during the IBSS sweep but are not part of
-#' the user-facing fit contract.
-#'
-#' @keywords internal
-#' @noRd
-cleanup_model.mf_individual <- function(data, params, model, ...) {
-  # IBSS scratch fields stripped from the user-facing fit.
-  # `model$fitted` (wavelet-domain running fit) is KEPT: it is
-  # consumed by `ibss_initialize.mf_individual` via
-  # `params$model_init$fitted` to warm-start a follow-up fit
-  # without recomputing one IBSS sweep. Removing it costs an
-  # extra iteration on every warm-start call.
-  #
-  # `model$V` is stripped: held at 1 across all effects because
-  # the mixture weights in `pi_V` carry the per-effect prior
-  # adaptation, so V is uninformative as a diagnostic. Use
-  # `summary(fit)` for a useful prior-shape summary.
-  model$V                  <- NULL
-  model$residuals          <- NULL
-  model$fitted_without_l   <- NULL
-  model$raw_residuals      <- NULL
-  model$residual_variance  <- NULL
-  model$runtime            <- NULL
-  model
-}
 
 # ---- User-facing post-fit accessors ---------------------------
 

@@ -341,6 +341,12 @@ mfsusie <- function(X, Y,
     greedy_lbf_cutoff                    = greedy_lbf_cutoff,
     refine                     = FALSE,
     unmappable_effects         = "none",
+    # susieR's `get_objective.default` short-circuits on `params$use_NIG`
+    # before reaching the standard ELBO branch; we don't use the
+    # NIG / shrinkage prior in mfsusieR, so wire it explicitly to FALSE
+    # rather than leaving it NULL (NULL would trip an `&& nrow(...) == 1`
+    # short-circuit when use_NIG is undefined).
+    use_NIG                    = FALSE,
     residual_variance_lowerbound = 0,
     residual_variance_upperbound = Inf,
     model_init                 = model_init,
