@@ -157,17 +157,42 @@ semantics, no formula change.
 
 ### Section 6: Performance and convergence on the heavy fixture
 
-Re-measure `n=84, p≈3500, M=6, T=128` after the recent perf
-landing. If it still times out, profile and identify whether
-the bottleneck is per-effect work that scales in `p` or
-something else (initial wavelet basis cost? sigma2 update?
-fitted-value reconstruction?). Apply targeted fixes (Rfast
-where it cleanly wins, more cpp11 only if profile says so,
-loop-invariant lifting). Also investigate the existing
-50-iteration non-convergence warning on the test fixture:
-identify whether it is a fixture issue (too tight tolerance,
-too low PVE) or an algorithmic issue (init quality, Eloglik
-disagreement with PIP-diff).
+Heavy-fixture re-measurement (`n=84, p≈3500, M=6, T=128, L=10`)
+**still exceeds 10 minutes** after the cache + subsetting +
+cpp11 perf work landed earlier. The recent work optimized
+the M-step path (mixsqp input shrunk via
+`mixsqp_alpha_eps`); the SER step path that scales linearly
+in `p` was untouched.
+
+Per-effect-per-iter work is dominated by
+`compute_residuals.mf_individual` and
+`compute_ser_statistics.mf_individual`, which build
+`X^T R` and `bhat = X^T R / xtx_diag` across all `p` SNPs
+every effect, every IBSS iteration. For this fixture that
+is `~2.3B` FP ops per IBSS iter, all in pure-R matrix code.
+
+Plan:
+
+1. **Profile** with `profvis` on this fixture (wrap
+   `mfsusie()` call, save flamegraph). Confirm SER-step
+   matrix multiplies are the hot path; if not, redirect.
+2. **cpp11 port of the per-outcome bhat/shat builder**:
+   `mf_per_outcome_bhat_shat()` (`R/individual_data_methods.R`)
+   does the `X^T R / xtx_diag` and per-(scale, outcome)
+   sigma broadcast. Tight loop in cpp11armadillo or via the
+   `compute_marginal_bhat_shat` susieR helper if compatible.
+   Numerical identity at `tol = 1e-12`.
+3. **Convergence-side wins**: re-measure after exposing
+   `convergence_method = "pip"` (Section 4). If PIP-based
+   stopping converges in fewer iterations on this fixture
+   shape, the overall fit time drops without further code.
+4. Investigate the 50-iteration non-convergence warning on
+   the test fixture (a separate issue from the heavy fixture
+   above): is it a pathological fixture or a real algorithmic
+   issue?
+5. Re-measure heavy fixture after each of (2) and (3).
+   Target: under 5 minutes for the heavy fixture, ideally
+   under 2.
 
 ### Section 7: Comment polish and helper promotion
 

@@ -177,8 +177,34 @@ cheaper.
 
 ## C. Heavy-fixture re-measurement
 
-(Background run in progress; results pending. Will report
-in a follow-up.)
+Heavy fixture: `n=84, p=3500, M=6, T=c(128,128,128,128,128,128),
+L=10, max_iter=30`. Three causal SNPs at indices 100, 1500,
+2800 with smooth bell-shape effects; sigma = 0.5; standard
+seed.
+
+**Result: timed out at 10 minutes (exit code 143)** on
+current HEAD with the cache + subsetting + cpp11 perf work
+already landed.
+
+**Diagnosis** (from code-shape reasoning, not profile yet):
+the prior perf work optimized the M-step (mixsqp input
+shrunk via `mixsqp_alpha_eps` from p=3500 down to ~tens of
+SNPs). The **SER step path was untouched**:
+`compute_residuals.mf_individual` and
+`compute_ser_statistics.mf_individual` build
+`bhat = X^T R / xtx_diag` across all `p` SNPs every
+(effect, outcome, IBSS iter):
+
+  per call: ~n × p × T_basis = 84 × 3500 × 128 ≈ 38M FP ops
+  calls per IBSS iter: L × M = 10 × 6 = 60
+  per IBSS iter: ~2.3B FP ops
+  pure-R matrix code dominates wall-clock for this shape
+
+**Action** (Section 6 of the OpenSpec change): cpp11 port
+of `mf_per_outcome_bhat_shat()` core loop, with pure-R
+reference at `tol = 1e-12`. Expected speedup 5-10× on the
+SER step. Profile first to confirm; then port; then
+re-measure.
 
 ## D. Implementation order — refined per audit findings
 

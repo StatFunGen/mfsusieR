@@ -199,15 +199,34 @@ law-of-total-variance); the suppression was unjustified.
 
 ## 6. Performance and convergence
 
-- [ ] 6.1 Reproduce the heavy fixture (n=84, p≈3500, M=6,
-  T=128). Measure clean wall-clock with current HEAD. Skip
-  if not relevant after recent perf work.
-- [ ] 6.2 Profile if still slow; identify hot paths.
-- [ ] 6.3 Targeted fixes only: Rfast where it cleanly wins,
-  cpp11 only if profile justifies. No speculative caching.
-- [ ] 6.4 Investigate the 50-iteration warning case: is it a
-  pathological fixture or a real algorithmic issue?
-- [ ] 6.5 Re-measure; record before/after in a session note.
+Heavy fixture (n=84, p≈3500, M=6, T=128) **still exceeds
+10 minutes** on current HEAD after cache + subsetting +
+cpp11. The SER-step matrix multiplies (X^T R, ~2.3B FP ops
+per IBSS iter) were untouched by prior perf work.
+
+- [x] 6.1 Reproduce heavy fixture wall-clock (timed out at
+  10 min on current HEAD; documented in
+  `2026-04-28-audit-findings.md` section C).
+- [ ] 6.2 Run `profvis` on a smaller-but-similar fixture
+  (`n=84, p=1000, M=6, T=128`) so the profile completes;
+  confirm `compute_residuals.mf_individual` /
+  `compute_ser_statistics.mf_individual` matrix multiplies
+  dominate. Save flamegraph under
+  `bench/profiling/flamegraphs/`.
+- [ ] 6.3 cpp11 port of `mf_per_outcome_bhat_shat()` core
+  loop (X^T R divide-by-xtx_diag plus per-(scale, outcome)
+  sigma broadcast). Pure-R reference comparison at
+  `tol = 1e-12` per CLAUDE.md Phase 7 rule.
+- [ ] 6.4 Re-measure heavy fixture after the cpp11 port.
+  Target: under 5 minutes; ideally under 2.
+- [ ] 6.5 Investigate the 50-iteration warning case: is it a
+  pathological fixture or a real algorithmic issue? Address
+  if real; document if pathological.
+- [ ] 6.6 If still over target after (6.3), evaluate whether
+  exposing `convergence_method = "pip"` from Section 4
+  reduces iteration count enough; if so, document as the
+  recommended setting for `p >> n` fixtures.
+- [ ] 6.7 Record before/after in a session note.
 
 ## 7. Comment polish + helper promotion
 
