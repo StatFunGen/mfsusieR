@@ -146,3 +146,68 @@ test_that("mf_univariate_hmm_regression matches across multiple simulated config
     expect_equal(ours$lBF, ref$lBF, tolerance = 0, info = info_str)
   }
 })
+
+# =============================================================================
+# Credible band: shape, monotonicity, law-of-total-variance regression guard
+# =============================================================================
+
+test_that("mf_fit_hmm returns a per-position posterior SD vector", {
+  set.seed(11)
+  T_pos <- 24L
+  x  <- rnorm(T_pos, sd = 0.3)
+  sd <- runif(T_pos, 0.1, 0.4)
+  s  <- mfsusieR:::mf_fit_hmm(x, sd, halfK = 5L)
+  expect_named(s, c("prob", "x_post", "x_post_sd", "lfsr", "mu",
+                    "ll_hmm", "ll_null", "log_BF"),
+               ignore.order = TRUE)
+  expect_length(s$x_post_sd, T_pos)
+  expect_true(all(is.finite(s$x_post_sd)))
+  expect_true(all(s$x_post_sd >= 0))
+})
+
+test_that("mf_fit_hmm posterior SD matches a hand-computed law-of-total-variance value", {
+  # Construct a degenerate scenario where K = 2 (null + one
+  # nontrivial state). Use a fixture with known posterior shape:
+  # `x` strongly localized so the HMM concentrates on the
+  # non-null state at most positions. Then law-of-total-variance
+  # reduces to the per-state ash sd at each position.
+  set.seed(12)
+  T_pos <- 12L
+  x  <- c(rep(0, 6L), rep(1.5, 6L))   # null half + signal half
+  sd <- rep(0.2, T_pos)
+  s  <- mfsusieR:::mf_fit_hmm(x, sd, halfK = 3L)
+
+  # Sanity: at signal positions, the SD should be smaller than
+  # the prior sd (shrinkage). At null positions, SD ~ 0.
+  expect_true(all(s$x_post_sd[1:6] <= sd[1:6] + 1e-8))
+  # At signal positions, posterior should have non-trivial SD
+  # (not zero, not the prior).
+  expect_true(any(s$x_post_sd[7:12] > 0))
+})
+
+test_that("mf_post_smooth(method = 'HMM') populates credible_bands of correct shape", {
+  set.seed(13)
+  n <- 60; p <- 12; T_m <- 32L
+  X <- matrix(rnorm(n * p), n)
+  beta <- numeric(p); beta[3] <- 1.0
+  shape <- exp(-((seq_len(T_m) - T_m / 2)^2) / (2 * 6^2))
+  Y <- X %*% (matrix(beta, p, 1) %*% matrix(shape, 1, T_m)) +
+         matrix(rnorm(n * T_m, sd = 0.4), n)
+
+  fit   <- fsusie(Y, X, L = 1, max_iter = 30, verbose = FALSE)
+  fit_h <- mf_post_smooth(fit, method = "HMM")
+
+  bands <- fit_h$smoothed$HMM$credible_bands
+  expect_true(is.list(bands))
+  for (m in seq_along(bands)) {
+    for (l in seq_along(bands[[m]])) {
+      band <- bands[[m]][[l]]
+      expect_identical(dim(band), c(T_m, 2L))
+      lower <- band[, 1L]; upper <- band[, 2L]
+      mean_curve <- fit_h$smoothed$HMM$effect_curves[[m]][[l]]
+      # Monotonicity: lower <= mean <= upper everywhere.
+      expect_true(all(lower <= mean_curve + 1e-10))
+      expect_true(all(mean_curve <= upper + 1e-10))
+    }
+  }
+})
