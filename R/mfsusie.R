@@ -325,7 +325,7 @@ mfsusie <- function(X, Y,
     L <- nrow(fit$alpha)
     fit$X_eff <- vector("list", L)
     for (l in seq_len(L)) {
-      # data$X is centred + standardised; multiply by data$csd
+      # data$X is centered + standardized; multiply by data$csd
       # (X_scale) to get the raw-X column equivalent of the
       # alpha-weighted aggregate.
       fit$X_eff[[l]] <- as.numeric(

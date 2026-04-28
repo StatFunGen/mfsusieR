@@ -293,21 +293,21 @@ P_effect <- ggplot() +
               mapping = aes(x = x, ymin = lo, ymax = hi),
               fill = "skyblue", alpha = 0.45) +
   geom_point(data = df_truth, mapping = aes(x = x, y = y),
-             colour = "grey30", size = 1.2) +
+             color = "grey30", size = 1.2) +
   geom_line(data = df_curve, mapping = aes(x = x, y = y),
-            colour = "firebrick", linewidth = 1) +
-  geom_hline(yintercept = 0, linetype = "dotted", colour = "grey50") +
+            color = "firebrick", linewidth = 1) +
+  geom_hline(yintercept = 0, linetype = "dotted", color = "grey50") +
   labs(x = "position", y = "effect",
        title = "fSuSiE recovered effect curve") +
   theme_classic()
 
 df_pip <- data.frame(x = seq_along(fit_f$pip), y = fit_f$pip)
 P_pip <- ggplot(df_pip, aes(x = x, y = y)) +
-  geom_point(colour = "grey60", size = 0.9) +
+  geom_point(color = "grey60", size = 0.9) +
   geom_point(data = df_pip[true_pos_filt, , drop = FALSE],
-             colour = "firebrick", size = 2.2) +
+             color = "firebrick", size = 2.2) +
   geom_vline(xintercept = true_pos_filt,
-             linetype = "dashed", colour = "firebrick", alpha = 0.6) +
+             linetype = "dashed", color = "firebrick", alpha = 0.6) +
   ylim(0, 1) +
   labs(x = "SNP", y = "PIP", title = "fSuSiE PIPs") +
   theme_classic()
