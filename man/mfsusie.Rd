@@ -29,8 +29,6 @@ mfsusie(
   pip_stall_window = 5L,
   estimate_residual_variance = TRUE,
   verbose = FALSE,
-  lbf_min = NULL,
-  mixture_weight_method = NULL,
   track_fit = FALSE,
   max_padded_log2 = 10,
   wavelet_filter_number = 10,
@@ -104,9 +102,7 @@ to \code{L} in linear steps until the fit saturates
 (\code{min(lbf) < greed_lbf_cutoff}).}
 
 \item{greed_lbf_cutoff}{numeric saturation threshold for the
-greedy outer loop. Default 0.1. Replaces the older \code{lbf_min}
-argument; \code{lbf_min} still works with a deprecation warning
-for one minor version.}
+greedy outer loop. Default 0.1.}
 
 \item{estimate_prior_variance}{logical. When \code{TRUE} (default),
 run the per-effect empirical-Bayes update of the mixture
@@ -114,10 +110,7 @@ weights \code{pi_V[[m]]} per (outcome, scale) using the \code{mixsqp}
 solver. When \code{FALSE}, hold the prior fixed at the initial
 \code{prior_variance_grid} / \code{null_prior_weight}; useful when
 collapsing \code{mfsusie()} to \code{susieR::susie()} for sanity
-checks. Replaces the older \code{mixture_weight_method}
-argument; the old name still works with a deprecation
-warning for one minor version (\code{"mixsqp"} -> \code{TRUE},
-\code{"none"} -> \code{FALSE}).}
+checks.}
 
 \item{convergence_method}{one of \code{"elbo"} (default) or
 \code{"pip"}. Selects the IBSS convergence criterion. \code{"elbo"}

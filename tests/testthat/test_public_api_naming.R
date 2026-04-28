@@ -64,19 +64,3 @@ test_that("mfsusie() argument list contains the canonical public-API names", {
                                   paste(missing_args, collapse = ", ")))
 })
 
-test_that("deprecated mfsusie() args (mixture_weight_method, lbf_min) emit deprecate_warn", {
-  skip_if_not_installed("lifecycle")
-  set.seed(1L)
-  X <- matrix(rnorm(20 * 4), 20, 4)
-  Y <- list(matrix(rnorm(20 * 16), 20, 16))
-  expect_warning(
-    mfsusie(X, Y, L = 2, max_iter = 5,
-            mixture_weight_method = "mixsqp", verbose = FALSE),
-    "mixture_weight_method"
-  )
-  expect_warning(
-    mfsusie(X, Y, L = 2, max_iter = 5,
-            lbf_min = 0.2, verbose = FALSE),
-    "lbf_min"
-  )
-})

@@ -65,19 +65,14 @@
 #'   to `L` in linear steps until the fit saturates
 #'   (`min(lbf) < greed_lbf_cutoff`).
 #' @param greed_lbf_cutoff numeric saturation threshold for the
-#'   greedy outer loop. Default 0.1. Replaces the older `lbf_min`
-#'   argument; `lbf_min` still works with a deprecation warning
-#'   for one minor version.
+#'   greedy outer loop. Default 0.1.
 #' @param estimate_prior_variance logical. When `TRUE` (default),
 #'   run the per-effect empirical-Bayes update of the mixture
 #'   weights `pi_V[[m]]` per (outcome, scale) using the `mixsqp`
 #'   solver. When `FALSE`, hold the prior fixed at the initial
 #'   `prior_variance_grid` / `null_prior_weight`; useful when
 #'   collapsing `mfsusie()` to `susieR::susie()` for sanity
-#'   checks. Replaces the older `mixture_weight_method`
-#'   argument; the old name still works with a deprecation
-#'   warning for one minor version (`"mixsqp"` -> `TRUE`,
-#'   `"none"` -> `FALSE`).
+#'   checks.
 #' @param convergence_method one of `"elbo"` (default) or
 #'   `"pip"`. Selects the IBSS convergence criterion. `"elbo"`
 #'   stops when the change in ELBO falls below `tol`; `"pip"`
@@ -223,8 +218,6 @@ mfsusie <- function(X, Y,
                     pip_stall_window          = 5L,
                     estimate_residual_variance = TRUE,
                     verbose                   = FALSE,
-                    lbf_min                   = NULL,
-                    mixture_weight_method     = NULL,
                     track_fit                 = FALSE,
                     max_padded_log2           = 10,
                     wavelet_filter_number     = 10,
@@ -245,36 +238,6 @@ mfsusie <- function(X, Y,
   prior_variance_scope    <- match.arg(prior_variance_scope)
   residual_variance_scope <- match.arg(residual_variance_scope)
   convergence_method      <- match.arg(convergence_method)
-
-  # Deprecation shim: `mixture_weight_method` was renamed to
-  # `estimate_prior_variance` (TRUE/FALSE). Honor the old name
-  # for one minor version with a `lifecycle::deprecate_warn`.
-  if (!is.null(mixture_weight_method)) {
-    if (requireNamespace("lifecycle", quietly = TRUE)) {
-      lifecycle::deprecate_warn(
-        when    = "0.2.0",
-        what    = "mfsusie(mixture_weight_method)",
-        with    = "mfsusie(estimate_prior_variance)",
-        details = "Map: 'mixsqp' -> TRUE; 'none' -> FALSE."
-      )
-    }
-    mixture_weight_method   <- match.arg(mixture_weight_method,
-                                         choices = c("mixsqp", "none"))
-    estimate_prior_variance <- (mixture_weight_method == "mixsqp")
-  }
-
-  # Deprecation shim: `lbf_min` was renamed to
-  # `greed_lbf_cutoff`.
-  if (!is.null(lbf_min)) {
-    if (requireNamespace("lifecycle", quietly = TRUE)) {
-      lifecycle::deprecate_warn(
-        when = "0.2.0",
-        what = "mfsusie(lbf_min)",
-        with = "mfsusie(greed_lbf_cutoff)"
-      )
-    }
-    greed_lbf_cutoff <- lbf_min
-  }
 
   # Translate `estimate_prior_variance` to susieR's internal
   # vocabulary. susieR's `single_effect_regression.default` skips
