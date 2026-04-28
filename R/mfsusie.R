@@ -159,6 +159,15 @@
 #'   `mf_post_smooth(fit, X = X, Y = Y, ...)` instead; useful
 #'   when sharing fits where the per-individual data should
 #'   not travel with the fit.
+#' @param attach_lbf_outcome logical. When `TRUE` (default), the
+#'   fit carries `lbf_outcome`, an `L x p x M` array of per-(effect,
+#'   variant, outcome) log Bayes factors, populated from the IBSS
+#'   sweep. Consumed by `mf_post_outcome_configuration(fit,
+#'   by = "outcome")` (and by `susieR::susie_post_outcome_configuration`
+#'   directly). Set `FALSE` to drop these — extra storage is
+#'   `L * p * M` doubles. When `FALSE`, recover the array by
+#'   calling `mf_post_outcome_configuration(fit, X = X, Y = Y, ...)`
+#'   with the original data.
 #'
 #' @return A list of class `c("mfsusie", "susie")` carrying:
 #' \describe{
@@ -188,6 +197,10 @@
 #'     `attach_smoothing_inputs = TRUE` (default).}
 #'   \item{`X_eff`}{`list[L]` of per-effect alpha-weighted X
 #'     aggregates. Attached when `attach_smoothing_inputs = TRUE`.}
+#'   \item{`lbf_outcome`}{`L x p x M` array of per-(effect, variant,
+#'     outcome) log Bayes factors. Attached when
+#'     `attach_lbf_outcome = TRUE` (default). Consumed by
+#'     `mf_post_outcome_configuration(fit, by = "outcome")`.}
 #' }
 #'
 #' @references
@@ -229,11 +242,17 @@ mfsusie <- function(X, Y,
                     mixsqp_alpha_eps          = 1e-6,
                     model_init                = NULL,
                     small_sample_correction   = FALSE,
-                    attach_smoothing_inputs   = TRUE) {
+                    attach_smoothing_inputs   = TRUE,
+                    attach_lbf_outcome        = TRUE) {
   if (!is.logical(small_sample_correction) ||
       length(small_sample_correction) != 1L ||
       is.na(small_sample_correction)) {
     stop("`small_sample_correction` must be `TRUE` or `FALSE`.")
+  }
+  if (!is.logical(attach_lbf_outcome) ||
+      length(attach_lbf_outcome) != 1L ||
+      is.na(attach_lbf_outcome)) {
+    stop("`attach_lbf_outcome` must be `TRUE` or `FALSE`.")
   }
   prior_variance_scope    <- match.arg(prior_variance_scope)
   residual_variance_scope <- match.arg(residual_variance_scope)
@@ -325,7 +344,8 @@ mfsusie <- function(X, Y,
     model_init                 = model_init,
     small_sample_correction    = small_sample_correction,
     small_sample_df            = if (small_sample_correction) data$n - 1L
-                                 else NULL
+                                 else NULL,
+    attach_lbf_outcome         = isTRUE(attach_lbf_outcome)
   )
 
   # 4. Run the susieR workhorse. All per-effect and per-iteration
