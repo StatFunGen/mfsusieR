@@ -156,7 +156,7 @@
 #'   assays.
 #' @param control_mixsqp optional named list of `mixsqp` control
 #'   arguments forwarded to the per-(outcome, scale) M-step.
-#' @param null_weight numeric in `[0, 1]`. Ratio of null
+#' @param mixture_null_weight numeric in `[0, 1]`. Ratio of null
 #'   pseudo-weight to total data weight in the mixsqp M-step,
 #'   regularizing the EB scale-mixture prior toward the null
 #'   component. `0` is unregularized MLE; `0.05` (default) is
@@ -266,7 +266,7 @@ mfsusie <- function(X, Y,
                     wavelet_magnitude_cutoff  = 0,
                     wavelet_qnorm             = TRUE,
                     control_mixsqp            = NULL,
-                    null_weight               = 0.05,
+                    mixture_null_weight               = 0.05,
                     mixsqp_alpha_eps          = 1e-6,
                     model_init                = NULL,
                     small_sample_correction   = FALSE,
@@ -354,7 +354,7 @@ mfsusie <- function(X, Y,
     standardize                = standardize,
     track_fit                  = track_fit,
     verbose                    = verbose,
-    null_weight        = null_weight,
+    mixture_null_weight        = mixture_null_weight,
     mixsqp_alpha_eps           = mixsqp_alpha_eps,
     control_mixsqp             = control_mixsqp,
     L_greedy                   = L_greedy,

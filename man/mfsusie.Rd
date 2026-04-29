@@ -36,7 +36,7 @@ mfsusie(
   wavelet_magnitude_cutoff = 0,
   wavelet_qnorm = TRUE,
   control_mixsqp = NULL,
-  null_weight = 0.05,
+  mixture_null_weight = 0.05,
   mixsqp_alpha_eps = 1e-06,
   model_init = NULL,
   small_sample_correction = FALSE,
@@ -208,7 +208,7 @@ assays.}
 \item{control_mixsqp}{optional named list of \code{mixsqp} control
 arguments forwarded to the per-(outcome, scale) M-step.}
 
-\item{null_weight}{numeric in \verb{[0, 1]}. Ratio of null
+\item{mixture_null_weight}{numeric in \verb{[0, 1]}. Ratio of null
 pseudo-weight to total data weight in the mixsqp M-step,
 regularizing the EB scale-mixture prior toward the null
 component. \code{0} is unregularized MLE; \code{0.05} (default) is
