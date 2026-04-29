@@ -3,7 +3,7 @@
 #
 # Rationale: a real-world ATAC-seq dataset by Anjing Liu and
 # William Denault motivates the three round-3 features
-# (`low_count_filter`, `quantile_norm`, `small_sample_correction`).
+# (`wavelet_magnitude_cutoff`, `wavelet_qnorm`, `small_sample_correction`).
 # The raw genotype, cell-count, and read-count files are not
 # redistributable, so the vignette uses a simulated dataset
 # constructed to share the relevant characteristics: small `n`,
@@ -49,18 +49,18 @@ beta_curve[16:24] <- 1
 # Build per-outcome Y in the count-like scale, then log1p.
 # Two characteristics carry over from the real data:
 #   (i)  wavelet coefficients are heavy-tailed (some cell types
-#        have rare-event spikes), which motivates `quantile_norm`.
+#        have rare-event spikes), which motivates `wavelet_qnorm`.
 #   (ii) some bins have median count ~ 0 across individuals,
-#        which motivates `low_count_filter`.
+#        which motivates `wavelet_magnitude_cutoff`.
 # --- Build per-outcome Y -------------------------------------------
 # Two outcomes carry the same signal SNP at index `sig`. Each
 # outcome carries a different non-Gaussianity that one of the
 # three options addresses:
 #   - Outcome 1: a block of bins with median(|.|) below the
-#     `low_count_filter` threshold but with non-zero noise that
-#     pollutes the SER step. `low_count_filter` masks them.
+#     `wavelet_magnitude_cutoff` threshold but with non-zero noise that
+#     pollutes the SER step. `wavelet_magnitude_cutoff` masks them.
 #   - Outcome 2: heavy-tailed contamination but no near-zero
-#     bins. `quantile_norm` Gaussianizes the wavelet
+#     bins. `wavelet_qnorm` Gaussianizes the wavelet
 #     coefficients without destroying signal.
 # Both outcomes are at small `n = 40` so the
 # `small_sample_correction` (Johnson-t) is the right fit.
@@ -78,15 +78,16 @@ Y_f <- vector("list", M)
   Y_f[[1]] <- signal_1 + noise_1
   # Low-coverage block: bins 1-8 are at very low SNR. Their
   # absolute-value median is small enough that
-  # `low_count_filter = 0.02` masks them but `low_count_filter
-  # = 0` keeps them in the fit, where they contribute noise.
+  # `wavelet_magnitude_cutoff = 0.02` masks them but
+  # `wavelet_magnitude_cutoff = 0` keeps them in the fit, where
+  # they contribute noise.
   Y_f[[1]][, 1:8] <- rnorm(n * 8L, mean = 0, sd = 0.03)
 }
 
 # Outcome 2: heavy-tailed contamination only (no near-zero
 # bins). 18% of cells receive a large-variance perturbation.
 # The wavelet coefficients inherit heavy tails;
-# `quantile_norm` Gaussianizes them and the SuSiE Bayes-factor
+# `wavelet_qnorm` Gaussianizes them and the SuSiE Bayes-factor
 # assumption is restored.
 {
   signal_2 <- X[, sig, drop = FALSE] %*%
@@ -125,25 +126,25 @@ cat(sprintf("small_sample_correction = TRUE:   %.1f s, niter = %d\n",
 
 t_lowcount <- system.time(
   fit_lowcount <- mfsusie(X, Y_f, pos = pos, L = L_eff,
-                          low_count_filter = 0.02,
+                          wavelet_magnitude_cutoff = 0.02,
                           verbose = verbose)
 )
-cat(sprintf("low_count_filter = 0.02:          %.1f s, niter = %d\n",
+cat(sprintf("wavelet_magnitude_cutoff = 0.02:  %.1f s, niter = %d\n",
             t_lowcount[3L], fit_lowcount$niter))
 
 t_qn <- system.time(
   fit_qn <- mfsusie(X, Y_f, pos = pos, L = L_eff,
-                    quantile_norm = TRUE,
+                    wavelet_qnorm = TRUE,
                     verbose = verbose)
 )
-cat(sprintf("quantile_norm = TRUE:             %.1f s, niter = %d\n",
+cat(sprintf("wavelet_qnorm = TRUE:             %.1f s, niter = %d\n",
             t_qn[3L], fit_qn$niter))
 
 t_combined <- system.time(
   fit_combined <- mfsusie(X, Y_f, pos = pos, L = L_eff,
-                          low_count_filter        = 0.02,
-                          quantile_norm           = TRUE,
-                          small_sample_correction = TRUE,
+                          wavelet_magnitude_cutoff = 0.02,
+                          wavelet_qnorm            = TRUE,
+                          small_sample_correction  = TRUE,
                           verbose = verbose)
 )
 cat(sprintf("all three combined:               %.1f s, niter = %d\n",

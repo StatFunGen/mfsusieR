@@ -111,7 +111,7 @@
 #'   coherent variational free energy thanks to the
 #'   `get_objective.mfsusie` post-iteration KL refresh
 #'   (`refresh_lbf_kl.mf_individual`) which evaluates per-
-#'   effect KL[l] against the iter-final pi_V rather than the
+#'   effect `KL[l]` against the iter-final pi_V rather than the
 #'   pi_V state at the moment effect l was updated.
 #' @param pip_stall_window integer. Number of consecutive
 #'   iterations without PIP-difference improvement after which
@@ -211,12 +211,11 @@
 #'   \item{`G_prior`}{`list[M]` of `list[S_m]` ash-shaped prior
 #'     records (mutated by the IBSS loop).}
 #'   \item{`sigma2`}{`list[M]`. Element m is either a scalar
-#'     (when `residual_variance_scope = "per_outcome"`) or a
-#'     length-`S_m` vector of per-scale residual variances
-#'     (when `residual_variance_scope = "per_scale"`, the
-#'     default). The richer per-scale shape is mfsusieR-
-#'     specific; downstream code reading `sigma2` should
-#'     handle both.}
+#'     (when `residual_variance_scope = "per_outcome"`, the
+#'     default) or a length-`S_m` vector of per-scale residual
+#'     variances (when `residual_variance_scope = "per_scale"`).
+#'     The richer per-scale shape is mfsusieR-specific;
+#'     downstream code reading `sigma2` should handle both.}
 #'   \item{`elbo`}{numeric vector of ELBO values per iteration.}
 #'   \item{`niter`, `converged`}{IBSS termination metadata.}
 #'   \item{`pip`}{length-p posterior inclusion probabilities.}

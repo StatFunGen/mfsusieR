@@ -149,7 +149,7 @@ ELBO falls below \code{tol}; the per-iteration ELBO is a
 coherent variational free energy thanks to the
 \code{get_objective.mfsusie} post-iteration KL refresh
 (\code{refresh_lbf_kl.mf_individual}) which evaluates per-
-effect KL\link{l} against the iter-final pi_V rather than the
+effect \code{KL[l]} against the iter-final pi_V rather than the
 pi_V state at the moment effect l was updated.}
 
 \item{pip_stall_window}{integer. Number of consecutive
@@ -264,12 +264,11 @@ moment in the wavelet domain.}
 \item{\code{G_prior}}{\code{list[M]} of \code{list[S_m]} ash-shaped prior
 records (mutated by the IBSS loop).}
 \item{\code{sigma2}}{\code{list[M]}. Element m is either a scalar
-(when \code{residual_variance_scope = "per_outcome"}) or a
-length-\code{S_m} vector of per-scale residual variances
-(when \code{residual_variance_scope = "per_scale"}, the
-default). The richer per-scale shape is mfsusieR-
-specific; downstream code reading \code{sigma2} should
-handle both.}
+(when \code{residual_variance_scope = "per_outcome"}, the
+default) or a length-\code{S_m} vector of per-scale residual
+variances (when \code{residual_variance_scope = "per_scale"}).
+The richer per-scale shape is mfsusieR-specific;
+downstream code reading \code{sigma2} should handle both.}
 \item{\code{elbo}}{numeric vector of ELBO values per iteration.}
 \item{\code{niter}, \code{converged}}{IBSS termination metadata.}
 \item{\code{pip}}{length-p posterior inclusion probabilities.}
