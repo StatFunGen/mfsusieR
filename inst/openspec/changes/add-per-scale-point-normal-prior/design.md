@@ -34,7 +34,7 @@ prior_class <- switch(prior_variance_scope,
 same shape (list of K-component fitted-g records, one per scale);
 K = 2 for both new classes.
 
-### 2. Init step — marginal-data lead per scale + ebnm
+### 2. Init step, marginal-data lead per scale + ebnm
 
 New helper `init_ebnm_prior_per_scale(Y_m, X, scale_index,
 prior_class, ...)` builds G_prior with one ebnm fit per
@@ -84,7 +84,7 @@ prior_obj <- if (prior_variance_scope %in%
 }
 ```
 
-### 3a. M-step body — `ebnm_fn(x, s, g_init, fix_g)` on the multi-variable rectangle
+### 3a. M-step body, `ebnm_fn(x, s, g_init, fix_g)` on the multi-variable rectangle
 
 The M-step body for either ebnm-backed class flattens the
 alpha-thinned `(|keep_idx| × |idx_s|)` rectangle of (Bhat, Shat)
@@ -100,8 +100,8 @@ model$pi_V[[m]][s, ] <- fit$fitted_g$pi
 ```
 
 The data shape ebnm sees is the same alpha-thinned rectangle
-mixsqp consumes — just unweighted (ebnm cannot accept
-observation weights). The unweighted-many-variables design
+mixsqp consumes, just unweighted (ebnm cannot accept observation
+weights). The unweighted-many-variables design
 mirrors mixsqp's structural property: ebnm sees the bulk-noise
 distribution within `keep_idx` and the parametric MLE settles on
 a sensible conservative `pi_0` (most kept variables look null)
@@ -137,7 +137,7 @@ ebnm owns:
 - the `s == 0`, `x == NaN` adversarial-input guards.
 - the format of the returned `fitted_g` record.
 
-### 3b. M-step dispatch — `.opv_<class>` helper, mirroring `.opv_mixsqp`
+### 3b. M-step dispatch, `.opv_<class>` helper mirroring `.opv_mixsqp`
 
 The dispatch follows the existing `.opv_<class>` helper-per-class
 pattern. The mixsqp branch is `.opv_mixsqp`
@@ -213,21 +213,20 @@ No new S3 generic. No parent-class hierarchy. Class tags stay
 single. The dispatch is one `if/else if` arm per class, ~12
 lines, the same shape as the existing branch.
 
-This pattern earns its keep on YAGNI grounds: with the foreseeable
-ebnm family being just `point_normal` and `point_laplace`, the
-two helpers + two arms are simpler than an S3 generic + parent
-class + switch. If a third ebnm family ever arrives (e.g., a
-point-t slab), refactor then.
+With the foreseeable ebnm family being `point_normal` and
+`point_laplace`, two helpers + two arms are simpler than an S3
+generic + parent class + switch. A third ebnm family (e.g., a
+point-t slab) would refactor then.
 
-No deferred-M-step gate is needed. The multi-variable design
-naturally avoids the iter-1 trap (ebnm sees all p variables at
-iter 1 with uniform alpha, fits a sensible bulk-noise prior;
-once alpha concentrates, ebnm sees the LD-friends and refits).
-There is no `2/p` arbitrary constant and no `greedy_lbf_cutoff`
-gate to tune; the same `alpha_thin_eps` thinning that mixsqp
-uses suffices.
+No deferred-M-step gate is needed. At IBSS iter 1 alpha is
+uniform `1/p`, so `keep_idx` covers every variable and ebnm sees
+the bulk-noise distribution; pi_0 fits close to 1. Once alpha
+concentrates, `keep_idx` shrinks to the LD-friends of the lead
+and ebnm refits on that smaller multi-variable rectangle. The
+shared `alpha_thin_eps` thinning suffices; no `2/p` arbitrary
+constant, no `greedy_lbf_cutoff` gate.
 
-### 3c. Cache management — `iter_cache` with class-gated slots
+### 3c. `iter_cache` with class-gated slots
 
 `refresh_iter_cache.mf_individual` (renamed from
 `refresh_em_cache.mf_individual`; `em_cache` was misleading
@@ -266,13 +265,11 @@ The previous `sigma2_per_pos[[m]]` slot was dead storage (no
 consumer read it; every reader called `mf_sigma2_per_position()`
 directly). Dropped.
 
-Naming: `is_mixsqp_prior` (not `build_mixsqp_cache`) because the
-boolean expresses "this prior class needs the K-axis precompute
-slots", not "build a thing called mixsqp_cache." There is no
-ebnm-specific iter_cache slot — ebnm has no per-(m, s)
-precomputable aggregate; its per-(m, s) state is `g_init`,
-which lives on `G_prior[[m]][[s]]$fitted_g` (carried as part of
-the model's prior state, not as cache).
+Naming: `is_mixsqp_prior` reads as "this prior class needs the
+K-axis precompute slots." There is no ebnm-specific iter_cache
+slot: ebnm has no per-(m, s) precomputable aggregate; its
+per-(m, s) state is `g_init`, carried on
+`G_prior[[m]][[s]]$fitted_g`.
 
 ### 3d. Covariate-adjustment path stays unchanged
 

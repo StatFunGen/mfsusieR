@@ -598,12 +598,13 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
   G1 <- model$G_prior[[1L]]
   if (inherits(G1, c("mixture_normal", "mixture_normal_per_scale"))) {
     model <- .opv_mixsqp(data, params, model, ser_stats, keep_idx, zeta_keep)
-  } else if (inherits(G1, "mixture_point_normal_per_scale")) {
-    model <- .opv_ebnm_point_normal(data, params, model, ser_stats,
-                                    keep_idx, zeta_keep)
-  } else if (inherits(G1, "mixture_point_laplace_per_scale")) {
-    model <- .opv_ebnm_point_laplace(data, params, model, ser_stats,
-                                     keep_idx, zeta_keep)
+  } else if (inherits(G1, c("mixture_point_normal_per_scale",
+                            "mixture_point_laplace_per_scale"))) {
+    ebnm_fn <- if (inherits(G1, "mixture_point_normal_per_scale"))
+                 ebnm::ebnm_point_normal
+               else
+                 ebnm::ebnm_point_laplace
+    model <- .opv_ebnm_point(data, params, model, ser_stats, keep_idx, ebnm_fn)
   } else {
     stop("Unknown prior class on G_prior[[1]]: ",
          paste(class(G1), collapse = ", "))
@@ -693,44 +694,18 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
 
 #' ebnm M-step on the per-(outcome, scale) point-* prior
 #'
-#' Per (outcome, scale), calls `ebnm_fn(x, s, g_init, fix_g)` on
-#' the alpha-thinned `(|keep_idx| x |idx_s|)` rectangle of
-#' (Bhat, Shat) and writes the returned `fitted_g` into
-#' `model$G_prior[[m]][[s]]$fitted_g` and
-#' `model$pi_V[[m]][s, ]`. Mirrors `.opv_mixsqp`'s data shape
-#' and per-(m, s) loop; the only differences are the solver
-#' (ebnm vs mixsqp) and the absence of per-row alpha weighting
-#' (ebnm cannot accept observation weights). Always passes
-#' `g_init = G_m[[s]]$fitted_g` (warm-start), the analog of
-#' mixsqp's `pi_warm_start = pi_prev`; `fix_g` honors
-#' `params$estimate_prior_variance`.
+#' Per (outcome, scale), calls `ebnm_fn` on the alpha-thinned
+#' `(|keep_idx| × |idx_s|)` (Bhat, Shat) rectangle. Writes
+#' `fit$fitted_g` into `model$G_prior[[m]][[s]]$fitted_g` and
+#' `fit$fitted_g$pi` into `model$pi_V[[m]][s, ]`. Mirrors
+#' `.opv_mixsqp`'s data shape and per-(m, s) loop; the per-row
+#' alpha weighting that mixsqp uses is dropped because ebnm
+#' takes no observation weights.
 #'
 #' @keywords internal
 #' @noRd
 .opv_ebnm_point <- function(data, params, model, ser_stats,
-                            keep_idx, zeta_keep, ebnm_fn) {
-  # Mirror mixsqp's data shape: feed ebnm the alpha-thinned
-  # `(|keep_idx| x |idx_s|)` rectangle of (Bhat, Shat) per
-  # (m, s) instead of a single lead-variable's slice. ebnm
-  # cannot accept observation weights so the alpha-weighting
-  # mixsqp uses is dropped; the unweighted-many-variables design
-  # still mirrors mixsqp's key property: ebnm sees the
-  # bulk-noise distribution within `keep_idx` and the parametric
-  # MLE settles on a sensible conservative `pi_0` (most kept
-  # variables look null) plus a `sigma` driven by the few
-  # non-null cells. The lead-only alternative would fit "this
-  # single variable is non-null" and collapse `pi_0` toward 0,
-  # producing spurious CSes from the too-liberal slab.
-  #
-  # `keep_idx` filtering is the same `alpha_thin_eps`-bounded
-  # set that the mixsqp arm uses (computed by the parent
-  # `optimize_prior_variance.mf_individual()`). Truncation error
-  # is bounded by the dropped alpha mass; on iter 1 alpha is
-  # uniform and all variables are kept (giving ebnm the full
-  # bulk-noise distribution), on later iters keep_idx shrinks
-  # to the LD-friends of the lead (still a multi-variable set
-  # so the per_scale prior cannot collapse to single-variable
-  # over-fitting).
+                            keep_idx, ebnm_fn) {
   fix_g <- !isTRUE(params$estimate_prior_variance)
   for (m in seq_len(data$M)) {
     bhat_m <- ser_stats$betahat[[m]][keep_idx, , drop = FALSE]
@@ -738,37 +713,30 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
     G_m    <- model$G_prior[[m]]
     for (s in seq_along(G_m)) {
       idx <- G_m[[s]]$idx
-      fit <- ebnm_fn(
-        x      = as.vector(bhat_m[, idx, drop = FALSE]),
-        s      = as.vector(shat_m[, idx, drop = FALSE]),
-        g_init = G_m[[s]]$fitted_g,
-        fix_g  = fix_g
-      )
+      # `mode = 0` is the assumption baked into the SuSiE
+      # coefficient model (the slab is centered at zero). When
+      # `fix_g = TRUE` ebnm uses `g_init$mean` and ignores
+      # `mode`, emitting a warning if both are passed; skip
+      # `mode` on that path.
+      fit <- if (fix_g) {
+        ebnm_fn(
+          x      = as.vector(bhat_m[, idx, drop = FALSE]),
+          s      = as.vector(shat_m[, idx, drop = FALSE]),
+          g_init = G_m[[s]]$fitted_g,
+          fix_g  = TRUE)
+      } else {
+        ebnm_fn(
+          x      = as.vector(bhat_m[, idx, drop = FALSE]),
+          s      = as.vector(shat_m[, idx, drop = FALSE]),
+          mode   = 0,
+          g_init = G_m[[s]]$fitted_g,
+          fix_g  = FALSE)
+      }
       model$G_prior[[m]][[s]]$fitted_g <- fit$fitted_g
       model$pi_V[[m]][s, ]              <- fit$fitted_g$pi
     }
   }
   model
-}
-
-#' @rdname dot-opv_ebnm_point
-#' @keywords internal
-#' @noRd
-.opv_ebnm_point_normal <- function(data, params, model, ser_stats,
-                                   keep_idx, zeta_keep) {
-  .opv_ebnm_point(data, params, model, ser_stats,
-                  keep_idx, zeta_keep,
-                  ebnm_fn = ebnm::ebnm_point_normal)
-}
-
-#' @rdname dot-opv_ebnm_point
-#' @keywords internal
-#' @noRd
-.opv_ebnm_point_laplace <- function(data, params, model, ser_stats,
-                                    keep_idx, zeta_keep) {
-  .opv_ebnm_point(data, params, model, ser_stats,
-                  keep_idx, zeta_keep,
-                  ebnm_fn = ebnm::ebnm_point_laplace)
 }
 
 #' Per-iteration residual variance + derived-quantity update for `mf_individual`
