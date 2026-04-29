@@ -555,10 +555,10 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
   if (is.null(l)) {
     stop("`optimize_prior_variance.mf_individual` requires the effect index `l`.")
   }
-  # The joint per-effect SNP posterior `model$alpha[l, ]` is the
-  # softmax of the joint log-Bayes-factor across all M outcomes
+  # The joint per-effect variable posterior `model$alpha[l, ]` is
+  # the softmax of the joint log-Bayes-factor across all M outcomes
   # and S_m scales. Adding M outcomes increases the variance of
-  # the per-SNP joint lbf by ~M, so the dominant alpha values
+  # the per-variable joint lbf by ~M, so the dominant alpha values
   # concentrate ~M-fold relative to the M = 1 case. The mixsqp
   # M-step's regularization-to-data balance is set by
   # `nullweight / max_alpha`; to hold this ratio fixed across M
@@ -570,12 +570,12 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
   control    <- params$control_mixsqp %||% list()
   zeta_l     <- model$alpha[l, ]
 
-  # Adaptive variant subsetting: drop SNPs where the SuSiE per-
+  # Adaptive variable subsetting: drop variables where the SuSiE per-
   # effect posterior alpha is below `mixsqp_alpha_eps` from the
   # mixsqp input. Truncation error is bounded by
   # `sum_{j outside} alpha_j * max_k(L_jk)`, well under floating-
   # point precision for typical concentrated posteriors. Set
-  # `mixsqp_alpha_eps = 0` to recover the full p-SNP behavior.
+  # `mixsqp_alpha_eps = 0` to recover the full p-variable behavior.
   alpha_eps <- params$mixsqp_alpha_eps %||% 1e-6
   keep_idx  <- if (alpha_eps > 0) which(zeta_l > alpha_eps)
                else seq_along(zeta_l)
@@ -623,11 +623,11 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
         sd_grid         = sd_grid,
         sdmat_cache     = sdmat_sub,
         log_sdmat_cache = log_sdmat_sub)
-      # Warm-start mixsqp from the previous (m, s) solution. pi
-      # changes slowly between IBSS iters; warm starts cut inner
-      # SQP iterations from ~20 (cold) to ~1-3.
+      # Warm-start mixsqp from the previous (m, s) pi -- it changes
+      # slowly between IBSS iters, cutting inner SQP iterations
+      # from ~20 (cold) to ~1-3.
       pi_prev <- model$G_prior[[m]][[s]]$fitted_g$pi
-      new_pi <- mf_em_m_step_per_scale(
+      new_pi  <- mf_em_m_step_per_scale(
         L_mat, zeta_keep, idx_size = length(idx),
         mixsqp_null_penalty = mixsqp_null_penalty,
         control_mixsqp = control,

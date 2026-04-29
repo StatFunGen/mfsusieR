@@ -62,10 +62,15 @@ the data-driven path
 (\code{compute_marginal_bhat_shat} + \code{ash}) selects the
 grid per outcome.}
 
-\item{prior_variance_scope}{\code{"per_scale"} (default) or
-\code{"per_outcome"}. Controls whether the mixture-weight matrix
-\code{pi_V[[m]]} has a per-scale row dimension or collapses across
-scales.}
+\item{prior_variance_scope}{\code{"per_outcome"} (default) or
+\code{"per_scale"}. Controls whether the mixture-weight matrix
+\code{pi_V[[m]]} collapses across scales (one weight vector per
+outcome) or keeps a separate row per wavelet scale. The
+per-outcome scope is the default because it is roughly
+\code{S_m}-fold cheaper per IBSS iter (M mixsqp calls per iter
+instead of M*S_m); switch to \code{"per_scale"} only when you
+need scale-specific mixture weights for power on shape-
+varying signals.}
 
 \item{null_prior_weight}{numeric, weight on the null prior
 component. Default 2.}
@@ -177,23 +182,23 @@ arguments forwarded to the per-(outcome, scale) M-step.}
 on the null component of the mixsqp M-step. The total null
 pseudo-count fed to mixsqp is \code{mixsqp_null_penalty * idx_size},
 versus a total data weight of \code{idx_size} from the \code{zeta}-
-weighted SNP rows; the ratio \code{mixsqp_null_penalty : 1} is
+weighted variable rows; the ratio \code{mixsqp_null_penalty : 1} is
 therefore the null:data weight ratio at the M-step. Default
 \code{0.1} corresponds to a 10\% null:data ratio, anchored to
 \code{ashr::ash.workhorse(nullweight = 10)} over a typical
 \code{idx_size = 128} (ratio ~0.08). For multi-outcome fits the
 penalty is scaled by the number of outcomes \code{M} so that the
-null:data balance stays invariant as the per-effect SNP
+null:data balance stays invariant as the per-effect variable
 posterior concentrates linearly in \code{M}; single-outcome fits
 are unchanged.
 Default 0.7.}
 
-\item{mixsqp_alpha_eps}{numeric, threshold below which a SNP's
-per-effect posterior \code{alpha[l, j]} is dropped from the
-mixsqp M-step input. The truncation error on the M-step
-gradient is bounded by \verb{sum_\{j outside\} alpha_j * max_k(L_jk)}, well under floating-point precision for
+\item{mixsqp_alpha_eps}{numeric, threshold below which a
+variable's per-effect posterior \code{alpha[l, j]} is dropped
+from the mixsqp M-step input. The truncation error on the
+M-step gradient is bounded by \verb{sum_\{j outside\} alpha_j * max_k(L_jk)}, well under floating-point precision for
 typical concentrated SuSiE posteriors. Set to \code{0} to use
-every SNP regardless of \code{alpha[l, j]}. Default \code{1e-6}.}
+every variable regardless of \code{alpha[l, j]}. Default \code{1e-6}.}
 
 \item{model_init}{optional \code{mfsusie} fit object from a prior
 call. When supplied, the IBSS loop is seeded from the

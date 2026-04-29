@@ -155,7 +155,8 @@ plot_dims
 ```
 
 ```{r mfsusie-plot, fig.width = plot_dims$width, fig.height = plot_dims$height}
-mfsusie_plot(fit_s, facet_cs = "stack")
+mfsusie_plot(fit_s, facet_cs = "stack",
+             effect_variables = multiomic_example$causal_snps)
 ```
 
 ```{r cs}
