@@ -28,6 +28,6 @@ scale, per outcome. The wavelet pipeline that built the fit
 each outcome's original position grid \code{pos[[m]]}.
 }
 \details{
-Prediction uses the per-SNP alpha-weighted aggregate
+Prediction uses the per-variable alpha-weighted aggregate
 coefficient \verb{b[j, t] = sum_l alpha[l, j] * mu[l, j, t] / csd_X[j]}, the same form as \code{susieR::predict.susie()}.
 }

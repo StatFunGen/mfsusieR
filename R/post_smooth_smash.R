@@ -75,7 +75,7 @@
 #'
 #' Used internally by `mf_post_smooth(method = "smash")`; also
 #' useful as a standalone post-processing utility on a single
-#' SNP and a single functional outcome.
+#' variable and a single functional outcome.
 #'
 #' @param Y numeric matrix (`n x T`) or numeric vector of length
 #'   `n` (treated as `n x 1`). Per-position response.

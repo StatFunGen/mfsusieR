@@ -32,7 +32,7 @@ band derived from the smash posterior variance.
 \details{
 Used internally by \code{mf_post_smooth(method = "smash")}; also
 useful as a standalone post-processing utility on a single
-SNP and a single functional outcome.
+variable and a single functional outcome.
 }
 \examples{
 \donttest{

@@ -131,23 +131,23 @@
 #'   on the null component of the mixsqp M-step. The total null
 #'   pseudo-count fed to mixsqp is `mixsqp_null_penalty * idx_size`,
 #'   versus a total data weight of `idx_size` from the `zeta`-
-#'   weighted SNP rows; the ratio `mixsqp_null_penalty : 1` is
+#'   weighted variable rows; the ratio `mixsqp_null_penalty : 1` is
 #'   therefore the null:data weight ratio at the M-step. Default
 #'   `0.1` corresponds to a 10% null:data ratio, anchored to
 #'   `ashr::ash.workhorse(nullweight = 10)` over a typical
 #'   `idx_size = 128` (ratio ~0.08). For multi-outcome fits the
 #'   penalty is scaled by the number of outcomes `M` so that the
-#'   null:data balance stays invariant as the per-effect SNP
+#'   null:data balance stays invariant as the per-effect variable
 #'   posterior concentrates linearly in `M`; single-outcome fits
 #'   are unchanged.
 #'   Default 0.7.
-#' @param mixsqp_alpha_eps numeric, threshold below which a SNP's
-#'   per-effect posterior `alpha[l, j]` is dropped from the
-#'   mixsqp M-step input. The truncation error on the M-step
-#'   gradient is bounded by `sum_{j outside} alpha_j *
+#' @param mixsqp_alpha_eps numeric, threshold below which a
+#'   variable's per-effect posterior `alpha[l, j]` is dropped
+#'   from the mixsqp M-step input. The truncation error on the
+#'   M-step gradient is bounded by `sum_{j outside} alpha_j *
 #'   max_k(L_jk)`, well under floating-point precision for
 #'   typical concentrated SuSiE posteriors. Set to `0` to use
-#'   every SNP regardless of `alpha[l, j]`. Default `1e-6`.
+#'   every variable regardless of `alpha[l, j]`. Default `1e-6`.
 #' @param small_sample_correction logical. When `TRUE`, replaces
 #'   the per-variable Wakefield Normal marginal Bayes factor in
 #'   the SER step with a Johnson 2005 scaled Student-t marginal

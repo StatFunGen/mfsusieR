@@ -84,7 +84,7 @@ mf_total_wavelet <- function(fit, m) {
 #' @return list of length `M`; each element a numeric matrix
 #'   `n_new x T_m` of predicted curves on the original position
 #'   grid for that outcome.
-#' @details Prediction uses the per-SNP alpha-weighted aggregate
+#' @details Prediction uses the per-variable alpha-weighted aggregate
 #'   coefficient `b[j, t] = sum_l alpha[l, j] * mu[l, j, t] /
 #'   csd_X[j]`, the same form as `susieR::predict.susie()`.
 #' @export
@@ -171,7 +171,7 @@ coef.mfsusie <- function(object, smooth_method = NULL, ...) {
   for (m in seq_len(M)) {
     coef_l_wavelet <- matrix(0, nrow = L, ncol = meta$T_basis[m])
     for (l in seq_len(L)) {
-      # Per-SNP unscale of mu: mu lives in (X-standardized,
+      # Per-variable unscale of mu: mu lives in (X-standardized,
       # Y-standardized-then-DWT'd) units; dividing by `X_scale[j]`
       # converts it to (X-raw, Y-standardized-then-DWT'd) units so
       # the alpha-weighted sum is the per-effect coefficient on the
@@ -277,7 +277,7 @@ summary.mfsusie <- function(object, ...) {
       data.frame(
         cs_index    = i,
         size        = length(cs),
-        snps        = paste(cs, collapse = ","),
+        variables   = paste(cs, collapse = ","),
         purity      = if (!is.null(sets$purity)) sets$purity[i, "min.abs.corr"] else NA_real_,
         coverage    = if (!is.null(sets$coverage)) sets$coverage[i] else NA_real_,
         stringsAsFactors = FALSE
@@ -332,9 +332,9 @@ print.summary.mfsusie <- function(x, ...) {
   if (!is.null(x$cs) && nrow(x$cs) > 0L) {
     cat("  Credible sets:\n")
     for (i in seq_len(nrow(x$cs))) {
-      cat(sprintf("    CS %d: size=%d, purity=%.3f, snps=%s\n",
+      cat(sprintf("    CS %d: size=%d, purity=%.3f, variables=%s\n",
                   x$cs$cs_index[i], x$cs$size[i], x$cs$purity[i],
-                  x$cs$snps[i]))
+                  x$cs$variables[i]))
     }
   } else {
     cat("  No credible sets.\n")
@@ -671,7 +671,7 @@ mf_post_smooth <- function(fit,
     lfsr_curves[[m]]    <- vector("list", L)
 
     for (l in seq_len(L)) {
-      # Alpha-weighted aggregate across SNPs (no lead-variant
+      # Alpha-weighted aggregate across variables (no lead-variant
       # tie-break). Mean: E_q[b_l_t] = sum_j alpha[l, j] * mu[l, j, t].
       # Second moment: E_q[b_l_t^2] = sum_j alpha[l, j] * mu2[l, j, t].
       # Variance under the law of total variance.
@@ -772,7 +772,7 @@ mf_post_smooth <- function(fit,
 # in raw-Y / raw-X units. `X_eff[[l]] = X_raw %*% alpha[l, ]`
 # replaces the previous lead-variant column. The aggregate effect
 # curve for outcome m, effect l is the alpha-weighted sum of the
-# per-SNP wavelet posteriors `sum_j alpha[l, j] * mu[l, j, ·]`,
+# per-variable wavelet posteriors `sum_j alpha[l, j] * mu[l, j, ·]`,
 # inverse-DWT'd, then multiplied by `csd_Y` (per-position) so the
 # result lives in raw-Y units.
 .other_effects_pos <- function(fit, m, exclude) {
@@ -784,7 +784,7 @@ mf_post_smooth <- function(fit,
   for (l in seq_len(L)) {
     if (l == exclude) next
     # Alpha-weighted aggregate per-position wavelet coefficient
-    # across SNPs. `mu[[l]][[m]]` is p x T_basis.
+    # across variables. `mu[[l]][[m]]` is p x T_basis.
     mu_w_agg <- as.numeric(fit$alpha[l, ] %*% fit$mu[[l]][[m]])
     eff_pos  <- dwt_invert_packed(matrix(mu_w_agg, nrow = 1L),
                                       meta, m)

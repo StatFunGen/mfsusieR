@@ -1,13 +1,20 @@
 # Mixture-weight EM helpers for the per-(outcome, scale) prior update.
 #
-# Two pure-R helpers that build the (p * |idx_s| + 1) x K likelihood
-# matrix consumed by mixsqp and run mixsqp at one (outcome, scale)
-# pair. The orchestration (looping over outcomes and scales,
-# reading per-effect zeta from `model$alpha[l, ]`, etc.) happens in
-# `update_model_variance.mf_individual` (R/individual_data_methods.R).
+# Two pure-R helpers, called by the orchestrator in
+# `optimize_prior_variance.mf_individual` (R/individual_data_methods.R):
+#   * `mf_em_likelihood_per_scale`  -- build the mixsqp L matrix
+#   * `mf_em_m_step_per_scale`      -- run mixsqp (warm-started)
 #
 # Manuscript reference: methods/derivation.tex line 216 (factorized
 # empirical-Bayes mixture-weight update).
+
+# All-null pi vector (1, 0, ..., 0); used by mixsqp's `tol_null_prior`
+# collapse path.
+mf_em_pi_null <- function(K) {
+  out <- numeric(K)
+  out[1L] <- 1
+  out
+}
 
 #' Build the mixsqp likelihood matrix at one (outcome, scale)
 #'
@@ -165,9 +172,7 @@ mf_em_m_step_per_scale <- function(L, zeta, idx_size,
     keep_cols <- which(!zero_col)
     L_keep    <- L[, keep_cols, drop = FALSE]
     K_keep    <- length(keep_cols)
-    if (K_keep == 0L) {
-      out <- numeric(K); out[1L] <- 1; return(out)
-    }
+    if (K_keep == 0L) return(mf_em_pi_null(K))
     x0_keep  <- warm_x0(pi_warm_start, keep_cols, K_keep)
     res      <- mixsqp(L_keep, w, x0 = x0_keep, log = FALSE,
                        control = ctrl)
@@ -189,9 +194,6 @@ mf_em_m_step_per_scale <- function(L, zeta, idx_size,
       as.character(res$status)),
       style = "hint")
   }
-  if (out[1] > 1 - tol_null_prior) {
-    out    <- numeric(K)
-    out[1] <- 1
-  }
+  if (out[1] > 1 - tol_null_prior) out <- mf_em_pi_null(K)
   out
 }
