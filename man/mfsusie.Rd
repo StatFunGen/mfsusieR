@@ -8,7 +8,7 @@ mfsusie(
   X,
   Y,
   pos = NULL,
-  L = 10,
+  L = 20,
   prior_variance_grid = NULL,
   prior_variance_scope = c("per_outcome", "per_scale"),
   null_prior_weight = 2,
@@ -18,11 +18,11 @@ mfsusie(
   residual_variance_scope = c("per_outcome", "per_scale"),
   standardize = TRUE,
   intercept = TRUE,
-  max_iter = 100,
+  max_iter = 50,
   tol = 1e-04,
   coverage = 0.95,
   min_abs_corr = 0.5,
-  L_greedy = NULL,
+  L_greedy = 5,
   greedy_lbf_cutoff = 0.1,
   estimate_prior_variance = TRUE,
   convergence_method = c("pip", "elbo"),
@@ -31,17 +31,16 @@ mfsusie(
   verbose = FALSE,
   track_fit = FALSE,
   max_padded_log2 = 10,
-  wavelet_filter_number = 10,
+  wavelet_basis_order = 10,
   wavelet_family = "DaubLeAsymm",
-  low_count_filter = 0,
-  quantile_norm = FALSE,
+  wavelet_magnitude_cutoff = 0,
+  wavelet_qnorm = TRUE,
   control_mixsqp = NULL,
   mixsqp_null_penalty = 0.1,
   mixsqp_alpha_eps = 1e-06,
   model_init = NULL,
   small_sample_correction = FALSE,
-  attach_smoothing_inputs = TRUE,
-  attach_lbf_variable_outcome = TRUE
+  attach_smoothing_inputs = TRUE
 )
 }
 \arguments{
@@ -54,7 +53,11 @@ mfsusie(
 of length \code{T_m} recording the sampling positions for that
 outcome. Defaults to \code{seq_len(T_m)} per outcome.}
 
-\item{L}{integer, maximum number of single effects to fit.}
+\item{L}{integer, maximum number of single effects to fit.
+Default \code{20}. With the default \code{L_greedy = 5}, the IBSS
+workhorse grows the effect count from 5 toward this cap in
+steps of 5 until the fit saturates (\code{min(lbf) < greedy_lbf_cutoff}); set \code{L_greedy = NULL} to fit the full
+\code{L} effects in one round.}
 
 \item{prior_variance_grid}{optional length-K vector of mixture
 variances for the scale-mixture-of-normals prior. When \code{NULL},
@@ -75,9 +78,21 @@ varying signals.}
 \item{null_prior_weight}{numeric, weight on the null prior
 component. Default 2.}
 
-\item{cross_outcome_prior}{optional cross-outcome combiner
-object. Defaults to the trivial independence combiner
-(\code{cross_outcome_prior_independent()}).}
+\item{cross_outcome_prior}{optional object that controls how the
+per-outcome log-Bayes factors are combined into the joint
+log-Bayes factor used by the SER step. Each IBSS effect first
+computes a length-\code{p} log-BF per outcome \code{m} (one entry per
+variable, summed over wavelet positions); these are then
+reduced to a single length-\code{p} joint log-BF before the
+posterior \code{alpha} is taken as a softmax over variables.
+Defaults to outcome independence
+(\code{cross_outcome_prior_independent()}), under which the joint
+log-BF is the elementwise sum of the per-outcome log-BFs;
+equivalently, the joint BF is the product of per-outcome BFs.
+The argument is an extension point for non-independence
+combiners (e.g. modality-covariance priors) registered as S3
+methods on \code{combine_outcome_lbfs}; only the independence
+combiner is shipped, so most users leave this \code{NULL}.}
 
 \item{prior_weights}{optional length-p numeric vector, the
 variable-selection prior. Defaults to uniform \code{1/p}.}
@@ -86,14 +101,16 @@ variable-selection prior. Defaults to uniform \code{1/p}.}
 residual variance per outcome. Defaults to the per-outcome
 sample variance.}
 
-\item{residual_variance_scope}{\code{"per_scale"} (default)
-or \code{"per_outcome"}. Controls the sigma2 update shape.}
+\item{residual_variance_scope}{\code{"per_outcome"} (default) or
+\code{"per_scale"}. Controls the sigma2 update shape: a single
+scalar per outcome (default) or one scalar per wavelet scale
+per outcome.}
 
 \item{standardize}{logical, scale \code{X} columns to unit variance.}
 
 \item{intercept}{logical, center \code{X} columns to mean zero.}
 
-\item{max_iter}{integer, maximum IBSS iterations.}
+\item{max_iter}{integer, maximum IBSS iterations. Default \code{50}.}
 
 \item{tol}{numeric, ELBO change tolerance for convergence.}
 
@@ -102,10 +119,11 @@ or \code{"per_outcome"}. Controls the sigma2 update shape.}
 \item{min_abs_corr}{numeric, minimum variable-to-variable correlation
 inside a credible set (CS purity threshold).}
 
-\item{L_greedy}{integer or \code{NULL}. When non-\code{NULL}, run susieR's
-greedy outer loop, growing the effect count from \code{L_greedy} up
-to \code{L} in linear steps until the fit saturates
-(\code{min(lbf) < greedy_lbf_cutoff}).}
+\item{L_greedy}{integer or \code{NULL}. When non-\code{NULL} (default \code{5}),
+run susieR's greedy outer loop, growing the effect count from
+\code{L_greedy} up to \code{L} in linear steps until the fit saturates
+(\code{min(lbf) < greedy_lbf_cutoff}). Set \code{NULL} to fit the full
+\code{L} effects in one round.}
 
 \item{greedy_lbf_cutoff}{numeric saturation threshold for the
 greedy outer loop. Default 0.1.}
@@ -155,25 +173,31 @@ the fit. Default \code{FALSE}.}
 \item{max_padded_log2}{integer, log2 cap on the post-remap grid
 length per outcome. Default 10.}
 
-\item{wavelet_filter_number}{integer; see
-\code{filter.select}.}
+\item{wavelet_basis_order}{integer; selects the wavelet basis
+member within \code{wavelet_family}. For Daubechies families this
+equals the number of vanishing moments (higher = smoother,
+longer-support filter). Forwarded to \code{wavethresh::wd}'s
+\code{filter.number}; see also \code{filter.select}. Default \code{10}.}
 
-\item{wavelet_family}{character; see \code{wd}.}
+\item{wavelet_family}{character; selects the wavelet family.
+Forwarded to \code{wavethresh::wd}'s \code{family}. Default
+\code{"DaubLeAsymm"} (Daubechies least-asymmetric, a.k.a. Symmlet).}
 
-\item{low_count_filter}{non-negative numeric. Wavelet-domain
-columns with \verb{median(|column|) <= low_count_filter} are
-flagged as uninformative and treated as \code{Bhat = 0},
-\code{Shat = 1} at every IBSS iteration. Useful for
-sparse-coverage assays where many wavelet columns carry
-negligible signal. Default \code{0}; with the default the set
-is non-empty only when the response has at least one
-wavelet column whose absolute-value median is exactly zero.}
+\item{wavelet_magnitude_cutoff}{non-negative numeric. After
+the wavelet decomposition, each wavelet column \code{t} of the
+response has its median absolute value \verb{median(|Y_wd[, t]|)}
+compared against this cutoff; columns at or below are zeroed
+in the data and treated as \code{Bhat = 0}, \code{Shat = 1} at every
+IBSS iteration. Useful for sparse-coverage assays where
+high-frequency wavelet coefficients are dominated by zeros.
+Default \code{0}; only columns with a strictly-zero absolute-value
+median are masked.}
 
-\item{quantile_norm}{logical. When \code{TRUE}, applies a
+\item{wavelet_qnorm}{logical. When \code{TRUE} (default), applies a
 column-wise rank-based normal quantile transform to the
 wavelet-domain response before the IBSS loop. Useful for
-non-Gaussian wavelet coefficients arising from heavy-
-tailed assays. Default \code{FALSE}.}
+non-Gaussian wavelet coefficients arising from heavy-tailed
+assays.}
 
 \item{control_mixsqp}{optional named list of \code{mixsqp} control
 arguments forwarded to the per-(outcome, scale) M-step.}
@@ -191,7 +215,7 @@ penalty is scaled by the number of outcomes \code{M} so that the
 null:data balance stays invariant as the per-effect variable
 posterior concentrates linearly in \code{M}; single-outcome fits
 are unchanged.
-Default 0.7.}
+Default \code{0.1}.}
 
 \item{mixsqp_alpha_eps}{numeric, threshold below which a
 variable's per-effect posterior \code{alpha[l, j]} is dropped
@@ -228,15 +252,6 @@ Set \code{FALSE} to drop these and call
 \code{mf_post_smooth(fit, X = X, Y = Y, ...)} instead; useful
 when sharing fits where the per-individual data should
 not travel with the fit.}
-
-\item{attach_lbf_variable_outcome}{logical. When \code{TRUE} (default), the
-fit carries \code{lbf_variable_outcome}, an \verb{L x p x M} array of per-(effect,
-variant, outcome) log Bayes factors, populated from the IBSS
-sweep. Consumed by \code{mf_post_outcome_configuration(fit, by = "outcome")} (and by \code{susieR::susie_post_outcome_configuration}
-directly). Set \code{FALSE} to drop these — extra storage is
-\code{L * p * M} doubles. When \code{FALSE}, recover the array by
-calling \code{mf_post_outcome_configuration(fit, X = X, Y = Y, ...)}
-with the original data.}
 }
 \value{
 A list of class \code{c("mfsusie", "susie")} carrying:
@@ -270,9 +285,8 @@ aggregates. Attached when \code{attach_smoothing_inputs = TRUE}.}
 \item{\code{lbf_variable_outcome}}{\verb{L x p x M} array of per-(effect, variant,
 outcome) log Bayes factors. Parallels \code{lbf_variable} (which is
 \verb{L x p}, the joint composite summed across scales and outcomes);
-\code{lbf_variable_outcome} keeps the M axis intact. Attached when
-\code{attach_lbf_variable_outcome = TRUE} (default). Consumed by
-\code{susie_post_outcome_configuration(fit, by = "outcome")}.}
+\code{lbf_variable_outcome} keeps the M axis intact. Always attached;
+consumed by \code{susie_post_outcome_configuration(fit, by = "outcome")}.}
 }
 }
 \description{

@@ -53,19 +53,33 @@
 #'   varying signals.
 #' @param null_prior_weight numeric, weight on the null prior
 #'   component. Default 2.
-#' @param cross_outcome_prior optional cross-outcome combiner
-#'   object. Defaults to the trivial independence combiner
-#'   (`cross_outcome_prior_independent()`).
+#' @param cross_outcome_prior optional object that controls how the
+#'   per-outcome log-Bayes factors are combined into the joint
+#'   log-Bayes factor used by the SER step. Each IBSS effect first
+#'   computes a length-`p` log-BF per outcome `m` (one entry per
+#'   variable, summed over wavelet positions); these are then
+#'   reduced to a single length-`p` joint log-BF before the
+#'   posterior `alpha` is taken as a softmax over variables.
+#'   Defaults to outcome independence
+#'   (`cross_outcome_prior_independent()`), under which the joint
+#'   log-BF is the elementwise sum of the per-outcome log-BFs;
+#'   equivalently, the joint BF is the product of per-outcome BFs.
+#'   The argument is an extension point for non-independence
+#'   combiners (e.g. modality-covariance priors) registered as S3
+#'   methods on `combine_outcome_lbfs`; only the independence
+#'   combiner is shipped, so most users leave this `NULL`.
 #' @param prior_weights optional length-p numeric vector, the
 #'   variable-selection prior. Defaults to uniform `1/p`.
 #' @param residual_variance optional list of length `M`, initial
 #'   residual variance per outcome. Defaults to the per-outcome
 #'   sample variance.
-#' @param residual_variance_scope `"per_scale"` (default)
-#'   or `"per_outcome"`. Controls the sigma2 update shape.
+#' @param residual_variance_scope `"per_outcome"` (default) or
+#'   `"per_scale"`. Controls the sigma2 update shape: a single
+#'   scalar per outcome (default) or one scalar per wavelet scale
+#'   per outcome.
 #' @param standardize logical, scale `X` columns to unit variance.
 #' @param intercept logical, center `X` columns to mean zero.
-#' @param max_iter integer, maximum IBSS iterations.
+#' @param max_iter integer, maximum IBSS iterations. Default `50`.
 #' @param tol numeric, ELBO change tolerance for convergence.
 #' @param coverage numeric in (0, 1), credible-set coverage.
 #' @param min_abs_corr numeric, minimum variable-to-variable correlation
@@ -115,22 +129,28 @@
 #'   the fit. Default `FALSE`.
 #' @param max_padded_log2 integer, log2 cap on the post-remap grid
 #'   length per outcome. Default 10.
-#' @param wavelet_filter_number integer; see
-#'   `filter.select`.
-#' @param wavelet_family character; see `wd`.
-#' @param low_count_filter non-negative numeric. Wavelet-domain
-#'   columns with `median(|column|) <= low_count_filter` are
-#'   flagged as uninformative and treated as `Bhat = 0`,
-#'   `Shat = 1` at every IBSS iteration. Useful for
-#'   sparse-coverage assays where many wavelet columns carry
-#'   negligible signal. Default `0`; with the default the set
-#'   is non-empty only when the response has at least one
-#'   wavelet column whose absolute-value median is exactly zero.
-#' @param quantile_norm logical. When `TRUE`, applies a
+#' @param wavelet_basis_order integer; selects the wavelet basis
+#'   member within `wavelet_family`. For Daubechies families this
+#'   equals the number of vanishing moments (higher = smoother,
+#'   longer-support filter). Forwarded to `wavethresh::wd`'s
+#'   `filter.number`; see also `filter.select`. Default `10`.
+#' @param wavelet_family character; selects the wavelet family.
+#'   Forwarded to `wavethresh::wd`'s `family`. Default
+#'   `"DaubLeAsymm"` (Daubechies least-asymmetric, a.k.a. Symmlet).
+#' @param wavelet_magnitude_cutoff non-negative numeric. After
+#'   the wavelet decomposition, each wavelet column `t` of the
+#'   response has its median absolute value `median(|Y_wd[, t]|)`
+#'   compared against this cutoff; columns at or below are zeroed
+#'   in the data and treated as `Bhat = 0`, `Shat = 1` at every
+#'   IBSS iteration. Useful for sparse-coverage assays where
+#'   high-frequency wavelet coefficients are dominated by zeros.
+#'   Default `0`; only columns with a strictly-zero absolute-value
+#'   median are masked.
+#' @param wavelet_qnorm logical. When `TRUE` (default), applies a
 #'   column-wise rank-based normal quantile transform to the
 #'   wavelet-domain response before the IBSS loop. Useful for
-#'   non-Gaussian wavelet coefficients arising from heavy-
-#'   tailed assays. Default `FALSE`.
+#'   non-Gaussian wavelet coefficients arising from heavy-tailed
+#'   assays.
 #' @param control_mixsqp optional named list of `mixsqp` control
 #'   arguments forwarded to the per-(outcome, scale) M-step.
 #' @param mixsqp_null_penalty numeric, per-coefficient pseudo-count
@@ -180,15 +200,6 @@
 #'   `mf_post_smooth(fit, X = X, Y = Y, ...)` instead; useful
 #'   when sharing fits where the per-individual data should
 #'   not travel with the fit.
-#' @param attach_lbf_variable_outcome logical. When `TRUE` (default), the
-#'   fit carries `lbf_variable_outcome`, an `L x p x M` array of per-(effect,
-#'   variant, outcome) log Bayes factors, populated from the IBSS
-#'   sweep. Consumed by `mf_post_outcome_configuration(fit,
-#'   by = "outcome")` (and by `susieR::susie_post_outcome_configuration`
-#'   directly). Set `FALSE` to drop these — extra storage is
-#'   `L * p * M` doubles. When `FALSE`, recover the array by
-#'   calling `mf_post_outcome_configuration(fit, X = X, Y = Y, ...)`
-#'   with the original data.
 #'
 #' @return A list of class `c("mfsusie", "susie")` carrying:
 #' \describe{
@@ -221,9 +232,8 @@
 #'   \item{`lbf_variable_outcome`}{`L x p x M` array of per-(effect, variant,
 #'     outcome) log Bayes factors. Parallels `lbf_variable` (which is
 #'     `L x p`, the joint composite summed across scales and outcomes);
-#'     `lbf_variable_outcome` keeps the M axis intact. Attached when
-#'     `attach_lbf_variable_outcome = TRUE` (default). Consumed by
-#'     `susie_post_outcome_configuration(fit, by = "outcome")`.}
+#'     `lbf_variable_outcome` keeps the M axis intact. Always attached;
+#'     consumed by `susie_post_outcome_configuration(fit, by = "outcome")`.}
 #' }
 #'
 #' @references
@@ -243,7 +253,7 @@ mfsusie <- function(X, Y,
                                                   "per_scale"),
                     standardize               = TRUE,
                     intercept                 = TRUE,
-                    max_iter                  = 100,
+                    max_iter                  = 50,
                     tol                       = 1e-4,
                     coverage                  = 0.95,
                     min_abs_corr              = 0.5,
@@ -256,26 +266,20 @@ mfsusie <- function(X, Y,
                     verbose                   = FALSE,
                     track_fit                 = FALSE,
                     max_padded_log2           = 10,
-                    wavelet_filter_number     = 10,
+                    wavelet_basis_order       = 10,
                     wavelet_family            = "DaubLeAsymm",
-                    low_count_filter          = 0,
-                    quantile_norm             = FALSE,
+                    wavelet_magnitude_cutoff  = 0,
+                    wavelet_qnorm             = TRUE,
                     control_mixsqp            = NULL,
                     mixsqp_null_penalty       = 0.1,
                     mixsqp_alpha_eps          = 1e-6,
                     model_init                = NULL,
                     small_sample_correction   = FALSE,
-                    attach_smoothing_inputs   = TRUE,
-                    attach_lbf_variable_outcome        = TRUE) {
+                    attach_smoothing_inputs   = TRUE) {
   if (!is.logical(small_sample_correction) ||
       length(small_sample_correction) != 1L ||
       is.na(small_sample_correction)) {
     stop("`small_sample_correction` must be `TRUE` or `FALSE`.")
-  }
-  if (!is.logical(attach_lbf_variable_outcome) ||
-      length(attach_lbf_variable_outcome) != 1L ||
-      is.na(attach_lbf_variable_outcome)) {
-    stop("`attach_lbf_variable_outcome` must be `TRUE` or `FALSE`.")
   }
   prior_variance_scope    <- match.arg(prior_variance_scope)
   residual_variance_scope <- match.arg(residual_variance_scope)
@@ -308,17 +312,17 @@ mfsusie <- function(X, Y,
 
   # 1. Construct the data class.
   data <- create_mf_individual(
-    X                     = X,
-    Y                     = Y,
-    pos                   = pos,
-    max_padded_log2       = max_padded_log2,
-    wavelet_filter_number = wavelet_filter_number,
-    wavelet_family        = wavelet_family,
-    standardize           = standardize,
-    intercept             = intercept,
-    low_count_filter      = low_count_filter,
-    quantile_norm         = quantile_norm,
-    verbose               = verbose
+    X                        = X,
+    Y                        = Y,
+    pos                      = pos,
+    max_padded_log2          = max_padded_log2,
+    wavelet_basis_order      = wavelet_basis_order,
+    wavelet_family           = wavelet_family,
+    standardize              = standardize,
+    intercept                = intercept,
+    wavelet_magnitude_cutoff = wavelet_magnitude_cutoff,
+    wavelet_qnorm            = wavelet_qnorm,
+    verbose                  = verbose
   )
 
   # 2. Build the prior (scale-mixture-of-normals + cross-outcome
@@ -373,8 +377,7 @@ mfsusie <- function(X, Y,
     model_init                 = model_init,
     small_sample_correction    = small_sample_correction,
     small_sample_df            = if (small_sample_correction) data$n - 1L
-                                 else NULL,
-    attach_lbf_variable_outcome         = isTRUE(attach_lbf_variable_outcome)
+                                 else NULL
   )
 
   # 4. Run the susieR workhorse. All per-effect and per-iteration

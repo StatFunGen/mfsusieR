@@ -274,15 +274,16 @@ for functional fine-mapping problems.
 `fsusie()` exposes two preprocessing flags for the wavelet
 matrix:
 
-- `low_count_filter` (default `0`): wavelet columns with
-  `median(|column|) <= low_count_filter` are masked, contributing
+- `wavelet_magnitude_cutoff` (default `0`): wavelet columns with
+  `median(|column|) <= wavelet_magnitude_cutoff` are masked, contributing
   `(Bhat = 0, Shat = 1)` to the SER step. Use a small positive
   value when the response has sparse non-zero entries (e.g.,
   ATAC-seq read pileups).
-- `quantile_norm` (default `FALSE`): applies a column-wise
+- `wavelet_qnorm` (default `TRUE`): applies a column-wise
   rank-based normal quantile transform to the wavelet matrix.
-  Use when the per-position residuals are heavy-tailed or
-  visibly non-Gaussian.
+  Useful when the per-position residuals are heavy-tailed or
+  visibly non-Gaussian. Set to `FALSE` to skip the transform when
+  the wavelet coefficients are already approximately Gaussian.
 
 See `?mfsusie` for the full set of preprocessing options.
 

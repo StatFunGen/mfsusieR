@@ -108,14 +108,14 @@ test_that("wavelet_eb agrees with port source up to documented bug magnitude", {
 test_that("preprocessing flags accept valid values and reject bad ones", {
   sim <- build_cov_sim()
   expect_silent(suppressWarnings(
-    mf_adjust_for_covariates(sim$Y, sim$Z, low_count_filter = 0.01)))
+    mf_adjust_for_covariates(sim$Y, sim$Z, wavelet_magnitude_cutoff = 0.01)))
   expect_silent(suppressWarnings(
-    mf_adjust_for_covariates(sim$Y, sim$Z, quantile_norm = TRUE)))
+    mf_adjust_for_covariates(sim$Y, sim$Z, wavelet_qnorm = TRUE)))
   expect_error(
-    mf_adjust_for_covariates(sim$Y, sim$Z, low_count_filter = -0.1),
+    mf_adjust_for_covariates(sim$Y, sim$Z, wavelet_magnitude_cutoff = -0.1),
     "non-negative")
   expect_error(
-    mf_adjust_for_covariates(sim$Y, sim$Z, quantile_norm = "yes"),
+    mf_adjust_for_covariates(sim$Y, sim$Z, wavelet_qnorm = "yes"),
     "TRUE` or `FALSE`")
 })
 

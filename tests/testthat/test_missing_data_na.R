@@ -44,13 +44,13 @@ with_runtime <- function(label, expr, budget_sec = 120) {
 mfsusie_args_noqnorm <- list(L = 5, max_iter = 40,
                               prior_variance_scope    = "per_outcome",
                               residual_variance_scope = "per_outcome",
-                              quantile_norm = FALSE,
+                              wavelet_qnorm = FALSE,
                               verbose = FALSE)
 
 mfsusie_args_qnorm   <- list(L = 5, max_iter = 40,
                               prior_variance_scope    = "per_outcome",
                               residual_variance_scope = "per_outcome",
-                              quantile_norm = TRUE,
+                              wavelet_qnorm = TRUE,
                               verbose = FALSE)
 
 # ---- create_mf_individual: na_idx and xtx_diag_list contract ----------
@@ -118,7 +118,7 @@ test_that("each trait gets an independent na_idx when missing rows differ", {
 
 # ---- mfsusie end-to-end: no crash with NA rows -------------------------
 
-test_that("mfsusie quantile_norm=FALSE does not crash with 20% NA rows per trait", {
+test_that("mfsusie wavelet_qnorm=FALSE does not crash with 20% NA rows per trait", {
   d <- make_na_XY()
   rt <- with_runtime("mfsusie qnorm=FALSE 20% NA", {
     do.call(mfsusie, c(list(X = d$X, Y = d$Y), mfsusie_args_noqnorm))
@@ -127,7 +127,7 @@ test_that("mfsusie quantile_norm=FALSE does not crash with 20% NA rows per trait
   expect_s3_class(rt$result, "susie")
 })
 
-test_that("mfsusie quantile_norm=TRUE does not crash with 20% NA rows per trait", {
+test_that("mfsusie wavelet_qnorm=TRUE does not crash with 20% NA rows per trait", {
   d <- make_na_XY()
   rt <- with_runtime("mfsusie qnorm=TRUE 20% NA", {
     do.call(mfsusie, c(list(X = d$X, Y = d$Y), mfsusie_args_qnorm))
@@ -136,7 +136,7 @@ test_that("mfsusie quantile_norm=TRUE does not crash with 20% NA rows per trait"
   expect_s3_class(rt$result, "susie")
 })
 
-test_that("mfsusie quantile_norm=FALSE returns valid pip with 20% NA", {
+test_that("mfsusie wavelet_qnorm=FALSE returns valid pip with 20% NA", {
   d <- make_na_XY()
   rt <- with_runtime("mfsusie qnorm=FALSE pip check", {
     do.call(mfsusie, c(list(X = d$X, Y = d$Y), mfsusie_args_noqnorm))
@@ -148,7 +148,7 @@ test_that("mfsusie quantile_norm=FALSE returns valid pip with 20% NA", {
   expect_true(all(fit$pip >= 0 & fit$pip <= 1))
 })
 
-test_that("mfsusie quantile_norm=TRUE returns valid pip with 20% NA", {
+test_that("mfsusie wavelet_qnorm=TRUE returns valid pip with 20% NA", {
   d <- make_na_XY()
   rt <- with_runtime("mfsusie qnorm=TRUE pip check", {
     do.call(mfsusie, c(list(X = d$X, Y = d$Y), mfsusie_args_qnorm))
@@ -162,7 +162,7 @@ test_that("mfsusie quantile_norm=TRUE returns valid pip with 20% NA", {
 
 # ---- causal signal recovery under NA -----------------------------------
 
-test_that("causal pip > 0.5 under quantile_norm=FALSE with 20% NA (strong signal)", {
+test_that("causal pip > 0.5 under wavelet_qnorm=FALSE with 20% NA (strong signal)", {
   d <- make_na_XY(effect = 2)
   rt <- with_runtime("mfsusie qnorm=FALSE signal recovery", {
     do.call(mfsusie, c(list(X = d$X, Y = d$Y), mfsusie_args_noqnorm))
@@ -171,7 +171,7 @@ test_that("causal pip > 0.5 under quantile_norm=FALSE with 20% NA (strong signal
   expect_gt(rt$result$pip[d$causal_j], 0.5)
 })
 
-test_that("causal pip > 0.5 under quantile_norm=TRUE with 20% NA (strong signal)", {
+test_that("causal pip > 0.5 under wavelet_qnorm=TRUE with 20% NA (strong signal)", {
   d <- make_na_XY(effect = 2)
   rt <- with_runtime("mfsusie qnorm=TRUE signal recovery", {
     do.call(mfsusie, c(list(X = d$X, Y = d$Y), mfsusie_args_qnorm))
@@ -217,7 +217,7 @@ test_that("runtime comparison: qnorm=FALSE vs qnorm=TRUE at 5%, 20%, 40% NA", {
 
 # ---- edge cases --------------------------------------------------------
 
-test_that("mfsusie quantile_norm=FALSE does not crash: univariate T_m=1 with NA", {
+test_that("mfsusie wavelet_qnorm=FALSE does not crash: univariate T_m=1 with NA", {
   set.seed(mfsusier_test_seed())
   n <- 50; p <- 15
   X <- scale(matrix(rbinom(n * p, 2, 0.3), n, p))
@@ -225,13 +225,13 @@ test_that("mfsusie quantile_norm=FALSE does not crash: univariate T_m=1 with NA"
             matrix(2 * X[, 3] + rnorm(n), n, 1))
   Y[[1]][sample(n, 10), ] <- NA
   rt <- with_runtime("mfsusie qnorm=FALSE T_m=1 NA", {
-    mfsusie(X, Y, L = 3, max_iter = 30, quantile_norm = FALSE, verbose = FALSE)
+    mfsusie(X, Y, L = 3, max_iter = 30, wavelet_qnorm = FALSE, verbose = FALSE)
   })
   expect_lt(rt$elapsed, rt$budget_sec)
   expect_s3_class(rt$result, "susie")
 })
 
-test_that("mfsusie quantile_norm=TRUE does not crash: univariate T_m=1 with NA", {
+test_that("mfsusie wavelet_qnorm=TRUE does not crash: univariate T_m=1 with NA", {
   set.seed(mfsusier_test_seed())
   n <- 50; p <- 15
   X <- scale(matrix(rbinom(n * p, 2, 0.3), n, p))
@@ -239,13 +239,13 @@ test_that("mfsusie quantile_norm=TRUE does not crash: univariate T_m=1 with NA",
             matrix(2 * X[, 3] + rnorm(n), n, 1))
   Y[[1]][sample(n, 10), ] <- NA
   rt <- with_runtime("mfsusie qnorm=TRUE T_m=1 NA", {
-    mfsusie(X, Y, L = 3, max_iter = 30, quantile_norm = TRUE, verbose = FALSE)
+    mfsusie(X, Y, L = 3, max_iter = 30, wavelet_qnorm = TRUE, verbose = FALSE)
   })
   expect_lt(rt$elapsed, rt$budget_sec)
   expect_s3_class(rt$result, "susie")
 })
 
-test_that("mfsusie quantile_norm=FALSE: null simulation with NA stays well-behaved", {
+test_that("mfsusie wavelet_qnorm=FALSE: null simulation with NA stays well-behaved", {
   set.seed(mfsusier_test_seed() + 5L)
   n <- 50; p <- 20
   X <- scale(matrix(rbinom(n * p, 2, 0.3), n, p))
@@ -255,14 +255,14 @@ test_that("mfsusie quantile_norm=FALSE: null simulation with NA stays well-behav
     y
   })
   rt <- with_runtime("mfsusie qnorm=FALSE null+NA", {
-    mfsusie(X, Y, L = 5, max_iter = 30, quantile_norm = FALSE, verbose = FALSE)
+    mfsusie(X, Y, L = 5, max_iter = 30, wavelet_qnorm = FALSE, verbose = FALSE)
   })
   expect_lt(rt$elapsed, rt$budget_sec)
   expect_true(all(rt$result$pip >= 0 & rt$result$pip <= 1))
   expect_true(max(rt$result$pip) < 0.99)
 })
 
-test_that("mfsusie quantile_norm=TRUE: null simulation with NA stays well-behaved", {
+test_that("mfsusie wavelet_qnorm=TRUE: null simulation with NA stays well-behaved", {
   set.seed(mfsusier_test_seed() + 5L)
   n <- 50; p <- 20
   X <- scale(matrix(rbinom(n * p, 2, 0.3), n, p))
@@ -272,7 +272,7 @@ test_that("mfsusie quantile_norm=TRUE: null simulation with NA stays well-behave
     y
   })
   rt <- with_runtime("mfsusie qnorm=TRUE null+NA", {
-    mfsusie(X, Y, L = 5, max_iter = 30, quantile_norm = TRUE, verbose = FALSE)
+    mfsusie(X, Y, L = 5, max_iter = 30, wavelet_qnorm = TRUE, verbose = FALSE)
   })
   expect_lt(rt$elapsed, rt$budget_sec)
   expect_true(all(rt$result$pip >= 0 & rt$result$pip <= 1))
@@ -305,7 +305,7 @@ test_that("mfsusie per_scale scope does not crash with NA (qnorm=FALSE)", {
     mfsusie(d$X, d$Y, L = 3, max_iter = 30,
             prior_variance_scope    = "per_scale",
             residual_variance_scope = "per_scale",
-            quantile_norm = FALSE, verbose = FALSE)
+            wavelet_qnorm = FALSE, verbose = FALSE)
   })
   expect_lt(rt$elapsed, rt$budget_sec)
   expect_s3_class(rt$result, "susie")
@@ -317,7 +317,7 @@ test_that("mfsusie per_scale scope does not crash with NA (qnorm=TRUE)", {
     mfsusie(d$X, d$Y, L = 3, max_iter = 30,
             prior_variance_scope    = "per_scale",
             residual_variance_scope = "per_scale",
-            quantile_norm = TRUE, verbose = FALSE)
+            wavelet_qnorm = TRUE, verbose = FALSE)
   })
   expect_lt(rt$elapsed, rt$budget_sec)
   expect_s3_class(rt$result, "susie")

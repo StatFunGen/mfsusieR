@@ -235,15 +235,12 @@ loglik.mf_individual <- function(data, params, model, V, ser_stats, l = NULL,
                               shat2   = ser_stats$shat2)
     }
 
-    # Persist per-outcome BFs when the user opted in via
-    # `attach_lbf_variable_outcome = TRUE` at fit time. The slot is
-    # pre-allocated in `initialize_susie_model.mf_individual`; when
-    # NULL the IBSS skips storage. Each `outcome_lbfs[[m]]` is a
-    # length-p vector of log BFs for outcome m, summed across scales.
-    if (!is.null(model$lbf_variable_outcome)) {
-      for (m in seq_len(M)) {
-        model$lbf_variable_outcome[l, , m] <- outcome_lbfs[[m]]
-      }
+    # Persist per-outcome BFs. The slot is pre-allocated in
+    # `initialize_susie_model.mf_individual`. Each `outcome_lbfs[[m]]`
+    # is a length-p vector of log BFs for outcome m, summed across
+    # scales.
+    for (m in seq_len(M)) {
+      model$lbf_variable_outcome[l, , m] <- outcome_lbfs[[m]]
     }
 
     return(model)

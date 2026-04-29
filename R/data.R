@@ -174,8 +174,8 @@
 #'     Normal marginal Bayes factor).}
 #'   \item{`johnson`}{`mfsusie` fit with
 #'     `small_sample_correction = TRUE` (Johnson-t marginal).}
-#'   \item{`lowcount`}{`mfsusie` fit with `low_count_filter = 0.02`.}
-#'   \item{`qn`}{`mfsusie` fit with `quantile_norm = TRUE`.}
+#'   \item{`lowcount`}{`mfsusie` fit with `wavelet_magnitude_cutoff = 0.02`.}
+#'   \item{`qn`}{`mfsusie` fit with `wavelet_qnorm = TRUE`.}
 #'   \item{`combined`}{`mfsusie` fit with all three corrections
 #'     enabled.}
 #' }
