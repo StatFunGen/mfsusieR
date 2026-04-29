@@ -1,5 +1,11 @@
-^inst/openspec$
+^inst/bench$
+^inst/bootstrap-mfsusieR\.sh$
+^inst/CLAUDE\.md$
+^inst/data-raw$
 ^inst/notes$
+^inst/openspec$
+^inst/README-SETUP\.md$
+^inst/scripts$
 ^\.claude$
 ^\.github$
 ^\.Rbuildignore$
@@ -7,9 +13,6 @@
 ^docs$
 ^pixi\.toml$
 ^pixi\.lock$
+^\.pixi$
 ^pkgdown$
-^bootstrap-mfsusieR\.sh$
-^README-SETUP\.md$
 ^tests/testthat/scripts$
-^CLAUDE\.md$
-^data-raw$

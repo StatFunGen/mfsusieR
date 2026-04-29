@@ -115,19 +115,7 @@ test_that("mf_adjust_for_covariates accepts wavelet_magnitude_cutoff", {
   Y <- Z %*% matrix(rnorm(K * T_m), K, T_m) +
        matrix(rnorm(n * T_m, sd = 0.4), n, T_m)
   out <- suppressWarnings(
-    mf_adjust_for_covariates(wavelet_qnorm = FALSE, Y, Z, wavelet_magnitude_cutoff = 0.05))
-  expect_equal(dim(out$Y_adjusted), c(n, T_m))
-  expect_true(out$sigma2 > 0)
-})
-
-test_that("mf_adjust_for_covariates accepts wavelet_qnorm", {
-  set.seed(32L)
-  n <- 60L; T_m <- 64L; K <- 2L
-  Z <- matrix(rnorm(n * K), n, K)
-  Y <- Z %*% matrix(rnorm(K * T_m), K, T_m) +
-       matrix(rnorm(n * T_m, sd = 0.4), n, T_m)
-  out <- suppressWarnings(
-    mf_adjust_for_covariates(Y, Z, wavelet_qnorm = TRUE))
+    mf_adjust_for_covariates(Y, Z, wavelet_magnitude_cutoff = 0.05))
   expect_equal(dim(out$Y_adjusted), c(n, T_m))
   expect_true(out$sigma2 > 0)
 })

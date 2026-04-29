@@ -293,8 +293,8 @@ Fit the multi-functional, multi-outcome Sum of Single Effects
 (mfSuSiE) regression model. Each outcome \code{m} carries a per-sample
 functional response \code{Y_m} of length \code{T_m}; \code{T_m} may differ across
 outcomes, and either \code{T_m = 1} (univariate response) or \code{T_m > 1}
-(functional response on a regular grid) is supported. mfsusieR runs
-a per-outcome wavelet decomposition, then dispatches into susieR's
+(functional response on a regular grid) is supported; for the latter
+mfsusieR runs a per-outcome wavelet decomposition, then dispatches into susieR's
 IBSS workhorse with mfsusieR-specific S3 methods that handle the
 per-(scale, outcome) mixture-of-normals prior and residual
 variance.
