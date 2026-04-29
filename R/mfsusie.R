@@ -37,10 +37,15 @@
 #'   the data-driven path
 #'   (`compute_marginal_bhat_shat` + `ash`) selects the
 #'   grid per outcome.
-#' @param prior_variance_scope `"per_scale"` (default) or
-#'   `"per_outcome"`. Controls whether the mixture-weight matrix
-#'   `pi_V[[m]]` has a per-scale row dimension or collapses across
-#'   scales.
+#' @param prior_variance_scope `"per_outcome"` (default) or
+#'   `"per_scale"`. Controls whether the mixture-weight matrix
+#'   `pi_V[[m]]` collapses across scales (one weight vector per
+#'   outcome) or keeps a separate row per wavelet scale. The
+#'   per-outcome scope is the default because it is roughly
+#'   `S_m`-fold cheaper per IBSS iter (M mixsqp calls per iter
+#'   instead of M*S_m); switch to `"per_scale"` only when you
+#'   need scale-specific mixture weights for power on shape-
+#'   varying signals.
 #' @param null_prior_weight numeric, weight on the null prior
 #'   component. Default 2.
 #' @param cross_outcome_prior optional cross-outcome combiner

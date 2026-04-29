@@ -110,16 +110,26 @@ mf_sigma2_per_position <- function(data, model, m) {
   }
 }
 
-# Per-outcome (Bhat, Shat) derivation from the cached residuals on
-# `model$residuals[[m]]`. Shared by `compute_ser_statistics` and
-# `calculate_posterior_moments` so the divide-by-pw and per-scale
-# sigma2 broadcast lives in one place.
+# Per-outcome (Bhat, Shat) from cached residuals. shat2_m only depends
+# on xtx_diag (fixed) and sigma2[[m]] (changes at the per-iter sigma2
+# update), so we read `model$em_cache$shat2[[m]]` populated by
+# `refresh_em_cache` instead of redoing the outer product per (l, m).
 mf_per_outcome_bhat_shat <- function(data, model, m) {
   pw    <- data$xtx_diag
   XtR_m <- model$residuals[[m]]
   bhat_m <- XtR_m / pw
-  sigma2_per_pos <- mf_sigma2_per_position(data, model, m)
-  shat2_m <- outer(1 / pw, sigma2_per_pos)
+
+  cached_shat2 <- model$em_cache$shat2[[m]]
+  shat2_m <- if (!is.null(cached_shat2) &&
+                 identical(dim(cached_shat2),
+                           c(data$p, data$T_basis[m]))) {
+    cached_shat2
+  } else {
+    # Fallback before em_cache is populated (e.g., first SER call) or
+    # in tests that bypass the IBSS orchestrator.
+    sigma2_per_pos <- mf_sigma2_per_position(data, model, m)
+    outer(1 / pw, sigma2_per_pos)
+  }
 
   # Low-count mask: the IBSS treats flagged columns as
   # uninformative (Bhat = 0, Shat = 1) at every iteration.
@@ -211,6 +221,17 @@ loglik.mf_individual <- function(data, params, model, V, ser_stats, l = NULL,
     model$lbf[l]            <- lbf_model
     model$lbf_variable[l, ] <- lbf_combined
 
+    # Stash ser_stats so the next call in susieR's SER orchestrator
+    # -- calculate_posterior_moments, which does not receive
+    # ser_stats -- can reuse it. Keyed by `l` to avoid stale reads.
+    # refresh_lbf_kl calls with update_alpha = FALSE and never hits
+    # CPM, so we skip the stash there.
+    if (update_alpha) {
+      model$ser_cache <- list(l = l,
+                              betahat = ser_stats$betahat,
+                              shat2   = ser_stats$shat2)
+    }
+
     # Persist per-outcome BFs when the user opted in via
     # `attach_lbf_variable_outcome = TRUE` at fit time. The slot is
     # pre-allocated in `initialize_susie_model.mf_individual`; when
@@ -245,10 +266,20 @@ loglik.mf_individual <- function(data, params, model, V, ser_stats, l = NULL,
 #' @noRd
 calculate_posterior_moments.mf_individual <- function(data, params, model, V, l, ...) {
   p <- data$p
+  # Reuse the (bhat, shat2) stashed by the prior loglik.mf_individual
+  # call (same SER orchestrator step) instead of recomputing.
+  use_cache <- !is.null(model$ser_cache) &&
+                identical(model$ser_cache$l, l)
   for (m in seq_len(data$M)) {
-    bs <- mf_per_outcome_bhat_shat(data, model, m)
-    bhat_m <- bs$bhat
-    shat_m <- sqrt(bs$shat2)
+    if (use_cache) {
+      bhat_m  <- model$ser_cache$betahat[[m]]
+      shat2_m <- model$ser_cache$shat2[[m]]
+    } else {
+      bs      <- mf_per_outcome_bhat_shat(data, model, m)
+      bhat_m  <- bs$bhat
+      shat2_m <- bs$shat2
+    }
+    shat_m <- sqrt(shat2_m)
 
     G_m    <- model$G_prior[[m]]
     mu_lm  <- matrix(0, nrow = p, ncol = data$T_basis[m])
@@ -586,10 +617,15 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
         sd_grid         = sd_grid,
         sdmat_cache     = sdmat_sub,
         log_sdmat_cache = log_sdmat_sub)
+      # Warm-start mixsqp from the previous (m, s) solution. pi
+      # changes slowly between IBSS iters; warm starts cut inner
+      # SQP iterations from ~20 (cold) to ~1-3.
+      pi_prev <- model$G_prior[[m]][[s]]$fitted_g$pi
       new_pi <- mf_em_m_step_per_scale(
         L_mat, zeta_keep, idx_size = length(idx),
         mixsqp_null_penalty = mixsqp_null_penalty,
-        control_mixsqp = control)
+        control_mixsqp = control,
+        pi_warm_start  = pi_prev)
       model$G_prior[[m]][[s]]$fitted_g$pi <- new_pi
       model$pi_V[[m]][s, ]                 <- new_pi
     }

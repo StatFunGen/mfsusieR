@@ -114,7 +114,8 @@ mf_em_m_step_per_scale <- function(L, zeta, idx_size,
                                    init_pi0_w     = 0.5,
                                    tol_null_prior = 0.001,
                                    control_mixsqp = NULL,
-                                   is_ebmvfr      = FALSE) {
+                                   is_ebmvfr      = FALSE,
+                                   pi_warm_start  = NULL) {
   K <- ncol(L)
   w <- if (is_ebmvfr) {
     # Covariate-adjustment branch: zeta is uniform across the
@@ -124,10 +125,29 @@ mf_em_m_step_per_scale <- function(L, zeta, idx_size,
   } else {
     c(mixsqp_null_penalty * idx_size, rep(zeta, idx_size))
   }
-  ctrl <- if (is.null(control_mixsqp)) list(verbose = FALSE) else {
-    if (is.null(control_mixsqp$verbose)) control_mixsqp$verbose <- FALSE
-    control_mixsqp
+
+  # mixsqp defaults tuned for warm-started inner-loop use. tol.svd = 0
+  # skips an irlba SVD that only helps low-rank L (ours is full rank
+  # by construction). Caller-supplied `control_mixsqp` (from
+  # `params$control_mixsqp`) overrides any of these.
+  default_ctrl <- list(verbose      = FALSE,
+                       tol.svd      = 0,
+                       numiter.em   = 10L,
+                       convtol.sqp  = 1e-6)
+  ctrl <- if (is.null(control_mixsqp)) default_ctrl else {
+    out_ctrl <- default_ctrl
+    out_ctrl[names(control_mixsqp)] <- control_mixsqp
+    out_ctrl
   }
+
+  cold_x0 <- function(K_eff) c(init_pi0_w, rep(1e-6, K_eff - 1L))
+  warm_x0 <- function(pi_prev, valid_idx, K_eff) {
+    if (is.null(pi_prev) || length(pi_prev) != K) return(cold_x0(K_eff))
+    # Floor near-zero entries so mixsqp's interior-point start is well-defined.
+    x <- pmax(pi_prev[valid_idx], 1e-6)
+    x / sum(x)
+  }
+
   # Filter all-zero columns of L before handing to mixsqp. Each such
   # column corresponds to a mixture-component standard deviation that
   # has zero data support at this (outcome, scale, l) -- e.g., a
@@ -148,16 +168,26 @@ mf_em_m_step_per_scale <- function(L, zeta, idx_size,
     if (K_keep == 0L) {
       out <- numeric(K); out[1L] <- 1; return(out)
     }
-    x0_keep  <- c(init_pi0_w, rep(1e-6, K_keep - 1L))
-    pi_keep  <- mixsqp(L_keep, w, x0 = x0_keep, log = FALSE,
-                       control = ctrl)$x
+    x0_keep  <- warm_x0(pi_warm_start, keep_cols, K_keep)
+    res      <- mixsqp(L_keep, w, x0 = x0_keep, log = FALSE,
+                       control = ctrl)
     out <- numeric(K)
-    out[keep_cols] <- pi_keep
+    out[keep_cols] <- res$x
   } else {
-    out <- mixsqp(L, w,
-                  x0      = c(init_pi0_w, rep(1e-6, K - 1)),
+    res <- mixsqp(L, w,
+                  x0      = warm_x0(pi_warm_start, seq_len(K), K),
                   log     = FALSE,
-                  control = ctrl)$x
+                  control = ctrl)
+    out <- res$x
+  }
+  status_ok <- is.null(res$status) ||
+                identical(res$status, "converged to optimal solution") ||
+                identical(res$status, "converged")
+  if (!status_ok) {
+    warning_message(sprintf(
+      "mixsqp prior-update did not converge (status: \"%s\"). If this repeats, pass `control_mixsqp = list(numiter.em = 20, convtol.sqp = 1e-8, tol.svd = 1e-10)` to mfsusie() / fsusie() to use mixsqp's stock control.",
+      as.character(res$status)),
+      style = "hint")
   }
   if (out[1] > 1 - tol_null_prior) {
     out    <- numeric(K)

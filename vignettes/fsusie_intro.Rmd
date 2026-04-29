@@ -231,35 +231,34 @@ non-uniform local density.
 
 The wavelet-domain mixture prior on ${\bf B}^{(l)}$ has two
 options for sharing variance components. The default,
-`prior_variance_scope = "per_scale"`, fits a separate mixture
-weight vector at each wavelet scale per outcome; this is the
-standard fSuSiE prior. The alternative,
-`prior_variance_scope = "per_outcome"`, collapses across scales
-and fits a single mixture weight vector per outcome. The
-per-scale prior has higher power and estimation accuracy on
-typical functional data; the per-outcome prior is faster on
-larger problems.
+`prior_variance_scope = "per_outcome"`, fits one mixture weight
+vector per outcome (collapsed across scales). The alternative,
+`prior_variance_scope = "per_scale"`, fits a separate weight
+vector at each wavelet scale; this is the original fSuSiE prior
+and can yield higher power and estimation accuracy on signals
+whose shape varies systematically with scale. Per-scale costs
+roughly `S_m`-fold more per IBSS iter (one `mixsqp` call per
+scale per outcome instead of one per outcome), so it is opt-in.
 
 ```{r prior-comparison, message = FALSE}
+fit_per_out   <- fsusie(coverage_example$Y, coverage_example$X,
+                        pos = coverage_example$pos,
+                        L = 15, L_greedy = 5,
+                        verbose = FALSE)        # per-outcome (default)
 fit_per_scale <- fsusie(coverage_example$Y, coverage_example$X,
                         pos = coverage_example$pos,
                         L = 15, L_greedy = 5,
                         prior_variance_scope = "per_scale",
                         verbose = FALSE)
-fit_per_out   <- fsusie(coverage_example$Y, coverage_example$X,
-                        pos = coverage_example$pos,
-                        L = 15, L_greedy = 5,
-                        prior_variance_scope = "per_outcome",
-                        verbose = FALSE)
-fit_per_scale$niter
 fit_per_out$niter
+fit_per_scale$niter
 ```
 
 ```{r prior-scatter, fig.height = 4, fig.width = 4}
-plot(fit_per_scale$pip, fit_per_out$pip,
+plot(fit_per_out$pip, fit_per_scale$pip,
      pch = 16, cex = 0.8, col = "#1f78b4",
-     xlab = "PIP (per-scale prior)",
-     ylab = "PIP (per-outcome prior)",
+     xlab = "PIP (per-outcome prior, default)",
+     ylab = "PIP (per-scale prior)",
      xlim = c(0, 1), ylim = c(0, 1),
      main = "Prior comparison: PIPs")
 abline(0, 1, lty = 3, col = "grey50")
