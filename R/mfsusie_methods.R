@@ -662,7 +662,7 @@ mf_post_smooth <- function(fit,
     lfsr_curves[[m]]    <- vector("list", L)
 
     for (l in seq_len(L)) {
-      # Alpha-weighted aggregate across variables (no lead-variable
+      # Alpha-weighted aggregate across variables (no lead-variant
       # tie-break). Mean: E_q[b_l_t] = sum_j alpha[l, j] * mu[l, j, t].
       # Second moment: E_q[b_l_t^2] = sum_j alpha[l, j] * mu2[l, j, t].
       # Variance under the law of total variance.
@@ -763,7 +763,7 @@ mf_post_smooth <- function(fit,
 
 # Sum_{l != exclude} X_eff[l] * (alpha-weighted inverse-DWT of mu_l)
 # in raw-Y / raw-X units. `X_eff[[l]] = X_raw %*% alpha[l, ]`
-# replaces the previous lead-variable column. The aggregate effect
+# replaces the previous lead-variant column. The aggregate effect
 # curve for outcome m, effect l is the alpha-weighted sum of the
 # per-variable wavelet posteriors `sum_j alpha[l, j] * mu[l, j, ·]`,
 # inverse-DWT'd, then multiplied by `csd_Y` (per-position) so the

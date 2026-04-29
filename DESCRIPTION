@@ -28,6 +28,7 @@ Imports:
     wavethresh,
     mixsqp,
     ashr,
+    ebnm (>= 1.0.0),
     matrixStats,
     LaplacesDemon,
     stats

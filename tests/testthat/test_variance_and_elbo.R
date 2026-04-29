@@ -556,8 +556,7 @@ test_that("init_scale_mixture_prior_default with one group returns single-elemen
     prior_class = "mixture_normal",
     groups      = list(seq_len(5)))
   expect_identical(length(out$G_prior), 1L)
-  expect_true(inherits(out$G_prior, "mixture_normal"))
-  expect_true(inherits(out$G_prior, "mixsqp_mixture_prior"))
+  expect_identical(attr(out$G_prior, "class"), "mixture_normal")
 })
 
 test_that("loglik handles zero-predictor-weight SNPs by zeroing their lbf", {

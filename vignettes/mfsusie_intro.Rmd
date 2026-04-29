@@ -180,11 +180,6 @@ sapply(B_hat, dim)
   different scales adapt independently. More flexible at the cost
   of an `S_m`-fold larger M-step; useful when shape varies
   systematically with scale.
-- `"per_scale_normal"`: a 2-parameter point-normal
-  `(pi_0, sigma)` per (outcome, scale), fit in
-  `mf_em_point_normal()` by direct MLE on the lead variant
-  under the current `alpha[l, ]`. Skips the `mixsqp` call and
-  tends to be faster on multi-outcome workloads.
 
 Switch between them by changing one argument; the rest of the API and
 the fit object structure are identical.

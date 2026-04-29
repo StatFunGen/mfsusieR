@@ -184,7 +184,12 @@ loglik.mf_individual <- function(data, params, model, V, ser_stats, l = NULL,
     for (s in seq_along(G_m)) {
       idx <- G_m[[s]]$idx
       g_s <- G_m[[s]]$fitted_g
-      lbf_m <- lbf_m + if (use_johnson) {
+      lbf_m <- lbf_m + if (inherits(g_s, "laplacemix")) {
+        mixture_log_bf_laplace_per_scale(
+          Bhat_m[, idx, drop = FALSE],
+          Shat_m[, idx, drop = FALSE],
+          fitted_g = g_s, V_scale = V)
+      } else if (use_johnson) {
         mixture_log_bf_per_scale_johnson(
           Bhat_m[, idx, drop = FALSE],
           Shat_m[, idx, drop = FALSE],
@@ -287,10 +292,17 @@ calculate_posterior_moments.mf_individual <- function(data, params, model, V, l,
     for (s in seq_along(G_m)) {
       idx <- G_m[[s]]$idx
       g_s <- G_m[[s]]$fitted_g
-      out <- mixture_posterior_per_scale(
-        bhat_m[, idx, drop = FALSE],
-        shat_m[, idx, drop = FALSE],
-        g_s$sd, g_s$pi, V_scale = V)
+      out <- if (inherits(g_s, "laplacemix")) {
+        mixture_posterior_laplace_per_scale(
+          bhat_m[, idx, drop = FALSE],
+          shat_m[, idx, drop = FALSE],
+          fitted_g = g_s, V_scale = V)
+      } else {
+        mixture_posterior_per_scale(
+          bhat_m[, idx, drop = FALSE],
+          shat_m[, idx, drop = FALSE],
+          g_s$sd, g_s$pi, V_scale = V)
+      }
       mu_lm[, idx]  <- out$pmean
       mu2_lm[, idx] <- out$pmean2
     }
@@ -478,26 +490,36 @@ update_variance_components.mf_individual <- function(data, params, model, ...) {
 #   $sigma2_per_pos[[m]]   -- broadcast of model$sigma2[[m]] to a
 #                             length-T_basis[m] vector
 #   $shat2[[m]]            -- p x T_basis[m] = outer(1/xtx_diag,
-#                             sigma2_per_pos)
+#                             sigma2_per_pos). Consumed by
+#                             mf_per_outcome_bhat_shat() on every
+#                             SER call (loglik + posterior moments)
+#                             for every prior class, so it is
+#                             always built.
 #   $sdmat[[m]][[s]]       -- (p*|idx_s|) x K matrix used by
-#                             mf_em_likelihood_per_scale
-#   $log_sdmat[[m]][[s]]   -- log of $sdmat[[m]][[s]]
+#                             mf_em_likelihood_per_scale, the
+#                             mixsqp M-step kernel only. Skipped
+#                             for the ebnm-backed prior classes
+#                             (point_normal, point_laplace) which
+#                             read neither sdmat nor log_sdmat.
+#   $log_sdmat[[m]][[s]]   -- log of $sdmat[[m]][[s]] (mixsqp-only).
 #
-# The (m, s) entries depend on the G_prior layout (groups), so
-# they are rebuilt only when the group structure or sd-grid
-# changes (i.e., after init or any prior-grid change).
+# The (m, s) entries depend on the G_prior layout (groups) and on
+# the slab sd grid, so they are rebuilt only when the group
+# structure or the sd-grid changes (i.e., after init or any
+# prior-grid change). For the ebnm-backed paths the slab is
+# parametric (single sd or scale), so even if sdmat were rebuilt
+# every iter it would not produce wrong numbers -- the mixsqp
+# kernel just is not called on those paths, so the work is wasted.
 refresh_em_cache.mf_individual <- function(data, model) {
-  # Only the mixsqp path consumes the cache. The point-normal
-  # path's M-step recomputes its own invariants per call.
-  if (!inherits(model$G_prior[[1L]], "mixsqp_mixture_prior")) {
-    return(model)
-  }
   M  <- data$M
+  build_mixsqp_cache <- inherits(
+    model$G_prior[[1L]],
+    c("mixture_normal", "mixture_normal_per_scale"))
 
   sigma2_per_pos_list <- vector("list", M)
   shat2_list          <- vector("list", M)
-  sdmat_list          <- vector("list", M)
-  log_sdmat_list      <- vector("list", M)
+  sdmat_list          <- if (build_mixsqp_cache) vector("list", M) else NULL
+  log_sdmat_list      <- if (build_mixsqp_cache) vector("list", M) else NULL
 
   for (m in seq_len(M)) {
     pw <- data$xtx_diag_list[[m]]
@@ -505,6 +527,8 @@ refresh_em_cache.mf_individual <- function(data, model) {
     sigma2_per_pos_list[[m]] <- sigma2_per_pos
     shat2_m <- outer(1 / pw, sigma2_per_pos)
     shat2_list[[m]] <- shat2_m
+
+    if (!build_mixsqp_cache) next
 
     G_m       <- model$G_prior[[m]]
     sdmat_m     <- vector("list", length(G_m))
@@ -530,20 +554,28 @@ refresh_em_cache.mf_individual <- function(data, model) {
   model
 }
 
-#' Per-effect prior update for `mf_individual` (mixsqp on `pi_V`)
+#' Per-effect prior update for `mf_individual`
 #'
-#' Overrides `optimize_prior_variance` for the
-#' `mf_individual` data class. Per (outcome, scale), builds the
-#' mixsqp likelihood matrix (`mf_em_likelihood_per_scale`) from the
-#' per-outcome (Bhat, Shat) in `ser_stats`, runs the M step
-#' (`mf_em_m_step_per_scale`) with `zeta = model$alpha[l, ]`, and
-#' writes the new mixture weights into both
-#' `model$G_prior[[m]][[s]]$fitted_g$pi` and `model$pi_V[[m]][s, ]`.
+#' Overrides `optimize_prior_variance` for the `mf_individual`
+#' data class. Computes the alpha-thinned `(keep_idx, zeta_keep)`
+#' shared by every solver and dispatches per (outcome, scale) on
+#' the G_prior class:
 #'
-#' The susieR-style scalar `V[l]` is held at 1 since the
-#' mixture weights absorb the per-effect prior shape adaptation.
-#' Returns `list(V = 1, model = updated_model)` per the susieR
-#' generic contract.
+#' - `mixture_normal` / `mixture_normal_per_scale`: mixsqp via
+#'   `.opv_mixsqp()`. Builds `mf_em_likelihood_per_scale()` then
+#'   `mf_em_m_step_per_scale()`; updates `fitted_g$pi`.
+#' - `mixture_point_normal_per_scale`: ebnm via
+#'   `.opv_ebnm_point_normal()`. Calls `ebnm::ebnm_point_normal()`
+#'   on the lead-variable slice; updates `fitted_g`.
+#' - `mixture_point_laplace_per_scale`: ebnm via
+#'   `.opv_ebnm_point_laplace()`. Calls `ebnm::ebnm_point_laplace()`
+#'   on the lead-variable slice; updates `fitted_g`.
+#'
+#' Each helper mutates `model$G_prior[[m]][[s]]$fitted_g` and
+#' `model$pi_V[[m]][s, ]`. The susieR-style scalar `V[l]` is held
+#' at 1 since the mixture weights absorb the per-effect prior
+#' shape adaptation. Returns `list(V = 1, model = updated_model)`
+#' per the susieR generic contract.
 #'
 #' @references
 #' Manuscript: methods/derivation.tex line 216
@@ -558,45 +590,68 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
   if (is.null(l)) {
     stop("`optimize_prior_variance.mf_individual` requires the effect index `l`.")
   }
-  zeta_l    <- model$alpha[l, ]
-  alpha_eps <- params$mixsqp_alpha_eps %||% 5e-5
+  zeta_l <- model$alpha[l, ]
+
+  # Adaptive variable subsetting: drop variables where the SuSiE
+  # per-effect posterior alpha is below `mixsqp_alpha_eps`. For
+  # mixsqp this caps the L-matrix size; for the ebnm-backed paths
+  # the (keep_idx, zeta_keep) pair is reused to pick the lead
+  # variable via `lead = keep_idx[which.max(zeta_keep)]`.
+  alpha_eps <- params$mixsqp_alpha_eps %||% 1e-6
   keep_idx  <- if (alpha_eps > 0) which(zeta_l > alpha_eps)
                else seq_along(zeta_l)
   if (length(keep_idx) < 1L) keep_idx <- which.max(zeta_l)
   zeta_keep <- zeta_l[keep_idx]
 
-  if (inherits(model$G_prior[[1L]], "mixsqp_mixture_prior")) {
-    model <- .opv_mixsqp(data, params, model, ser_stats,
-                         keep_idx, zeta_keep)
-  } else if (inherits(model$G_prior[[1L]],
-                      "mixture_point_normal_per_scale")) {
-    model <- .opv_point_normal(data, params, model, ser_stats,
-                               keep_idx, zeta_keep)
+  G1 <- model$G_prior[[1L]]
+  if (inherits(G1, c("mixture_normal", "mixture_normal_per_scale"))) {
+    model <- .opv_mixsqp(data, params, model, ser_stats, keep_idx, zeta_keep)
+  } else if (inherits(G1, "mixture_point_normal_per_scale")) {
+    model <- .opv_ebnm_point_normal(data, params, model, ser_stats,
+                                    keep_idx, zeta_keep)
+  } else if (inherits(G1, "mixture_point_laplace_per_scale")) {
+    model <- .opv_ebnm_point_laplace(data, params, model, ser_stats,
+                                     keep_idx, zeta_keep)
   } else {
     stop("Unknown prior class on G_prior[[1]]: ",
-         paste(class(model$G_prior[[1L]]), collapse = "/"))
+         paste(class(G1), collapse = ", "))
   }
   list(V = 1, model = model)
 }
 
-# Mixsqp branch: existing path, factored out for dispatch clarity.
-# Numerical behavior is unchanged from the pre-refactor body.
+#' mixsqp M-step on `pi_V` per (outcome, scale)
+#'
+#' Per (outcome, scale), builds the mixsqp likelihood matrix
+#' (`mf_em_likelihood_per_scale`) from the per-outcome (Bhat, Shat)
+#' in `ser_stats`, runs the M step (`mf_em_m_step_per_scale`)
+#' with `zeta_keep = model$alpha[l, keep_idx]`, and writes the
+#' new mixture weights into both
+#' `model$G_prior[[m]][[s]]$fitted_g$pi` and `model$pi_V[[m]][s, ]`.
+#'
+#' @keywords internal
+#' @noRd
 .opv_mixsqp <- function(data, params, model, ser_stats,
                         keep_idx, zeta_keep) {
   # The joint per-effect variable posterior `model$alpha[l, ]` is
   # the softmax of the joint log-Bayes-factor across all M outcomes
-  # and S_m scales. Adding M outcomes increases the variance of the
-  # per-variable joint lbf by ~M, so the dominant alpha values
+  # and S_m scales. Adding M outcomes increases the variance of
+  # the per-variable joint lbf by ~M, so the dominant alpha values
   # concentrate ~M-fold relative to the M = 1 case. The mixsqp
   # M-step's regularization-to-data balance is set by
-  # `nullweight / max_alpha`; to hold this ratio fixed across M we
-  # scale `mixture_null_weight` by M.
+  # `nullweight / max_alpha`; to hold this ratio fixed across M
+  # we scale `mixture_null_weight` by M. See
+  # `inst/notes/cross-package-audit-derivations.md` section 1
+  # for the full derivation.
   mixture_null_weight <- (params$mixture_null_weight %||% 0.05) *
                         max(1L, data$M)
   control <- params$control_mixsqp %||% list()
   cache   <- model$em_cache
-  p_full  <- ncol(model$alpha)
+  p_full  <- ncol(model$alpha)   # `model$alpha` is `L x p`
 
+  # The cached sdmat / log_sdmat are laid out in column-major order
+  # over `(j = 1..p_full, t in idx)`. Restricting to the rows that
+  # correspond to `keep_idx` is the same index expression for both
+  # caches, so we factor it once per `(m, s)`.
   cache_row_keep <- function(idx) {
     as.vector(outer(keep_idx, (seq_along(idx) - 1L) * p_full, "+"))
   }
@@ -610,6 +665,11 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
     G_m    <- model$G_prior[[m]]
     cache_m_sdmat     <- if (is.null(cache)) NULL else cache$sdmat[[m]]
     cache_m_log_sdmat <- if (is.null(cache)) NULL else cache$log_sdmat[[m]]
+    # Uniform group loop: each G_prior entry holds the column
+    # indices it covers (`$idx`). For `per_outcome` there is one
+    # group spanning every wavelet column (one mixsqp solve over
+    # the full outcome); for `per_scale` there are S_m
+    # groups, one per wavelet scale (S_m independent mixsqp solves).
     for (s in seq_along(G_m)) {
       idx     <- G_m[[s]]$idx
       sd_grid <- G_m[[s]]$fitted_g$sd
@@ -623,6 +683,9 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
         sd_grid         = sd_grid,
         sdmat_cache     = sdmat_sub,
         log_sdmat_cache = log_sdmat_sub)
+      # Warm-start mixsqp from the previous (m, s) pi -- it changes
+      # slowly between IBSS iters, cutting inner SQP iterations
+      # from ~20 (cold) to ~1-3.
       pi_prev <- model$G_prior[[m]][[s]]$fitted_g$pi
       new_pi  <- mf_em_m_step_per_scale(
         L_mat, zeta_keep, idx_size = length(idx),
@@ -636,54 +699,67 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
   model
 }
 
-# Point-normal branch: lead-variable MLE per (outcome, scale) via
-# `mf_em_point_normal`. The lead variable is `keep_idx[which.max(zeta_keep)]`
-# under the current effect's posterior `alpha[l, ]`.
-#
-# No mixsqp, no `mixture_null_weight`, no em_cache (the parametric
-# MLE recomputes from scratch each call).
-.opv_point_normal <- function(data, params, model, ser_stats,
-                              keep_idx, zeta_keep) {
-  # Defer M-step when alpha is essentially uniform.
-  #
-  # At IBSS iter 1, `alpha[l, ]` is `1/p` uniform; `which.max` picks
-  # the first variable (a deterministic tie-break) and feeds a noise
-  # column to `mf_em_point_normal`. The MLE on noise drives sigma to
-  # the lower box of `optim` (warning: "did not converge"), the
-  # freeze fallback writes a near-degenerate prior, and the SER step
-  # under that prior returns uniform alpha again -- a fixed point at
-  # "no signal." Trace evidence in the sparse-fine-scale failure:
-  # iters 1-5 all stuck at alpha = 1/p, lead = 1 (noise). The
-  # moment-estimator init from `init_point_normal_prior_per_scale`
-  # (which uses the full marginal Bhat across all p variables) is
-  # already informative; defer until the SER concentrates alpha
-  # before letting the lead-variable MLE refine it.
-  p_full <- ncol(model$alpha)
-  alpha_concentration_threshold <- 2.0 / p_full
-  if (max(zeta_keep) < alpha_concentration_threshold) return(model)
-
+#' ebnm M-step on the per-(outcome, scale) point-* prior
+#'
+#' Per (outcome, scale), calls `ebnm_fn(x, s, g_init, fix_g)` on
+#' the lead-variable observation slice and writes the returned
+#' `fitted_g` into `model$G_prior[[m]][[s]]$fitted_g` and
+#' `model$pi_V[[m]][s, ]`. Mirrors `.opv_mixsqp`'s shape: same
+#' arguments, same per-(m, s) loop, just a different per-call
+#' solver. Always passes `g_init = G_m[[s]]$fitted_g`
+#' (warm-start), the analog of mixsqp's `pi_warm_start = pi_prev`;
+#' `fix_g` honors `params$estimate_prior_variance`.
+#'
+#' Lead per (m, s): `lead = keep_idx[which.max(zeta_keep)]`. The
+#' lead-variable slice replaces the alpha-thinned full Bhat /
+#' Shat rectangle that mixsqp consumes; a parametric
+#' spike-and-slab MLE on pooled data dilutes the slab signal
+#' across the noise variables, while a per-lead-variable fit
+#' gives ebnm a single signal-tracking observation set per scale.
+#'
+#' @keywords internal
+#' @noRd
+.opv_ebnm_point <- function(data, params, model, ser_stats,
+                            keep_idx, zeta_keep, ebnm_fn) {
   lead <- keep_idx[which.max(zeta_keep)]
+  fix_g <- !isTRUE(params$estimate_prior_variance)
   for (m in seq_len(data$M)) {
     bhat_m <- ser_stats$betahat[[m]]
     shat_m <- sqrt(ser_stats$shat2[[m]])
     G_m    <- model$G_prior[[m]]
     for (s in seq_along(G_m)) {
       idx <- G_m[[s]]$idx
-      x   <- as.vector(bhat_m[lead, idx, drop = FALSE])
-      sv  <- as.vector(shat_m[lead, idx, drop = FALSE])
-      pi_prev    <- G_m[[s]]$fitted_g$pi
-      sigma_prev <- G_m[[s]]$fitted_g$sd[2L]
-      fit <- mf_em_point_normal(
-        x = x, s = sv,
-        pi_0_init  = pi_prev[1L],
-        sigma_init = max(sigma_prev, 1e-8))
-      new_pi <- c(fit$pi_0, 1 - fit$pi_0)
-      model$G_prior[[m]][[s]]$fitted_g$pi <- new_pi
-      model$G_prior[[m]][[s]]$fitted_g$sd <- c(0, fit$sigma)
-      model$pi_V[[m]][s, ]                 <- new_pi
+      fit <- ebnm_fn(
+        x      = bhat_m[lead, idx],
+        s      = shat_m[lead, idx],
+        g_init = G_m[[s]]$fitted_g,
+        fix_g  = fix_g
+      )
+      model$G_prior[[m]][[s]]$fitted_g <- fit$fitted_g
+      model$pi_V[[m]][s, ]              <- fit$fitted_g$pi
     }
   }
   model
+}
+
+#' @rdname dot-opv_ebnm_point
+#' @keywords internal
+#' @noRd
+.opv_ebnm_point_normal <- function(data, params, model, ser_stats,
+                                   keep_idx, zeta_keep) {
+  .opv_ebnm_point(data, params, model, ser_stats,
+                  keep_idx, zeta_keep,
+                  ebnm_fn = ebnm::ebnm_point_normal)
+}
+
+#' @rdname dot-opv_ebnm_point
+#' @keywords internal
+#' @noRd
+.opv_ebnm_point_laplace <- function(data, params, model, ser_stats,
+                                    keep_idx, zeta_keep) {
+  .opv_ebnm_point(data, params, model, ser_stats,
+                  keep_idx, zeta_keep,
+                  ebnm_fn = ebnm::ebnm_point_laplace)
 }
 
 #' Per-iteration residual variance + derived-quantity update for `mf_individual`

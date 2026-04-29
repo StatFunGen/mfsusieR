@@ -10,7 +10,8 @@ mfsusie(
   pos = NULL,
   L = 20,
   prior_variance_grid = NULL,
-  prior_variance_scope = c("per_outcome", "per_scale", "per_scale_normal"),
+  prior_variance_scope = c("per_outcome", "per_scale", "per_scale_normal",
+    "per_scale_laplace"),
   null_prior_init = 0,
   cross_outcome_prior = NULL,
   prior_weights = NULL,
@@ -65,19 +66,22 @@ the data-driven path
 (\code{compute_marginal_bhat_shat} + \code{ash}) selects the
 grid per outcome.}
 
-\item{prior_variance_scope}{one of \code{"per_outcome"}
-(default), \code{"per_scale"}, or \code{"per_scale_normal"}.
-\code{"per_outcome"} fits one mixture-of-normals prior pooled
-across wavelet scales (one mixsqp call per outcome per
-IBSS iter). \code{"per_scale"} fits a separate mixture per
-(outcome, scale) (S_m mixsqp calls per outcome per iter).
-\code{"per_scale_normal"} fits a 2-parameter point-normal
-prior per (outcome, scale) via a custom alpha-weighted
-MLE (no mixsqp); the parsimonious form trades the K+1
-mixture weights of the per-scale flavor for two
-parameters (\code{pi_0}, \code{sigma}) and is well-conditioned at
-coarse scales where the per-scale mixsqp path is data-
-starved.}
+\item{prior_variance_scope}{one of \code{"per_outcome"} (default),
+\code{"per_scale"}, \code{"per_scale_normal"}, or \code{"per_scale_laplace"}.
+Controls the mixture-weight layout and the M-step solver.
+\code{"per_outcome"} collapses across scales (one weight vector per
+outcome) and fits the K+1-component scale-mixture-of-normals
+prior with \code{mixsqp}; this is the default because it is
+roughly \code{S_m}-fold cheaper per IBSS iter (M mixsqp calls per
+iter instead of M\emph{S_m). \code{"per_scale"} keeps a separate K+1
+weight vector per (outcome, scale), still fit with \code{mixsqp}.
+\code{"per_scale_normal"} and \code{"per_scale_laplace"} switch the
+per-(outcome, scale) prior to a 2-component point-} spike-
+and-slab fit by \code{ebnm::ebnm_point_normal()} or
+\code{ebnm::ebnm_point_laplace()} respectively; they are the
+right choice when each wavelet scale has a single
+characteristic effect-size scale and the K+1-component
+mixsqp fit is under-determined on coarse scales.}
 
 \item{null_prior_init}{numeric in \verb{[0, 1]}, initial \code{pi[null]}
 for the scale-mixture prior on \code{b_l} at IBSS iter 1. The

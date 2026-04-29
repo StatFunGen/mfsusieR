@@ -121,89 +121,74 @@ init_scale_mixture_prior_default <- function(Y_m,
     rec$idx <- idx
     rec
   })
-  class(G_prior) <- c(prior_class, "mixsqp_mixture_prior")
+  attr(G_prior, "class") <- prior_class
 
   list(G_prior = G_prior, tt = bs)
 }
 
-#' Init helper for `mixture_point_normal_per_scale`
+#' Per-outcome ebnm-driven prior init for the per-scale point-* paths
 #'
-#' Builds a per-(outcome, scale) point-normal prior with two
-#' parameters per cell (`pi_0`, `sigma`). Used by
-#' `mf_prior_scale_mixture()` when
-#' `prior_variance_scope = "per_scale_normal"`.
+#' Mirrors `init_scale_mixture_prior_default()` shape for the
+#' two ebnm-backed prior classes. For each group (one wavelet
+#' scale `s` with column index set `idx_s`), picks the lead
+#' variable from the marginal data via
+#' `which.max(rowMeans(Bhat[, idx_s]^2))` and fits a 2-component
+#' point-* prior on the lead variable's per-scale slice via the
+#' matching `ebnm::ebnm_point_*()` call. The lead picker at init
+#' is alpha-independent because `alpha` is uniform `1/p` at IBSS
+#' iter 0 and `which.max` would tie-break to variable 1.
 #'
-#' Per scale `s`, `sigma_init_s` is the data-driven
-#' debiased moment estimator
-#'   `sqrt(max(eps, mean(Bhat[, idx_s]^2) - mean(Shat[, idx_s]^2)))`
-#' when `prior_variance_grid` is `NULL`. Length-1
-#' `prior_variance_grid` forces a fixed
-#' `sigma = sqrt(prior_variance_grid)` at every scale (the
-#' susie-degenerate path). Other lengths warn and ignore.
-#'
-#' @param Y_m numeric matrix `n x T_basis[m]`.
-#' @param X numeric matrix `n x p`.
-#' @param groups list of integer index vectors per scale
-#'   (from `gen_wavelet_indx`).
-#' @param null_prior_init numeric in `[0, 1]`. Default `0`.
-#' @param prior_variance_grid optional length-1 numeric.
-#'   Default `NULL`.
-#' @return list: `G_prior` (class
-#'   `"mixture_point_normal_per_scale"`) and `tt` (per-outcome
-#'   marginal `(Bhat, Shat)`).
+#' @param Y_m numeric matrix `n x T_basis[m]` of wavelet
+#'   coefficients for outcome m.
+#' @param X numeric matrix `n x p` of column-centred covariates.
+#' @param prior_class one of `"mixture_point_normal_per_scale"`
+#'   or `"mixture_point_laplace_per_scale"`.
+#' @param groups list of integer vectors from
+#'   `data$scale_index[[m]]`. One group per scale.
+#' @param na_idx integer vector of complete-case row indices for
+#'   outcome m, or `NULL` for all rows.
+#' @return list with `G_prior` (one ebnm fit per scale, `idx`
+#'   attached, `lead_init_s` recorded) and `tt` (the marginal
+#'   Bhat / Shat from the susieR helper).
 #' @keywords internal
+#' @importFrom ebnm ebnm_point_normal ebnm_point_laplace
 #' @noRd
-init_point_normal_prior_per_scale <- function(Y_m, X, groups,
-                                              null_prior_init = 0,
-                                              prior_variance_grid = NULL) {
-  if (is.null(groups)) stop("`groups` is required.")
+init_ebnm_prior_per_scale <- function(Y_m,
+                                       X,
+                                       prior_class,
+                                       groups,
+                                       na_idx = NULL) {
+  prior_class <- match.arg(prior_class,
+                           c("mixture_point_normal_per_scale",
+                             "mixture_point_laplace_per_scale"))
+  if (is.null(groups)) {
+    stop("`groups` is required: a list of column-index vectors covered by each prior entry.")
+  }
+  ebnm_fn <- switch(prior_class,
+    mixture_point_normal_per_scale  = ebnm::ebnm_point_normal,
+    mixture_point_laplace_per_scale = ebnm::ebnm_point_laplace
+  )
 
+  if (!is.null(na_idx)) {
+    Y_m <- Y_m[na_idx, , drop = FALSE]
+    X   <- X[na_idx,   , drop = FALSE]
+  }
   bs <- compute_marginal_bhat_shat(X, Y_m)
 
-  use_fixed <- !is.null(prior_variance_grid)
-  if (use_fixed && length(prior_variance_grid) > 1L) {
-    if (!is.null(warning_message))
-      warning_message(
-        "`prior_variance_grid` length > 1 has no meaning under per_scale_normal; ignoring.",
-        style = "hint")
-    use_fixed <- FALSE
-  }
-  fixed_sigma <- if (use_fixed) sqrt(prior_variance_grid[1L]) else NA_real_
-
   G_prior <- lapply(groups, function(idx) {
-    sigma_s <- if (use_fixed) {
-      fixed_sigma
-    } else {
-      # Sparse-signal-robust moment estimator. The straight
-      # `mean(Bhat^2)` averages signal-bearing positions in with the
-      # bulk of noise; for a sparse spike-shape signal where only one
-      # or two positions per scale carry signal, the mean
-      # underestimates the true slab scale by ~sqrt(idx_size).
-      # Per-variable mean (averaged across positions in the scale),
-      # max across variables: picks the variable that looks most like
-      # signal at this scale and uses its averaged-over-positions
-      # variance as the slab init. Robust within a variable; signal-
-      # selective across variables; bounded for the null (max
-      # across-variable noise mean stays close to the per-variable
-      # `Shat^2` mean).
-      bhat2 <- bs$Bhat[, idx, drop = FALSE]^2
-      shat2 <- bs$Shat[, idx, drop = FALSE]^2
-      per_var_bhat2 <- if (ncol(bhat2) == 1L) as.vector(bhat2)
-                       else rowMeans(bhat2)
-      per_var_shat2 <- if (ncol(shat2) == 1L) as.vector(shat2)
-                       else rowMeans(shat2)
-      sqrt(max(1e-8, max(per_var_bhat2 - per_var_shat2)))
-    }
+    bhat_slice <- bs$Bhat[, idx, drop = FALSE]
+    shat_slice <- bs$Shat[, idx, drop = FALSE]
+    lead_s     <- which.max(rowMeans(bhat_slice^2))
+    fit        <- ebnm_fn(x = bhat_slice[lead_s, ],
+                          s = shat_slice[lead_s, ])
     list(
-      fitted_g = list(
-        pi   = c(null_prior_init, 1 - null_prior_init),
-        sd   = c(0, sigma_s),
-        mean = c(0, 0)
-      ),
-      idx = idx
+      fitted_g    = fit$fitted_g,
+      idx         = idx,
+      lead_init_s = lead_s
     )
   })
-  class(G_prior) <- "mixture_point_normal_per_scale"
+  attr(G_prior, "class") <- prior_class
+
   list(G_prior = G_prior, tt = bs)
 }
 
@@ -222,11 +207,12 @@ init_point_normal_prior_per_scale <- function(Y_m, X, groups,
 #'   fit is skipped and the grid is used directly. Setting
 #'   `length(grid) == 1` collapses the mixture to a single
 #'   Gaussian (matches `susieR::susie()` semantics).
-#' @param prior_variance_scope `"per_scale"` (default, stores
-#'   prior per scale per outcome), `"per_outcome"` (collapses the
-#'   scale dimension), or `"per_scale_normal"` (2-parameter
-#'   point-normal prior per scale, fit by lead-variable MLE via
-#'   `mf_em_point_normal()` instead of mixsqp).
+#' @param prior_variance_scope one of `"per_scale"` (default,
+#'   stores prior per scale per outcome), `"per_outcome"`
+#'   (collapses the scale dimension), `"per_scale_normal"`
+#'   (per-scale point-normal prior fit by `ebnm`), or
+#'   `"per_scale_laplace"` (per-scale point-laplace prior fit by
+#'   `ebnm`).
 #' @param null_prior_init scalar in `[0, 1]`, initial `pi[null]`
 #'   for the scale-mixture prior. Default `0` (the EM washes it
 #'   out within a few iterations regardless of starting value).
@@ -240,7 +226,8 @@ mf_prior_scale_mixture <- function(data,
                                    prior_variance_grid = NULL,
                                    prior_variance_scope = c("per_scale",
                                                             "per_outcome",
-                                                            "per_scale_normal"),
+                                                            "per_scale_normal",
+                                                            "per_scale_laplace"),
                                    null_prior_init    = 0,
                                    grid_multiplier      = sqrt(2)) {
   prior_variance_scope <- match.arg(prior_variance_scope)
@@ -252,41 +239,14 @@ mf_prior_scale_mixture <- function(data,
   T_basis <- data$T_basis
   X        <- data$X
 
-  # Per-scale point-normal prior: separate init path, returns
-  # `mixture_point_normal_per_scale`-classed G_prior per outcome.
-  if (prior_variance_scope == "per_scale_normal") {
-    G_prior_per_outcome <- vector("list", M)
-    pi_weights          <- vector("list", M)
-    V_grid              <- vector("list", M)
-    for (m in seq_len(M)) {
-      Y_m    <- data$D[[m]]
-      groups_m <- data$scale_index[[m]]
-      init <- init_point_normal_prior_per_scale(
-        Y_m = Y_m, X = X, groups = groups_m,
-        null_prior_init = null_prior_init,
-        prior_variance_grid = prior_variance_grid)
-      G_prior_per_outcome[[m]] <- init$G_prior
-      sd_per_scale <- vapply(init$G_prior,
-                             function(g) g$fitted_g$sd[2L],
-                             numeric(1L))
-      V_grid[[m]] <- sd_per_scale^2
-      pi_weights[[m]] <- matrix(c(null_prior_init, 1 - null_prior_init),
-                                nrow = length(groups_m), ncol = 2L,
-                                byrow = TRUE)
-    }
-    out <- list(G_prior              = G_prior_per_outcome,
-                V_grid               = V_grid,
-                pi                   = pi_weights,
-                prior_variance_scope = prior_variance_scope)
-    class(out) <- "mf_prior_scale_mixture"
-    return(out)
-  }
-
-  prior_class <- if (prior_variance_scope == "per_scale") {
-    "mixture_normal_per_scale"
-  } else {
-    "mixture_normal"
-  }
+  prior_class <- switch(prior_variance_scope,
+    per_outcome       = "mixture_normal",
+    per_scale         = "mixture_normal_per_scale",
+    per_scale_normal  = "mixture_point_normal_per_scale",
+    per_scale_laplace = "mixture_point_laplace_per_scale"
+  )
+  use_ebnm <- prior_variance_scope %in%
+    c("per_scale_normal", "per_scale_laplace")
 
   G_prior_per_outcome <- vector("list", M)
   V_grid               <- vector("list", M)
@@ -300,16 +260,69 @@ mf_prior_scale_mixture <- function(data,
     # optimize_prior_variance) iterate `G_prior[[m]]` directly and
     # read `G_prior[[m]][[s]]$idx` to slice (Bhat, Shat) -- so
     # `per_outcome` (1 entry covering every wavelet column) and
-    # `per_scale` (S_m entries, one per wavelet scale)
-    # share a single uniform loop body. No mode-specific branching
-    # downstream.
-    groups_m <- if (prior_variance_scope == "per_scale") {
-      data$scale_index[[m]]
-    } else {
+    # `per_scale` / `per_scale_*` (S_m entries, one per wavelet
+    # scale) share a single uniform loop body. No mode-specific
+    # branching downstream.
+    groups_m <- if (prior_variance_scope == "per_outcome") {
       list(unlist(data$scale_index[[m]], use.names = FALSE))
+    } else {
+      data$scale_index[[m]]
     }
 
-    if (use_user_grid) {
+    if (use_ebnm) {
+      if (use_user_grid) {
+        if (length(prior_variance_grid) != 1L) {
+          stop("`prior_variance_grid` on `per_scale_normal` / `per_scale_laplace` must have length 1 (a fixed slab variance); got length ",
+               length(prior_variance_grid), ".")
+        }
+        # User-supplied fixed slab path. Builds the matching
+        # per-scale `fitted_g` (normalmix for `per_scale_normal`,
+        # laplacemix for `per_scale_laplace`) without calling ebnm
+        # at init; pairs with `estimate_prior_variance = FALSE` to
+        # hold the prior fixed across IBSS (susie-degenerate lock).
+        sigma <- sqrt(prior_variance_grid[1L])
+        pi_kvec <- c(null_prior_init, 1 - null_prior_init)
+        if (prior_class == "mixture_point_normal_per_scale") {
+          fg_proto <- structure(
+            list(pi = pi_kvec, mean = c(0, 0), sd = c(0, sigma)),
+            class = "normalmix", row.names = c(1L, 2L))
+        } else {
+          # Match the Laplace slab variance to V = sigma^2:
+          # Laplace variance = 2 * scale^2, so scale = sigma / sqrt(2).
+          fg_proto <- structure(
+            list(pi = pi_kvec, mean = c(0, 0),
+                 scale = c(0, sigma / sqrt(2))),
+            class = "laplacemix", row.names = c(1L, 2L))
+        }
+        G_prior_per_outcome[[m]] <- lapply(groups_m, function(idx) {
+          list(fitted_g = fg_proto, idx = idx, lead_init_s = NA_integer_)
+        })
+        attr(G_prior_per_outcome[[m]], "class") <- prior_class
+        pi_weights[[m]] <- matrix(pi_kvec, nrow = length(groups_m),
+                                  ncol = 2L, byrow = TRUE)
+        V_grid[[m]] <- rep(prior_variance_grid[1L], length(groups_m))
+      } else {
+        out <- init_ebnm_prior_per_scale(
+          Y_m         = data$D[[m]],
+          X           = X,
+          prior_class = prior_class,
+          groups      = groups_m,
+          na_idx      = data$na_idx[[m]]
+        )
+        G_prior_per_outcome[[m]] <- out$G_prior
+        pi_kvec <- out$G_prior[[1L]]$fitted_g$pi
+        pi_weights[[m]] <- matrix(pi_kvec, nrow = length(groups_m),
+                                  ncol = length(pi_kvec), byrow = TRUE)
+        V_grid[[m]] <- vapply(out$G_prior, function(g) {
+          sl <- g$fitted_g
+          # Slab variance: sd[2]^2 for normalmix, scale[2]^2 * 2 for
+          # laplacemix (Laplace variance is 2 * scale^2). Stored for
+          # introspection only; not consumed downstream.
+          if (!is.null(sl$sd)) sl$sd[2L]^2
+          else 2 * sl$scale[2L]^2
+        }, numeric(1))
+      }
+    } else if (use_user_grid) {
       # User-supplied path: same grid replicated per outcome (and
       # per scale when scope = per_scale). No ash fit; the
       # G_prior slot holds a minimal ash-shaped record so downstream
@@ -325,7 +338,7 @@ mf_prior_scale_mixture <- function(data,
           idx      = idx
         )
       })
-      class(G_prior_per_outcome[[m]]) <- c(prior_class, "mixsqp_mixture_prior")
+      attr(G_prior_per_outcome[[m]], "class") <- prior_class
       pi_weights[[m]] <- matrix(pi_kvec, nrow = length(groups_m),
                                 ncol = K + 1, byrow = TRUE)
     } else {
@@ -359,7 +372,7 @@ mf_prior_scale_mixture <- function(data,
     pi                   = pi_weights,
     null_prior_init    = null_prior_init,
     prior_variance_scope = prior_variance_scope,
-    update_method        = "mixsqp"
+    update_method        = if (use_ebnm) "ebnm" else "mixsqp"
   )
   class(obj) <- "mf_prior_scale_mixture"
   obj

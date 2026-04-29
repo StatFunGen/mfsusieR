@@ -228,22 +228,16 @@ non-uniform local density.
 
 ## Prior choices
 
-The wavelet-domain mixture prior on ${\bf B}^{(l)}$ has three
+The wavelet-domain mixture prior on ${\bf B}^{(l)}$ has two
 options for sharing variance components. The default,
 `prior_variance_scope = "per_outcome"`, fits one mixture weight
-vector per outcome (collapsed across scales).
-`prior_variance_scope = "per_scale"` fits a separate weight
+vector per outcome (collapsed across scales). The alternative,
+`prior_variance_scope = "per_scale"`, fits a separate weight
 vector at each wavelet scale; this is the original fSuSiE prior
 and can yield higher power and estimation accuracy on signals
 whose shape varies systematically with scale. Per-scale costs
 roughly `S_m`-fold more per IBSS iter (one `mixsqp` call per
 scale per outcome instead of one per outcome), so it is opt-in.
-`prior_variance_scope = "per_scale_normal"` keeps the per-scale
-shape but replaces the K+1-component mixture with a 2-parameter
-point-normal `(pi_0, sigma)` per (outcome, scale), fit by an
-MLE on the lead variant under the current `alpha[l, ]`. The
-reduced parameterization avoids the `mixsqp` call and tends to
-be faster on multi-outcome workloads.
 
 ```{r prior-comparison, message = FALSE}
 fit_per_out   <- fsusie(coverage_example$Y, coverage_example$X,
