@@ -75,7 +75,7 @@ anything that touches numerical paths.
   `c(20L, 44L)`, and ebnm's fitted `sigma` should be at least 5x
   the per-scale empirical SD of pure-noise variables.
 
-## 5. M-step dispatch — `.opv_<class>` helpers, mirroring `.opv_mixsqp`
+## 5. M-step dispatch, `.opv_<class>` helpers mirroring `.opv_mixsqp`
 
 - [x] 5.1 New helper in `R/individual_data_methods.R`:
   `.opv_ebnm_point(data, params, model, ser_stats, keep_idx,
@@ -107,15 +107,14 @@ anything that touches numerical paths.
   `params$mixture_null_weight` (no-op on the parametric form).
   They share the alpha-thinned `(keep_idx, zeta_keep)` already
   computed by the caller using `params$alpha_thin_eps`. No
-  deferred-M-step gate is needed; the multi-variable design
-  naturally handles the iter-1 uniform-alpha case (ebnm sees
-  all p variables → conservative `pi_0`).
+  deferred-M-step gate: at iter 1 alpha is uniform and ebnm sees
+  all p variables, so `pi_0` fits close to 1.
 - [x] 5.6 Rename `mixsqp_alpha_eps` to `alpha_thin_eps` in
   `R/mfsusie.R` (formal + roxygen + body forwarding) and
   `R/individual_data_methods.R` (read site). The rename
   reflects that the threshold now drives both M-step solvers.
 
-## 6. Cache management — `iter_cache` with class-gated slots
+## 6. `iter_cache` with class-gated slots
 
 - [x] 6.1 Rename `refresh_em_cache.mf_individual()` to
   `refresh_iter_cache.mf_individual()` and the model slot
@@ -146,7 +145,7 @@ All `tol = 1e-12` unless noted. Tests live in
 `tests/testthat/test_per_scale_normal_degeneracy.R` (kept; the
 file already exists).
 
-### 7a. Scalar T=1 vs `susieR::susie` — primary correctness locks
+### 7a. Scalar T=1 vs `susieR::susie`, primary correctness locks
 
 Common fixture: `n = 200`, `p = 50`, two causal SNPs, scalar Y,
 `L = 5`, **`max_iter = 200`**, **`tol = 1e-10`**,
@@ -168,7 +167,7 @@ Tolerance protocol:
   from the per-iter loglik kernel even at convergence.
 
 - [ ] 7a.1 `prior_variance_scope = "per_outcome"` +
-  `prior_variance_grid = sigma2` (length-1) — already exists,
+  `prior_variance_grid = sigma2` (length-1), already exists,
   ensure it still passes.
 - [ ] 7a.2 `prior_variance_scope = "per_scale"` +
   `prior_variance_grid = sigma2` (length-1).
@@ -304,18 +303,18 @@ bypassing the IBSS dispatch.
   each recover both CSes, diagonal-PP.H4 > 0.5, no spurious
   third CS.
 - [ ] 8.4 Multi-outcome correctness: M=3, planted shared
-  causal across all outcomes — both new paths recover the
+  causal across all outcomes, both new paths recover the
   shared CS with `marginal_prob >= 0.5` for every outcome
   under
   `susie_post_outcome_configuration(by = "outcome",
   method = "susiex")`.
 - [ ] 8.5 Null-locus stability: simulation with NO planted
-  effect (all noise) — both new paths return 0 CSes (no
+  effect (all noise), both new paths return 0 CSes (no
   spurious findings). The point-* parametric regularization
   should make this clean.
 - [ ] 8.6 Sparse-coverage stress: simulation with
   `wavelet_magnitude_cutoff > 0` (some near-zero columns get
-  masked) — both new paths produce a valid fit (no NaN, no
+  masked), both new paths produce a valid fit (no NaN, no
   crash) with the masked columns honored.
 
 ## 8b. Vignette sweep (acceptance gate)

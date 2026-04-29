@@ -198,11 +198,12 @@ mixture_posterior_per_scale <- function(bhat_slice,
 #' Per-(variable, scale) log-Bayes factor under a per-scale point-Laplace prior
 #'
 #' Per (j, t) computes the marginal log-likelihood under the
-#' point-Laplace prior via `ebnm:::vloglik_point_laplace()`,
-#' subtracts the null marginal log-likelihood, and sums across
-#' the scale's `|idx_s|` positions. The Normal-Laplace
-#' convolution + spike mixture is ebnm's authoritative formula;
-#' calling its internal vector helper avoids a math fork.
+#' point-Laplace prior via `vloglik_point_laplace()` (cached at
+#' load from ebnm; see `R/zzz.R`), subtracts the null marginal
+#' log-likelihood, and sums across the scale's `|idx_s|`
+#' positions. The Normal-Laplace convolution + spike mixture is
+#' ebnm's authoritative formula; calling the cached binding
+#' avoids a math fork without a runtime `:::` call.
 #'
 #' @inheritParams mixture_log_bf_per_scale
 #' @param fitted_g a `laplacemix` record returned by
@@ -219,22 +220,34 @@ mixture_log_bf_laplace_per_scale <- function(bhat_slice,
   if (!is.matrix(bhat_slice) || !is.matrix(shat_slice)) {
     stop("`bhat_slice` and `shat_slice` must be matrices.")
   }
+  # ebnm's MLE collapses `laplacemix` to a single component when
+  # `pi_0 -> 0` or `pi_0 -> 1` (see `ebnm:::pl_partog`). Defend by
+  # branching on `length(pi)` and treating the single-component
+  # record as either pure-slab (pi_1 = 1) or pure-null (pi_0 = 1).
+  n_comp <- length(fitted_g$pi)
+  pi_0 <- if (n_comp == 1L && fitted_g$scale[1L] == 0) 1
+          else fitted_g$pi[1L]
+  pi_1 <- 1 - pi_0
+  # Slab parameters live at index 2 in the 2-component case, at
+  # index 1 in the collapsed pure-slab case.
+  slab_idx <- if (n_comp == 1L) 1L else 2L
   # V_scale acts on the slab variance. Laplace variance is
-  # 2 * lambda^2; rescale lambda by sqrt(V_scale) so the
-  # post-rescale variance equals V_scale * 2 * lambda^2.
-  lambda <- fitted_g$scale[2L] * sqrt(V_scale)
-  pi_0   <- fitted_g$pi[1L]
-  pi_1   <- 1 - pi_0
-  mu     <- fitted_g$mean[2L]
+  # 2 * lambda^2; rescale lambda by sqrt(V_scale).
+  lambda   <- fitted_g$scale[slab_idx] * sqrt(V_scale)
+  mu       <- fitted_g$mean [slab_idx]
 
-  if (pi_1 == 0 || lambda == 0) {
-    # No slab mass; sum_t log(pi_0) per j.
-    return(rep(ncol(bhat_slice) * log(pi_0), nrow(bhat_slice)))
-  }
+  # Boundary cases. `pi_1 == 0` (pure null): mixture density
+  # equals dnull, BF per cell is `log(pi_0) = log(1)`, summed over
+  # `ncol` positions per j. `lambda == 0` (slab degenerates to a
+  # delta at zero, with `pi_1 > 0`): mixture density equals
+  # `(pi_0 + pi_1) * dnull = dnull`, BF per cell is `log(1) = 0`.
+  if (pi_1 == 0)   return(rep(ncol(bhat_slice) * log(pi_0),
+                              nrow(bhat_slice)))
+  if (lambda == 0) return(rep(0,                  nrow(bhat_slice)))
 
   bhat_vec <- as.vector(bhat_slice)
   shat_vec <- as.vector(shat_slice)
-  log_dens_mix <- ebnm:::vloglik_point_laplace(
+  log_dens_mix <- vloglik_point_laplace(
     x  = bhat_vec,
     s  = shat_vec,
     w  = pi_1,
@@ -270,9 +283,12 @@ mixture_posterior_laplace_per_scale <- function(bhat_slice,
   }
   p     <- nrow(bhat_slice)
   T_idx <- ncol(bhat_slice)
-  # V-rescale the slab as in the lbf kernel.
-  g_eff <- fitted_g
-  g_eff$scale[2L] <- fitted_g$scale[2L] * sqrt(V_scale)
+  # V-rescale the slab. Defend against ebnm's collapse to a
+  # single-component `laplacemix` (see lbf kernel for the same
+  # guard).
+  g_eff    <- fitted_g
+  slab_idx <- if (length(fitted_g$pi) == 1L) 1L else 2L
+  g_eff$scale[slab_idx] <- fitted_g$scale[slab_idx] * sqrt(V_scale)
 
   fit <- ebnm::ebnm_point_laplace(
     x      = as.vector(bhat_slice),

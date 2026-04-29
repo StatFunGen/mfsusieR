@@ -184,8 +184,9 @@ init_ebnm_prior_per_scale <- function(Y_m,
     bhat_slice <- bs$Bhat[, idx, drop = FALSE]
     shat_slice <- bs$Shat[, idx, drop = FALSE]
     lead_s     <- which.max(rowMeans(bhat_slice^2))
-    fit        <- ebnm_fn(x = bhat_slice[lead_s, ],
-                          s = shat_slice[lead_s, ])
+    fit        <- ebnm_fn(x    = bhat_slice[lead_s, ],
+                          s    = shat_slice[lead_s, ],
+                          mode = 0)
     list(
       fitted_g    = fit$fitted_g,
       idx         = idx,
@@ -300,7 +301,7 @@ mf_prior_scale_mixture <- function(data,
             class = "laplacemix", row.names = c(1L, 2L))
         }
         G_prior_per_outcome[[m]] <- lapply(groups_m, function(idx) {
-          list(fitted_g = fg_proto, idx = idx, lead_init_s = NA_integer_)
+          list(fitted_g = fg_proto, idx = idx)
         })
         attr(G_prior_per_outcome[[m]], "class") <- prior_class
         pi_weights[[m]] <- matrix(pi_kvec, nrow = length(groups_m),

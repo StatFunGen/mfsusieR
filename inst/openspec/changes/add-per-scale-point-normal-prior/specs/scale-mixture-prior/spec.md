@@ -40,7 +40,7 @@ with two parameters per (outcome, scale) cell estimated by empirical Bayes via `
 
 The M-step on prior class `"mixture_point_normal_per_scale"` SHALL call `ebnm::ebnm_point_normal()`, and the M-step on `"mixture_point_laplace_per_scale"` SHALL call `ebnm::ebnm_point_laplace()`, per (outcome, scale) on the flattened alpha-thinned rectangle of (Bhat, Shat) with `g_init` set to the previous IBSS iter's `fitted_g`.
 
-The data passed to ebnm is `(x = as.vector(bhat_m[keep_idx, idx_s]), s = as.vector(shat_m[keep_idx, idx_s]))` where `keep_idx` is the alpha-thinned variable indices computed in `optimize_prior_variance.mf_individual()` using `params$alpha_thin_eps` (the same threshold the mixsqp arm uses). The returned `fit$fitted_g` SHALL be written into `G_m[[s]]$fitted_g` without modification, and `fit$fitted_g$pi` SHALL be written into `model$pi_V[[m]][s, ]`. The M-step on these paths SHALL NOT consume `mixture_null_weight` (the parametric form is its own regularizer; the phantom-null pseudo-row machinery does not apply).
+The data passed to ebnm is `(x = as.vector(bhat_m[keep_idx, idx_s]), s = as.vector(shat_m[keep_idx, idx_s]))` where `keep_idx` is the alpha-thinned variable indices computed in `optimize_prior_variance.mf_individual()` using `params$alpha_thin_eps` (the same threshold the mixsqp arm uses). The returned `fit$fitted_g` SHALL be written into `G_m[[s]]$fitted_g` without modification, and `fit$fitted_g$pi` SHALL be written into `model$pi_V[[m]][s, ]`. `mixture_null_weight` SHALL be silently ignored on these prior classes.
 
 #### Scenario: ebnm receives the multi-variable rectangle with warm-start g_init
 
@@ -70,7 +70,7 @@ For each scale `s` with index set `idx_s`, the helper computes `bs <- compute_ma
 
 ### Requirement: Cache refresh SHALL skip the mixsqp-only blocks on the ebnm paths
 
-`refresh_iter_cache.mf_individual()` SHALL skip the mixsqp-only `sdmat` and `log_sdmat` builds when `model$G_prior[[1L]]` does not inherit from `"mixture_normal"` or `"mixture_normal_per_scale"`, while still building `shat2` so `mf_per_outcome_bhat_shat()` does not fall through to its per-call recomputation. The `iter_cache` slot replaces the previous `em_cache` slot (renamed to reflect that the cache is consumed by SER calls too, not just the M-step). The previous `sigma2_per_pos` slot was dead storage and is removed.
+`refresh_iter_cache.mf_individual()` SHALL skip the mixsqp-only `sdmat` and `log_sdmat` builds when `model$G_prior[[1L]]` does not inherit from `"mixture_normal"` or `"mixture_normal_per_scale"`, while still building `shat2` so `mf_per_outcome_bhat_shat()` does not fall through to its per-call recomputation.
 
 #### Scenario: ebnm path skips sdmat / log_sdmat but keeps shat2
 

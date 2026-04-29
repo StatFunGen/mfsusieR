@@ -42,6 +42,7 @@ r45 = {features = ["r45"]}
 "r-wavethresh" = "*"
 "r-mixsqp" = "*"
 "r-ashr" = "*"
+"r-ebnm" = "*"           # ebnm_point_normal / ebnm_point_laplace for per_scale_normal / per_scale_laplace
 "r-matrixstats" = "*"
 "r-laplacesdemon" = "*"  # Student-t kernel for small_sample_correction
 

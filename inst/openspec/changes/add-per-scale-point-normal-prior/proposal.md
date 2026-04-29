@@ -23,17 +23,15 @@ beta_s ~ pi_0_s * delta_0  +  (1 - pi_0_s) * G_s(. ; sigma_s)
 with `G_s` either Normal (`per_scale_normal`) or Laplace
 (`per_scale_laplace`). Two parameters per (outcome, scale) cell
 versus the K+1 of `mixture_normal_per_scale`. The data goes ~15x
-further; sample-size sanity at coarse scales improves
-dramatically; the parametric form is intrinsically regularized so
-the null pseudo-count knob (`mixture_null_weight`) is unnecessary
-on these paths.
+further (~15x more rows per fitted parameter); the parametric
+form is intrinsically regularized so the null pseudo-count knob
+(`mixture_null_weight`) is unnecessary on these paths.
 
-Adding both Normal and Laplace as parallel options costs almost
-nothing (one `.opv_<class>` helper per slab choice, sharing the
-same loop body) and gives the user the heavier tail when the
-wavelet-domain signal is sparse within a scale (1-2 active
-positions per scale), which is the common case for sharp
-transitions or localized features.
+Both Normal and Laplace ship as parallel options through a single
+`.opv_<class>` helper per slab choice sharing the same loop body.
+Laplace gives the heavier tail when the wavelet-domain signal is
+sparse within a scale (1-2 active positions per scale), the
+common case for sharp transitions or localized features.
 
 ## What changes
 
@@ -115,25 +113,24 @@ truncation-error semantics.
 
 Why ebnm:
 
-- Mature, peer-reviewed empirical-Bayes solver maintained
-  alongside `ashr` and `mixsqp`. Both already enter through
-  `susieR`'s dependency closure, so the marginal weight is `ebnm`
-  itself.
-- One call covers Normal and Laplace slabs through a uniform
-  interface.
-- `g_init = <previous fit>` enables warm-start across IBSS iters
-  without bespoke caching, mirroring the mixsqp wrapper's
-  `pi_warm_start` shape.
-- Numerical edge cases (`s == 0`, degenerate `x`, `n <= 2`,
-  `optim` non-convergence) are ebnm's responsibility, not ours.
+- `ebnm_point_normal()` and `ebnm_point_laplace()` share the same
+  `(x, s, g_init, fix_g)` interface, so one helper covers both
+  slabs.
+- `g_init = <previous fit>` warm-starts across IBSS iters without
+  a bespoke cache, mirroring the mixsqp wrapper's
+  `pi_warm_start`.
+- `ashr` and `mixsqp` are already in `susieR`'s closure, so the
+  marginal weight is `ebnm` itself.
+- ebnm owns numerical edge cases (`s == 0`, degenerate `x`,
+  `n <= 2`, `optim` non-convergence).
 
 ## Why this layered out the way the model does
 
 Functional Y goes through a discrete wavelet transform that
 decorrelates positions. Wavelet columns at different scales span
 orders of magnitude in natural variance; the mixture-of-normals
-adapts to that cross-scale heterogeneity (this is the
-`per_outcome` story). Within a single scale the variance is
+adapts to that cross-scale heterogeneity (the `per_outcome`
+section above). Within a single scale the variance is
 approximately constant, and a two-component spike-and-slab is the
 right Bayesian model for "most of these positions are noise; the
 rest share a variance." Normal versus Laplace controls the

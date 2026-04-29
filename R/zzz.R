@@ -9,7 +9,7 @@ if (!exists("%||%", baseenv())) {
   `%||%` <- function(x, y) if (is.null(x)) y else x
 }
 
-# Cached susieR internals (populated by .onLoad).
+# Cached susieR + ebnm internals (populated by .onLoad).
 warning_message            <- NULL
 SER_posterior_e_loglik     <- NULL
 update_variance_components <- NULL
@@ -18,11 +18,13 @@ get_var_y                  <- NULL
 initialize_susie_model     <- NULL
 initialize_fitted          <- NULL
 get_cs                     <- NULL
+vloglik_point_laplace      <- NULL
 
 #' @keywords internal
 #' @noRd
 .onLoad <- function(libname, pkgname) {
   susie_ns <- asNamespace("susieR")
+  ebnm_ns  <- asNamespace("ebnm")
   pkg_ns   <- asNamespace(pkgname)
 
   # Cache susieR internals used by per-iteration methods.
@@ -36,6 +38,9 @@ get_cs                     <- NULL
                "get_cs")) {
     assign(fn, get(fn, envir = susie_ns), envir = pkg_ns)
   }
+  assign("vloglik_point_laplace",
+         get("vloglik_point_laplace", envir = ebnm_ns),
+         envir = pkg_ns)
 
   # Register S3 methods for the susieR generics dispatched on
   # `mf_individual`.
