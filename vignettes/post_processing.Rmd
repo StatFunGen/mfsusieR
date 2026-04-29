@@ -80,7 +80,7 @@ beta[42, ] <-  1.5 * shape
 beta[97, ] <- -1.0 * shape
 Y <- X %*% beta + matrix(rnorm(n * T_m, sd = 0.5), n)
 
-fit <- fsusie(Y, X, pos = positions, L = 15, L_greedy = 5, verbose = TRUE)
+fit <- fsusie(Y, X, pos = positions)
 ```
 
 ## Before smoothing
@@ -209,7 +209,7 @@ When several smoothers are stacked, plotting picks the
 highest-priority one and lists the others as a hint:
 
 ```{r tuning-stacked-dims}
-fit_multi <- mf_post_smooth(fit, method = "TI")
+fit_multi <- mf_post_smooth(fit)
 fit_multi <- mf_post_smooth(fit_multi, method = "HMM")
 fit_multi <- mf_post_smooth(fit_multi, method = "scalewise")
 plot_dims_ml <- mfsusie_plot_dimensions(fit_multi)
@@ -245,8 +245,8 @@ Y_list <- list(
   X %*% beta2 + matrix(rnorm(n * 32, sd = 0.4), n)
 )
 
-fit_m   <- mfsusie(X, Y_list, L = 15, L_greedy = 5, verbose = TRUE)
-fit_m_s <- mf_post_smooth(fit_m, method = "TI")
+fit_m   <- mfsusie(X, Y_list)
+fit_m_s <- mf_post_smooth(fit_m)
 ```
 
 ```{r mfsusie-plot-dims}

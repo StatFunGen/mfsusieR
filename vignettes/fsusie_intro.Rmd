@@ -80,8 +80,7 @@ legend("topright",
 
 ```{r fit, message = FALSE}
 fit <- fsusie(coverage_example$Y, coverage_example$X,
-              pos = coverage_example$pos,
-              L = 15, L_greedy = 5, verbose = TRUE)
+              pos = coverage_example$pos)
 fit$niter; fit$converged
 fit$sets$cs
 fit$pip[coverage_example$causal_snps]
@@ -209,8 +208,7 @@ T_full   <- ncol(coverage_example$Y)
 keep     <- sort(sample.int(T_full, size = 100L, replace = FALSE))
 Y_uneven <- coverage_example$Y[, keep]
 fit_uneven <- fsusie(Y_uneven, coverage_example$X,
-                     pos = keep,
-                     L = 15, L_greedy = 5, verbose = TRUE)
+                     pos = keep)
 fit_uneven$sets$cs
 fit_uneven$pip[coverage_example$causal_snps]
 ```
@@ -243,14 +241,10 @@ scale per outcome instead of one per outcome), so it is opt-in.
 
 ```{r prior-comparison, message = FALSE}
 fit_per_out   <- fsusie(coverage_example$Y, coverage_example$X,
-                        pos = coverage_example$pos,
-                        L = 15, L_greedy = 5,
-                        verbose = FALSE)        # per-outcome (default)
+                        pos = coverage_example$pos)             # per-outcome (default)
 fit_per_scale <- fsusie(coverage_example$Y, coverage_example$X,
                         pos = coverage_example$pos,
-                        L = 15, L_greedy = 5,
-                        prior_variance_scope = "per_scale",
-                        verbose = FALSE)
+                        prior_variance_scope = "per_scale")
 fit_per_out$niter
 fit_per_scale$niter
 ```

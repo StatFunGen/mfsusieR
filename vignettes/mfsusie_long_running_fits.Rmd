@@ -74,14 +74,8 @@ ELBO that is still rising. We use `track_fit = TRUE` only to
 inspect the trajectory; in production it is optional.
 
 ```{r first-pass}
-fit_signal_short <- mfsusie(X, Y_signal, L = 15, L_greedy = 5,
-                            max_iter = 5,
-                            prior_variance_scope = "per_outcome",
-                            verbose = FALSE)
-fit_null_short   <- mfsusie(X, Y_null,   L = 15, L_greedy = 5,
-                            max_iter = 5,
-                            prior_variance_scope = "per_outcome",
-                            verbose = FALSE)
+fit_signal_short <- mfsusie(X, Y_signal, max_iter = 5)
+fit_null_short   <- mfsusie(X, Y_null,   max_iter = 5)
 
 c(signal = fit_signal_short$niter,    null = fit_null_short$niter)
 c(signal = fit_signal_short$converged, null = fit_null_short$converged)
@@ -117,10 +111,9 @@ cold zero state. The follow-up then converges in a small number
 of additional iterations rather than the cold-start total.
 
 ```{r warm-followup}
-fit_signal_warm <- mfsusie(X, Y_signal, L = 15, L_greedy = 5,
+fit_signal_warm <- mfsusie(X, Y_signal,
                            max_iter = 100,
                            model_init = fit_signal_short,
-                           prior_variance_scope = "per_outcome",
                            verbose = FALSE)
 fit_signal_warm$niter
 fit_signal_warm$converged
@@ -129,9 +122,8 @@ fit_signal_warm$converged
 Compare to a cold-start run of the same locus at full budget:
 
 ```{r cold-baseline}
-fit_signal_cold <- mfsusie(X, Y_signal, L = 15, L_greedy = 5,
+fit_signal_cold <- mfsusie(X, Y_signal,
                            max_iter = 100,
-                           prior_variance_scope = "per_outcome",
                            verbose = FALSE)
 fit_signal_cold$niter
 ```
@@ -151,10 +143,9 @@ deterministically.
 saveRDS(fit_signal_short, "fit_partial.rds")
 # ...later, on a new job...
 fit_partial <- readRDS("fit_partial.rds")
-fit_full    <- mfsusie(X, Y_signal, L = 15, L_greedy = 5,
+fit_full    <- mfsusie(X, Y_signal,
                        max_iter = 100,
-                       model_init = fit_partial,
-                       prior_variance_scope = "per_outcome")
+                       model_init = fit_partial)
 ```
 
 The supplied `model_init` must have the same `L` as the new call,
@@ -230,9 +221,8 @@ per-outcome residual variance), `pi_V` (the mixture weights),
 and the iteration's ELBO.
 
 ```{r track-fit, fig.height = 4.5, fig.width = 8}
-fit_traced <- mfsusie(X, Y_signal, L = 15, L_greedy = 5,
+fit_traced <- mfsusie(X, Y_signal,
                       max_iter = 20, tol = 1e-3,
-                      prior_variance_scope = "per_outcome",
                       verbose = FALSE, track_fit = TRUE)
 length(fit_traced$trace)
 str(fit_traced$trace[[1L]], max.level = 1L)

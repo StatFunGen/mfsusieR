@@ -246,7 +246,7 @@ a smooth recovered effect curve, no truth-informed configuration
 required.
 
 ```{r fsusie, message = FALSE, warning = FALSE}
-fit_f <- fsusie(y, X, L = 15L, L_greedy = 5L, verbose = FALSE)
+fit_f <- fsusie(y, X, verbose = FALSE)
 fit_f$sets$cs
 fit_f$pip[true_pos_filt]
 ```

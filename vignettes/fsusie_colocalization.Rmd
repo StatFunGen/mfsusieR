@@ -52,9 +52,9 @@ Y3 <- X %*% beta3 + matrix(rnorm(n * T_m, sd = 0.4), n)
 ## Fine-mapping
 
 ```{r coloc-fit}
-fit1 <- fsusie(Y1, X, pos = positions, L = 15, L_greedy = 5, verbose = FALSE)
-fit2 <- fsusie(Y2, X, pos = positions, L = 15, L_greedy = 5, verbose = FALSE)
-fit3 <- fsusie(Y3, X, pos = positions, L = 15, L_greedy = 5, verbose = FALSE)
+fit1 <- fsusie(Y1, X, pos = positions, verbose = FALSE)
+fit2 <- fsusie(Y2, X, pos = positions, verbose = FALSE)
+fit3 <- fsusie(Y3, X, pos = positions, verbose = FALSE)
 ```
 
 ## Colocalization
