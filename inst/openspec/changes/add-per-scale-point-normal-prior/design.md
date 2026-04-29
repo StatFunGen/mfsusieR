@@ -84,19 +84,31 @@ prior_obj <- if (prior_variance_scope %in%
 }
 ```
 
-### 3a. M-step body — single `ebnm_fn(x, s, g_init, fix_g)` call
+### 3a. M-step body — `ebnm_fn(x, s, g_init, fix_g)` on the multi-variable rectangle
 
-The M-step body for either ebnm-backed class is the same call,
-parameterized by which ebnm function fits the slab:
+The M-step body for either ebnm-backed class flattens the
+alpha-thinned `(|keep_idx| × |idx_s|)` rectangle of (Bhat, Shat)
+to two vectors and hands them to ebnm:
 
 ```r
-fit <- ebnm_fn(x      = bhat_m[lead, idx],
-               s      = shat_m[lead, idx],
+fit <- ebnm_fn(x      = as.vector(bhat_m[keep_idx, idx, drop = FALSE]),
+               s      = as.vector(shat_m[keep_idx, idx, drop = FALSE]),
                g_init = G_m[[s]]$fitted_g,
-               fix_g  = !params$estimate_prior_variance)
-G_m[[s]]$fitted_g <- fit$fitted_g
+               fix_g  = !isTRUE(params$estimate_prior_variance))
+G_m[[s]]$fitted_g  <- fit$fitted_g
 model$pi_V[[m]][s, ] <- fit$fitted_g$pi
 ```
+
+The data shape ebnm sees is the same alpha-thinned rectangle
+mixsqp consumes — just unweighted (ebnm cannot accept
+observation weights). The unweighted-many-variables design
+mirrors mixsqp's structural property: ebnm sees the bulk-noise
+distribution within `keep_idx` and the parametric MLE settles on
+a sensible conservative `pi_0` (most kept variables look null)
+plus a `sigma` driven by the few non-null cells. The lead-only
+alternative would fit "this single variable is non-null" and
+collapse `pi_0` toward 0, producing spurious CSes from the
+too-liberal slab.
 
 `g_init = <previous fit>` is the warm-start path: ebnm seeds
 optim from the previous IBSS iter's `fitted_g`. This mirrors
@@ -106,17 +118,15 @@ prior stays at the value the init helper or the previous iter
 wrote (used to honor `estimate_prior_variance = FALSE` and to
 hold the prior fixed in the susie-degenerate locks).
 
-Lead picker at the M-step: `lead = keep_idx[which.max(zeta_keep)]`
-where `keep_idx` and `zeta_keep` are the alpha-thinned variable
-indices and weights computed in the parent
-`optimize_prior_variance.mf_individual()` (mirrors mixsqp's
-existing `keep_idx`/`zeta_keep` plumbing,
-`R/individual_data_methods.R:561-567`). The lead picker is
-specific to point-* priors: mixsqp pools every alpha-thinned
-variable's data into the L matrix, while a parametric
-spike-and-slab MLE on pooled data dilutes the slab signal across
-the noise variables. The lead-variable slice gives ebnm a single
-signal-tracking observation set per (m, s).
+`alpha_thin_eps` is the unified per-effect alpha threshold,
+renamed from `mixsqp_alpha_eps`. The same threshold drives both
+arms: drop variables with `alpha[l, j] < alpha_thin_eps` from
+the M-step input. On iter 1 alpha is uniform `1/p` and all
+variables are kept (giving ebnm the full bulk-noise
+distribution); on later iters `keep_idx` shrinks to the
+LD-friends of the lead (still a multi-variable set, so the
+per-(m, s) prior cannot collapse to single-variable
+over-fitting).
 
 ebnm owns:
 - optim transport and convergence (the L-BFGS-B / `ashr` internal
@@ -152,18 +162,18 @@ helper takes the same arguments and returns the updated `model`:
 
 .opv_ebnm_point <- function(data, params, model, ser_stats,
                              keep_idx, zeta_keep, ebnm_fn) {
-  lead <- keep_idx[which.max(zeta_keep)]
+  fix_g <- !isTRUE(params$estimate_prior_variance)
   for (m in seq_len(data$M)) {
-    bhat_m <- ser_stats$betahat[[m]]
-    shat_m <- sqrt(ser_stats$shat2[[m]])
+    bhat_m <- ser_stats$betahat[[m]][keep_idx, , drop = FALSE]
+    shat_m <- sqrt(ser_stats$shat2[[m]][keep_idx, , drop = FALSE])
     G_m    <- model$G_prior[[m]]
     for (s in seq_along(G_m)) {
       idx <- G_m[[s]]$idx
       fit <- ebnm_fn(
-        x      = bhat_m[lead, idx],
-        s      = shat_m[lead, idx],
+        x      = as.vector(bhat_m[, idx, drop = FALSE]),
+        s      = as.vector(shat_m[, idx, drop = FALSE]),
         g_init = G_m[[s]]$fitted_g,
-        fix_g  = !isTRUE(params$estimate_prior_variance)
+        fix_g  = fix_g
       )
       model$G_prior[[m]][[s]]$fitted_g <- fit$fitted_g
       model$pi_V[[m]][s, ]              <- fit$fitted_g$pi
@@ -181,30 +191,27 @@ two new arms:
 optimize_prior_variance.mf_individual <- function(data, params, model,
                                                    ser_stats, l, ...) {
   # ... existing keep_idx / zeta_keep computation ...
-  if (inherits(model$G_prior[[1L]], "mixsqp_mixture_prior")) {
+  G1 <- model$G_prior[[1L]]
+  if (inherits(G1, c("mixture_normal", "mixture_normal_per_scale"))) {
     model <- .opv_mixsqp(data, params, model, ser_stats,
                          keep_idx, zeta_keep)
-  } else if (inherits(model$G_prior[[1L]],
-                      "mixture_point_normal_per_scale")) {
+  } else if (inherits(G1, "mixture_point_normal_per_scale")) {
     model <- .opv_ebnm_point_normal(data, params, model, ser_stats,
                                      keep_idx, zeta_keep)
-  } else if (inherits(model$G_prior[[1L]],
-                      "mixture_point_laplace_per_scale")) {
+  } else if (inherits(G1, "mixture_point_laplace_per_scale")) {
     model <- .opv_ebnm_point_laplace(data, params, model, ser_stats,
                                       keep_idx, zeta_keep)
   } else {
     stop("Unknown prior class on G_prior[[1]]: ",
-         paste(class(model$G_prior[[1L]]), collapse = ", "))
+         paste(class(G1), collapse = ", "))
   }
   list(V = 1, model = model)
 }
 ```
 
 No new S3 generic. No parent-class hierarchy. Class tags stay
-single (matching `mixture_normal_per_scale`'s current shape;
-mixsqp's `mixsqp_mixture_prior` parent tag stays where it is).
-The dispatch is one `if/else if` arm per class, ~12 lines, the
-same shape as the existing branch.
+single. The dispatch is one `if/else if` arm per class, ~12
+lines, the same shape as the existing branch.
 
 This pattern earns its keep on YAGNI grounds: with the foreseeable
 ebnm family being just `point_normal` and `point_laplace`, the
@@ -212,33 +219,60 @@ two helpers + two arms are simpler than an S3 generic + parent
 class + switch. If a third ebnm family ever arrives (e.g., a
 point-t slab), refactor then.
 
-### 3c. Cache management — one-line guard
+No deferred-M-step gate is needed. The multi-variable design
+naturally avoids the iter-1 trap (ebnm sees all p variables at
+iter 1 with uniform alpha, fits a sensible bulk-noise prior;
+once alpha concentrates, ebnm sees the LD-friends and refits).
+There is no `2/p` arbitrary constant and no `greedy_lbf_cutoff`
+gate to tune; the same `alpha_thin_eps` thinning that mixsqp
+uses suffices.
 
-`refresh_em_cache.mf_individual`
-(`R/individual_data_methods.R:489-...`) rebuilds `shat2`,
-`sigma2_per_pos`, `sdmat`, `log_sdmat` per (m, s) per IBSS iter.
-The mixsqp-only consumers are `sdmat` and `log_sdmat` (read by
-`mf_em_likelihood_per_scale` from inside `.opv_mixsqp`); `shat2`
-is also read by `mf_per_outcome_bhat_shat`
-(`R/individual_data_methods.R:125-128`) on every SER call,
-including the ebnm-backed paths.
+### 3c. Cache management — `iter_cache` with class-gated slots
 
-Gate the (m, s, K)-shaped builds (`sdmat`, `log_sdmat`) on the
-prior class but always build `shat2` and `sigma2_per_pos`:
+`refresh_iter_cache.mf_individual` (renamed from
+`refresh_em_cache.mf_individual`; `em_cache` was misleading
+because the cache is consumed by SER calls too, not just the
+M-step) holds two kinds of per-IBSS-iter precompute:
+
+- **`iter_cache$shat2[[m]]`** (`p × T_basis[m]`): always built.
+  Equals `outer(1/xtx_diag, sigma2_per_pos)`. Read by
+  `mf_per_outcome_bhat_shat()` on every SER call across both
+  arms; saves one `outer()` per (l, m) per IBSS iter (~`L × M`
+  outer products per iter).
+- **`iter_cache$sdmat[[m]][[s]]`, `iter_cache$log_sdmat[[m]][[s]]`**
+  (`(p × |idx_s|) × K` per (m, s)): built only when the prior
+  class is mixsqp-backed (`mixture_normal` or
+  `mixture_normal_per_scale`). The K-axis precompute is needed
+  by `mf_em_likelihood_per_scale` from inside `.opv_mixsqp`;
+  ebnm fits 2 scalars per (m, s) by direct optim, so there is
+  no K-axis aggregate to amortize.
+
+The class gate is a one-line boolean:
 
 ```r
-refresh_em_cache.mf_individual <- function(data, params, model) {
-  # ... build shat2 and sigma2_per_pos for every prior class ...
-  if (!inherits(model$G_prior[[1L]], "mixsqp_mixture_prior")) {
+refresh_iter_cache.mf_individual <- function(data, model) {
+  is_mixsqp_prior <- inherits(
+    model$G_prior[[1L]],
+    c("mixture_normal", "mixture_normal_per_scale"))
+  # ... build shat2 always ...
+  if (!is_mixsqp_prior) {
     return(model)   # skip the mixsqp-only sdmat / log_sdmat builds
   }
   # ... build sdmat / log_sdmat ...
 }
 ```
 
-Saves one `outer()` per (m, s) per IBSS iter on the ebnm paths
-without forcing `mf_per_outcome_bhat_shat` into its per-call
-fallback.
+The previous `sigma2_per_pos[[m]]` slot was dead storage (no
+consumer read it; every reader called `mf_sigma2_per_position()`
+directly). Dropped.
+
+Naming: `is_mixsqp_prior` (not `build_mixsqp_cache`) because the
+boolean expresses "this prior class needs the K-axis precompute
+slots", not "build a thing called mixsqp_cache." There is no
+ebnm-specific iter_cache slot — ebnm has no per-(m, s)
+precomputable aggregate; its per-(m, s) state is `g_init`,
+which lives on `G_prior[[m]][[s]]$fitted_g` (carried as part of
+the model's prior state, not as cache).
 
 ### 3d. Covariate-adjustment path stays unchanged
 
@@ -273,32 +307,32 @@ existing `(post_mean[m, j], post_var[m, j])` layout in
 single `if (inherits(G_m, "mixture_point_laplace_per_scale"))`
 branch around the existing normalmix moment formula.
 
-## Lead variable per scale
+## Lead variable at init
 
-Two phases:
+The marginal-data lead picker only acts at the init helper; the
+IBSS-loop M-step uses every variable in `keep_idx`, not a
+single lead.
 
-1. **Init (IBSS iter 0).** Lead per scale is picked from the
-   marginal data:
-   ```r
-   bs <- compute_marginal_bhat_shat(X, Y_m)
-   lead_s = which.max(rowMeans(bs$Bhat[, idx_s, drop = FALSE]^2))
-   ```
-   This is deterministic, alpha-independent, and selects a
-   variable whose marginal magnitude across scale `s`'s positions
-   is largest. ebnm fits the prior on
-   `(bs$Bhat[lead_s, idx_s], bs$Shat[lead_s, idx_s])` and stores
-   `fitted_g` in `G_prior[[m]][[s]]$fitted_g`.
+**Init (IBSS iter 0).** Lead per scale is picked from the
+marginal data:
+```r
+bs <- compute_marginal_bhat_shat(X, Y_m)
+lead_s = which.max(rowMeans(bs$Bhat[, idx_s, drop = FALSE]^2))
+```
+This is deterministic, alpha-independent, and selects a
+variable whose marginal magnitude across scale `s`'s positions
+is largest. ebnm fits the prior on
+`(bs$Bhat[lead_s, idx_s], bs$Shat[lead_s, idx_s])` and stores
+`fitted_g` in `G_prior[[m]][[s]]$fitted_g`. The init prior gives
+the IBSS effect-1 SER step a real signal-tracking starting prior
+rather than a moment-estimator default; once `alpha` accumulates
+mass through the SER step, the M-step refits ebnm on the
+multi-variable rectangle.
 
-2. **M-step (IBSS iter >= 1).** Lead is the conventional
-   `keep_idx[which.max(zeta_keep)]` reusing the alpha-thinned
-   `(keep_idx, zeta_keep)` already computed by
-   `optimize_prior_variance.mf_individual` for the mixsqp arm. At
-   iter 1 `zeta_keep` is uniform over the kept rows, so `which.max`
-   tie-breaks to the smallest `keep_idx`; the marginal-data lead
-   from the init helper has already shaped `fitted_g` and warm-
-   starts ebnm via `g_init`, so the iter-1 tie-break does not pin
-   the M-step to a noise variable. By iter 2 `alpha` reflects the
-   SER step and the lead is signal-driven.
+The recorded `lead_init_s` is kept on the G_prior entry as a
+test artifact (asserts the picker selected a signal-bearing
+variable on known fixtures); it is not consumed by the
+IBSS loop.
 
 Code uses **lead variable**; vignette prose uses **lead
 variant**.
@@ -365,15 +399,19 @@ back-to-back runs (idempotence at `tol = 1e-12`).
    nothing at the coarsest 1-2 scales (depending on `T_basis`), and
    those scales ride on the init from marginal data.
 
-2. **Lead-picker pathology.** If the marginal-data lead picker
-   selects a noise variable on a degenerate fixture (no signal
-   at scale `s`, all `Bhat[, idx_s]` are pure noise), ebnm fits a
-   near-null prior at init. Once IBSS effect 1 has cycled, the
-   M-step lead is `keep_idx[which.max(zeta_keep)]` and shifts to
-   wherever `alpha` has accumulated mass. Unit test: assert the
-   marginal-data lead picker selects a signal-bearing variable on
-   `scenario_minimal` and on the synthetic sparse fixture from
-   the proposal's acceptance criteria.
+2. **Init-time lead-picker pathology.** If the marginal-data
+   lead picker selects a noise variable on a degenerate fixture
+   (no signal at scale `s`, all `Bhat[, idx_s]` are pure noise),
+   ebnm fits a near-null prior at init. The IBSS-loop M-step
+   then refits ebnm on the full `(|keep_idx| × |idx_s|)`
+   rectangle (not the single lead variable), so a noisy init
+   gets corrected as soon as `alpha` accumulates mass. Net
+   effect: a bad init is recovered within a few IBSS iters.
+   Unit test: assert the marginal-data lead picker selects a
+   signal-bearing variable on the synthetic sparse fixture from
+   the proposal's acceptance criteria (`set.seed(2L); n = 200;
+   p = 30; T_m = 64; signal at variables c(7, 18) and times
+   c(20, 44)`).
 
 3. **ebnm version pinning.** The `point_normal` and
    `point_laplace` interfaces, plus the `g_init` / `fix_g`

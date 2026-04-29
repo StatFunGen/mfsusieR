@@ -69,40 +69,49 @@ Laplace slab.
 
 The new M-step is a per-(outcome, scale) loop that calls ebnm,
 identical in shape to the existing `.opv_mixsqp` per-(outcome,
-scale) loop that calls `mixsqp` (`R/individual_data_methods.R:584-637`).
-The dispatch follows the existing `.opv_<class>` helper-per-class
-pattern; no S3 generic refactor, no parent-class hierarchy. One
-helper per ebnm-backed class:
+scale) loop that calls `mixsqp`. The dispatch follows the
+existing `.opv_<class>` helper-per-class pattern; no S3 generic
+refactor, no parent-class hierarchy. One helper per ebnm-backed
+class plus a shared body:
 
 ```r
-.opv_ebnm_point_normal  <- function(data, params, model, ser_stats,
-                                     keep_idx, zeta_keep) { ... }
-.opv_ebnm_point_laplace <- function(data, params, model, ser_stats,
-                                     keep_idx, zeta_keep) { ... }
+.opv_ebnm_point        <- function(data, params, model, ser_stats,
+                                    keep_idx, zeta_keep, ebnm_fn) { ... }
+.opv_ebnm_point_normal  <- function(...) .opv_ebnm_point(..., ebnm_fn = ebnm::ebnm_point_normal)
+.opv_ebnm_point_laplace <- function(...) .opv_ebnm_point(..., ebnm_fn = ebnm::ebnm_point_laplace)
 ```
 
-The two helpers differ only in the ebnm function they call
-(`ebnm::ebnm_point_normal` vs `ebnm::ebnm_point_laplace`); the
-loop body is otherwise identical. ebnm owns: optim transport,
-init heuristics, the small-n freeze, the `g_init` warm-start
-path, convergence reporting, and the `fitted_g` record format we
-store back into `G_prior[[m]][[s]]$fitted_g`.
+The data shape ebnm sees is the same alpha-thinned
+`(|keep_idx| × |idx_s|)` rectangle of (Bhat, Shat) that mixsqp
+consumes, just unweighted: ebnm cannot accept observation
+weights so the per-row alpha weighting drops. The unweighted-
+many-variables design preserves mixsqp's structural property
+that the per-(m, s) parametric MLE sees the bulk-noise
+distribution, so `pi_0` settles at a sensible conservative
+value rather than collapsing toward 0 (the lead-only
+alternative would fit "this single variable is non-null" and
+produce spurious CSes from the resulting too-liberal slab).
 
-`mixsqp_alpha_eps` row thinning (the `alpha[l, j] > eps` filter
-at `R/individual_data_methods.R:561-566`) does not apply on the
-ebnm paths: the per-(m, s) call runs on the lead-variable slice
-only, not on the full `(p × idx_s)` rectangle. Lead per (m, s) is
-`lead = which.max(model$alpha[l, ])` for IBSS iter `>= 1`; at
-init, lead is picked from the marginal data via
-`which.max(rowMeans(bs$Bhat[, idx_s]^2))` because `alpha` is
-uniform `1/p` at iter 0 and the argmax tie-breaks to variable 1.
+ebnm owns: optim transport, init heuristics, the small-n
+freeze, the `g_init` warm-start path, convergence reporting,
+and the `fitted_g` record format we store back into
+`G_prior[[m]][[s]]$fitted_g`.
 
 The `g_init = <previous fit>` warm-start mirrors mixsqp's
 `pi_warm_start = pi_prev` pattern (always passed; no cold/warm
 branch). The init helper writes `fitted_g` into
-`G_prior[[m]][[s]]` at iter 0 just as
-`init_scale_mixture_prior_default()` does for the mixsqp path
-(`R/prior_scale_mixture.R:66-127`).
+`G_prior[[m]][[s]]` at iter 0 by picking a marginal-data lead
+per scale (`lead_s = which.max(rowMeans(bs$Bhat[, idx_s]^2))`)
+and fitting ebnm on that lead's per-scale slice; the IBSS-loop
+M-step then refits on the multi-variable rectangle.
+
+`alpha_thin_eps` (renamed from `mixsqp_alpha_eps`; see
+`mfsusie()` formal) is the unified per-effect alpha threshold
+used by both M-step solvers: drop variables with `alpha[l, j]
+< alpha_thin_eps` from the M-step input. Mixsqp uses it to cap
+the L-matrix size; ebnm uses it to scope the multi-variable
+ebnm call to non-negligible variables. Same threshold, same
+truncation-error semantics.
 
 Why ebnm:
 
