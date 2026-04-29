@@ -19,7 +19,6 @@ initialize_susie_model     <- NULL
 initialize_fitted          <- NULL
 get_cs                     <- NULL
 
-#' @useDynLib mfsusieR, .registration = TRUE
 #' @keywords internal
 #' @noRd
 .onLoad <- function(libname, pkgname) {

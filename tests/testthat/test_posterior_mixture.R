@@ -1,46 +1,19 @@
-# Apple-to-apple comparison against:
-#   mfsusieR pure-R oracles (R/reference_implementations.R) at <= 1e-12,
-#   ashr::calc_logLR / ashr::postmean / ashr::postsd at <= 1e-12.
+# Apple-to-apple comparison of `mixture_log_bf_per_scale` and
+# `mixture_posterior_per_scale` (vectorized R) against
+# `ashr::calc_logLR / ashr::postmean / ashr::postsd` at <= 1e-12.
 #
-# Per design.md D14 (cpp11 kernel vs pure-R oracle apple-to-apple
-# tolerance <= 1e-12).
+# These kernels were previously implemented in cpp11 with R oracles;
+# the cpp implementations have been removed since the vectorized R
+# is the single production path. ashr remains the independent
+# cross-check oracle for the closed-form mixture-of-normals math.
 #
 # Manuscript references for the closed-form mixture-of-normals math:
 #   methods/derivation.tex eq:post_f_mix
 #   methods/derivation.tex eq:post_f2_mix
 
-# ---- cpp11 vs pure-R oracle ------------------------------------------------
+# ---- production R vs ashr (closed-form cross-check) -----------------------
 
-test_that("mixture_log_bf_per_scale: cpp11 matches pure-R oracle at <= 1e-12", {
-  set.seed(mfsusier_test_seed())
-  J <- 50; Ti <- 16; K <- 5
-  B <- matrix(rnorm(J * Ti), nrow = J)
-  S <- matrix(runif(J * Ti, 0.5, 1.5), nrow = J)
-  sd_g <- c(0, sort(runif(K - 1, 0.1, 2)))
-  pi_g <- c(0.6, rep(0.4 / (K - 1), K - 1))
-
-  out_cpp <- mfsusieR:::mixture_log_bf_per_scale(B, S, sd_g, pi_g, V_scale = 1.5)
-  out_R   <- mfsusieR:::mixture_log_bf_per_scale_R(B, S, sd_g, pi_g, V_scale = 1.5)
-  expect_equal(out_cpp, out_R, tolerance = 1e-12)
-})
-
-test_that("mixture_posterior_per_scale: cpp11 matches pure-R oracle at <= 1e-12", {
-  set.seed(mfsusier_test_seed())
-  J <- 50; Ti <- 16; K <- 5
-  B <- matrix(rnorm(J * Ti), nrow = J)
-  S <- matrix(runif(J * Ti, 0.5, 1.5), nrow = J)
-  sd_g <- c(0, sort(runif(K - 1, 0.1, 2)))
-  pi_g <- c(0.6, rep(0.4 / (K - 1), K - 1))
-
-  out_cpp <- mfsusieR:::mixture_posterior_per_scale(B, S, sd_g, pi_g, V_scale = 1.5)
-  out_R   <- mfsusieR:::mixture_posterior_per_scale_R(B, S, sd_g, pi_g, V_scale = 1.5)
-  expect_equal(out_cpp$pmean,  out_R$pmean,  tolerance = 1e-12)
-  expect_equal(out_cpp$pmean2, out_R$pmean2, tolerance = 1e-12)
-})
-
-# ---- pure-R oracle vs ashr (sanity for the closed-form formula) -----------
-
-test_that("mixture_log_bf_per_scale_R: closed form matches ashr::calc_logLR at <= 1e-12", {
+test_that("mixture_log_bf_per_scale: closed form matches ashr::calc_logLR at <= 1e-12", {
   skip_if_not_installed("ashr")
   set.seed(mfsusier_test_seed())
   J <- 30; Ti <- 12; K <- 4
@@ -55,11 +28,11 @@ test_that("mixture_log_bf_per_scale_R: closed form matches ashr::calc_logLR at <
     ashr::calc_logLR(g, ashr::set_data(B[j, ], S[j, ]))
   }, numeric(1))
 
-  ours <- mfsusieR:::mixture_log_bf_per_scale_R(B, S, sd_g, pi_g, V_scale = V)
+  ours <- mfsusieR:::mixture_log_bf_per_scale(B, S, sd_g, pi_g, V_scale = V)
   expect_equal(ours, ashr_lbf, tolerance = 1e-12)
 })
 
-test_that("mixture_posterior_per_scale_R: closed form matches ashr::postmean / postsd at <= 1e-12", {
+test_that("mixture_posterior_per_scale: closed form matches ashr::postmean / postsd at <= 1e-12", {
   skip_if_not_installed("ashr")
   set.seed(mfsusier_test_seed())
   J <- 30; Ti <- 12; K <- 4
@@ -78,7 +51,7 @@ test_that("mixture_posterior_per_scale_R: closed form matches ashr::postmean / p
     ashr_psd[j, ] <- ashr::postsd(g, d)
   }
 
-  ours <- mfsusieR:::mixture_posterior_per_scale_R(B, S, sd_g, pi_g, V_scale = V)
+  ours <- mfsusieR:::mixture_posterior_per_scale(B, S, sd_g, pi_g, V_scale = V)
   expect_equal(ours$pmean,  ashr_pm, tolerance = 1e-12)
   expect_equal(ours$pmean2, ashr_psd^2 + ashr_pm^2, tolerance = 1e-12)
 })

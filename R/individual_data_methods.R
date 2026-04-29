@@ -733,16 +733,17 @@ refresh_lbf_kl.mf_individual <- function(data, params, model) {
 
 #' Coherent variational free energy for the `mfsusie` model class
 #'
-#' Overrides susieR's `get_objective.default` by first refreshing
-#' per-effect lbf[l] / KL[l] against the iter-final pi_V. Without
-#' this, `Eloglik - sum(KL)` is a hybrid quantity (see
-#' `refresh_lbf_kl.mf_individual` for derivation). After the refresh
-#' the reported ELBO is a coherent variational free energy at the
-#' iter-final variational posterior and prior.
+#' Overrides susieR's `get_objective.default`. On the ELBO
+#' convergence path, refreshes per-effect lbf[l] / KL[l] against the
+#' iter-final pi_V (see `refresh_lbf_kl.mf_individual`) so the
+#' returned ELBO is a coherent variational free energy. On the PIP
+#' convergence path the ELBO is unused by `check_convergence`, so
+#' the refresh is wasted work and we short-circuit with `NA_real_`.
 #'
 #' @keywords internal
 #' @noRd
 get_objective.mfsusie <- function(data, params, model) {
+  if (identical(params$convergence_method, "pip")) return(NA_real_)
   model <- refresh_lbf_kl.mf_individual(data, params, model)
   Eloglik(data, model) - sum(model$KL, na.rm = TRUE)
 }

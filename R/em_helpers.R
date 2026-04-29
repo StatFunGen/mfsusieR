@@ -62,7 +62,10 @@ mf_em_likelihood_per_scale <- function(bhat_slice, shat_slice, sd_grid,
     sdmat     <- sqrt(outer(svec^2, sd_grid^2, "+"))
     log_sdmat <- log(sdmat)
   }
-  log_L <- mf_em_log_likelihood_per_scale_cpp(bvec, sdmat, log_sdmat)
+  # log_L[r, k] = log dnorm(bvec[r]; 0, sdmat[r, k])
+  #             = -0.5 log(2 pi) - log_sdmat[r, k] - 0.5 (bvec[r] / sdmat[r, k])^2
+  # Vectorized via broadcast: bvec/sdmat is (N x K), log_sdmat is (N x K).
+  log_L <- -0.5 * log(2 * pi) - log_sdmat - 0.5 * (bvec / sdmat)^2
 
   # NA imputation for ill-conditioned Shat: replace each NA
   # column with the column median so mixsqp never sees an NA

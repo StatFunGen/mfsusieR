@@ -31,8 +31,6 @@ Imports:
     matrixStats,
     LaplacesDemon,
     stats
-LinkingTo:
-    cpp11
 Suggests:
     testthat (>= 3.0.0),
     knitr,
