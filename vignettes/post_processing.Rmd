@@ -288,7 +288,7 @@ position-space curve plus a pointwise credible band:
   `mean_pos +/- z(level) * sqrt(Var(pos))`.
 - `"smash"` — `smashr::smash.gaus` empirical-Bayes wavelet
   shrinkage on the per-position regression estimate of the
-  effect against the lead variable. The credible band uses
+  effect against the lead variant. The credible band uses
   `smash`'s `post.var = TRUE` posterior variance.
 
 ## Session info

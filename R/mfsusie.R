@@ -46,12 +46,11 @@
 #'   IBSS iter). `"per_scale"` fits a separate mixture per
 #'   (outcome, scale) (S_m mixsqp calls per outcome per iter).
 #'   `"per_scale_normal"` fits a 2-parameter point-normal
-#'   prior per (outcome, scale) via a custom alpha-weighted
-#'   MLE (no mixsqp); the parsimonious form trades the K+1
-#'   mixture weights of the per-scale flavor for two
-#'   parameters (`pi_0`, `sigma`) and is well-conditioned at
-#'   coarse scales where the per-scale mixsqp path is data-
-#'   starved.
+#'   prior per (outcome, scale) via a custom MLE on the lead
+#'   variant (the variable with the largest current
+#'   `alpha[l, ]`); no mixsqp, no `mixture_null_weight`. The
+#'   parsimonious form trades the K+1 mixture weights of the
+#'   per-scale flavor for two parameters (`pi_0`, `sigma`).
 #' @param null_prior_init numeric in `[0, 1]`, initial `pi[null]`
 #'   for the scale-mixture prior on `b_l` at IBSS iter 1. The
 #'   EM M-step overwrites it within a few iterations. Default

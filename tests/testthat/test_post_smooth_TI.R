@@ -19,7 +19,7 @@ test_that("mf_post_smooth(method = 'TI') matches univariate_TI_regression bit-fo
 
   # mfsusieR side: fit + smooth. Production mfsusieR uses
   # `X_eff = X %*% alpha` (alpha-weighted aggregate); upstream
-  # `univariate_TI_regression` uses the lead variant. Swap
+  # `univariate_TI_regression` uses the lead variable. Swap
   # `fit$X_eff` to the lead column so the bit-identity comparison
   # against the upstream routine still holds. Test hack only;
   # production code keeps the alpha-weighted form.

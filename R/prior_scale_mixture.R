@@ -171,10 +171,29 @@ init_point_normal_prior_per_scale <- function(Y_m, X, groups,
   fixed_sigma <- if (use_fixed) sqrt(prior_variance_grid[1L]) else NA_real_
 
   G_prior <- lapply(groups, function(idx) {
-    sigma_s <- if (use_fixed) fixed_sigma
-               else sqrt(max(1e-8,
-                             mean(bs$Bhat[, idx, drop = FALSE]^2) -
-                             mean(bs$Shat[, idx, drop = FALSE]^2)))
+    sigma_s <- if (use_fixed) {
+      fixed_sigma
+    } else {
+      # Sparse-signal-robust moment estimator. The straight
+      # `mean(Bhat^2)` averages signal-bearing positions in with the
+      # bulk of noise; for a sparse spike-shape signal where only one
+      # or two positions per scale carry signal, the mean
+      # underestimates the true slab scale by ~sqrt(idx_size).
+      # Per-variable mean (averaged across positions in the scale),
+      # max across variables: picks the variable that looks most like
+      # signal at this scale and uses its averaged-over-positions
+      # variance as the slab init. Robust within a variable; signal-
+      # selective across variables; bounded for the null (max
+      # across-variable noise mean stays close to the per-variable
+      # `Shat^2` mean).
+      bhat2 <- bs$Bhat[, idx, drop = FALSE]^2
+      shat2 <- bs$Shat[, idx, drop = FALSE]^2
+      per_var_bhat2 <- if (ncol(bhat2) == 1L) as.vector(bhat2)
+                       else rowMeans(bhat2)
+      per_var_shat2 <- if (ncol(shat2) == 1L) as.vector(shat2)
+                       else rowMeans(shat2)
+      sqrt(max(1e-8, max(per_var_bhat2 - per_var_shat2)))
+    }
     list(
       fitted_g = list(
         pi   = c(null_prior_init, 1 - null_prior_init),
@@ -203,9 +222,11 @@ init_point_normal_prior_per_scale <- function(Y_m, X, groups,
 #'   fit is skipped and the grid is used directly. Setting
 #'   `length(grid) == 1` collapses the mixture to a single
 #'   Gaussian (matches `susieR::susie()` semantics).
-#' @param prior_variance_scope `"per_scale"` (default,
-#'   stores prior per scale per outcome) or `"per_outcome"`
-#'   (collapses the scale dimension).
+#' @param prior_variance_scope `"per_scale"` (default, stores
+#'   prior per scale per outcome), `"per_outcome"` (collapses the
+#'   scale dimension), or `"per_scale_normal"` (2-parameter
+#'   point-normal prior per scale, fit by lead-variable MLE via
+#'   `mf_em_point_normal()` instead of mixsqp).
 #' @param null_prior_init scalar in `[0, 1]`, initial `pi[null]`
 #'   for the scale-mixture prior. Default `0` (the EM washes it
 #'   out within a few iterations regardless of starting value).
