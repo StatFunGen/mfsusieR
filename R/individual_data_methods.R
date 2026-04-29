@@ -671,24 +671,24 @@ update_derived_quantities.mf_individual <- function(data, params, model, ...) {
   model
 }
 
-#' Refresh per-effect lbf[l] / KL[l] against the iter-final pi_V
+#' Refresh per-effect `lbf[l]` / `KL[l]` against the iter-final pi_V
 #'
 #' During an IBSS iteration, each effect's `model$lbf[l]` and
 #' `model$KL[l]` are computed at the moment effect l was updated --
 #' but mfsusieR's per-effect prior (`pi_V[m][s, ]`) is updated
 #' between effects via mixsqp inside the SER step (see
 #' `optimize_prior_variance.mf_individual`). When effect l+1 updates
-#' pi_V, the previously-recorded lbf[l] / KL[l] for l < l+1 are
+#' pi_V, the previously-recorded `lbf[l]` / `KL[l]` for l < l+1 are
 #' against a now-stale pi_V state. The reported per-iteration ELBO
 #' `Eloglik(state_t) - sum(model$KL)` is therefore a hybrid quantity:
-#' Eloglik against the iter-final state, KL[l] against
+#' Eloglik against the iter-final state, `KL[l]` against
 #' state-when-l-was-updated. The hybrid is empirically close to the
 #' coherent variational free energy but is not strictly monotone.
 #'
-#' This refresh re-evaluates lbf[l] / lbf_variable[l] / KL[l] for
-#' each effect l using the iter-final pi_V (and the iter-final
+#' This refresh re-evaluates `lbf[l]` / `lbf_variable[l]` / `KL[l]`
+#' for each effect l using the iter-final pi_V (and the iter-final
 #' partial residual rebuilt from the frozen alpha / mu / mu2). The
-#' variational posterior alpha[l] is preserved via the
+#' variational posterior `alpha[l]` is preserved via the
 #' `update_alpha = FALSE` flag on `loglik.mf_individual`. After the
 #' refresh, `Eloglik(data, model) - sum(model$KL)` is the coherent
 #' ELBO at iter end.
@@ -728,8 +728,8 @@ refresh_lbf_kl.mf_individual <- function(data, params, model) {
 #' Coherent variational free energy for the `mfsusie` model class
 #'
 #' Overrides susieR's `get_objective.default`. On the ELBO
-#' convergence path, refreshes per-effect lbf[l] / KL[l] against the
-#' iter-final pi_V (see `refresh_lbf_kl.mf_individual`) so the
+#' convergence path, refreshes per-effect `lbf[l]` / `KL[l]` against
+#' the iter-final pi_V (see `refresh_lbf_kl.mf_individual`) so the
 #' returned ELBO is a coherent variational free energy. On the PIP
 #' convergence path the ELBO is unused by `check_convergence`, so
 #' the refresh is wasted work and we short-circuit with `NA_real_`.
