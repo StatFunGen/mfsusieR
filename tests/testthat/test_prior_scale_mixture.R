@@ -24,16 +24,16 @@ make_data <- function(n = 30, J = 8, T_per_outcome = c(64L, 128L)) {
 # ---- distribute_mixture_weights ---------------------------------------
 
 test_that("distribute_mixture_weights places null weight on first slot", {
-  w <- mfsusieR:::distribute_mixture_weights(K = 3, null_prior_weight = 2)
+  w <- mfsusieR:::distribute_mixture_weights(K = 3, null_prior_init = 0.5)
 
   expect_length(w, 4L)
   expect_equal(sum(w), 1, tolerance = 1e-12)
-  expect_equal(w[1], 2 / 4, tolerance = 1e-12)        # null weight
-  expect_equal(w[-1], rep((1 - 2 / 4) / 3, 3), tolerance = 1e-12)
+  expect_equal(w[1], 0.5, tolerance = 1e-12)              # null weight (direct)
+  expect_equal(w[-1], rep(0.5 / 3, 3), tolerance = 1e-12)
 })
 
-test_that("distribute_mixture_weights with null_prior_weight = 0", {
-  w <- mfsusieR:::distribute_mixture_weights(K = 1, null_prior_weight = 0)
+test_that("distribute_mixture_weights with null_prior_init = 0", {
+  w <- mfsusieR:::distribute_mixture_weights(K = 1, null_prior_init = 0)
 
   expect_length(w, 2L)
   expect_equal(w, c(0, 1), tolerance = 1e-12)
@@ -49,7 +49,7 @@ test_that("user-supplied grid is honored, no ash fit runs", {
     data,
     prior_variance_grid = v_grid,
     prior_variance_scope = "per_scale",
-    null_prior_weight = 2
+    null_prior_init = 0.5
   )
 
   expect_identical(class(prior), "mf_prior_scale_mixture")
@@ -62,17 +62,17 @@ test_that("user-supplied grid is honored, no ash fit runs", {
 test_that("user-supplied grid weights match distribute_mixture_weights", {
   data <- make_data()
   v_grid <- c(0.5, 2.0)
-  null_w <- 2
+  null_w <- 0.5
 
   prior <- mfsusieR:::mf_prior_scale_mixture(
     data,
     prior_variance_grid = v_grid,
     prior_variance_scope = "per_scale",
-    null_prior_weight = null_w
+    null_prior_init = null_w
   )
 
   expected_pi <- mfsusieR:::distribute_mixture_weights(
-    K = length(v_grid), null_prior_weight = null_w
+    K = length(v_grid), null_prior_init = null_w
   )
   for (m in seq_len(data$M)) {
     # Each row of pi[[m]] (one row per scale) equals expected_pi.
@@ -89,7 +89,7 @@ test_that("susieR-degeneracy contract C1 inputs produce single-component prior",
     data,
     prior_variance_grid = 0.5,           # length-1 grid
     prior_variance_scope = "per_outcome",
-    null_prior_weight = 0                 # no null component
+    null_prior_init = 0                 # no null component
   )
 
   expect_identical(prior$V_grid[[1]], 0.5)
@@ -109,24 +109,14 @@ test_that("data-driven init matches fsusieR::init_prior.default at 1e-12", {
   Y_m <- matrix(rnorm(n * T_basis), nrow = n)
   scale_index <- mfsusieR:::gen_wavelet_indx(log2(T_basis))
 
-  # Production mfsusieR sets the init pi from `null_prior_weight`
-  # via `pi_null = null_prior_weight / (K + 1)`. Upstream fsusieR
-  # hardcodes `pi_null = 0.8`. To make the comparison bit-fidelity
-  # at `tol = 1e-12`, set `null_prior_weight = 0.8 * (K + 1)` so
-  # the formula recovers exactly the upstream vector. K depends on
-  # the ash sd-grid which depends on the data, so we call once to
-  # discover K, then recall with the matched weight.
-  probe <- mfsusieR:::init_scale_mixture_prior_default(
-    Y_m = Y_m, X = X,
-    prior_class = "mixture_normal_per_scale",
-    groups      = scale_index
-  )
-  K <- length(probe$G_prior[[1]]$fitted_g$pi)
+  # mfsusieR sets the init pi directly from `null_prior_init`.
+  # Upstream fsusieR hardcodes `pi_null = 0.8`. Pass 0.8 directly
+  # for bit-fidelity at `tol = 1e-12`.
   ours <- mfsusieR:::init_scale_mixture_prior_default(
     Y_m = Y_m, X = X,
     prior_class       = "mixture_normal_per_scale",
     groups            = scale_index,
-    null_prior_weight = 0.8 * (K + 1)
+    null_prior_init = 0.8
   )
   ref <- fsusieR::init_prior(
     Y = Y_m, X = X, prior = "mixture_normal_per_scale",
@@ -153,7 +143,7 @@ test_that("T_m = 1 with NULL grid runs the data-driven path without crashing", {
   prior <- mfsusieR:::mf_prior_scale_mixture(
     data,
     prior_variance_grid = NULL,
-    null_prior_weight = 2
+    null_prior_init = 0.5
   )
 
   expect_identical(class(prior), "mf_prior_scale_mixture")
@@ -170,7 +160,7 @@ test_that("per_outcome scope collapses scale dimension", {
     data,
     prior_variance_grid = v_grid,
     prior_variance_scope = "per_outcome",
-    null_prior_weight = 2
+    null_prior_init = 0.5
   )
 
   for (m in seq_len(data$M)) {

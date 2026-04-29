@@ -196,7 +196,7 @@ test_that("zero-effect IBSS sweep keeps fitted at zero", {
 make_model_with_prior <- function(data, L = 3, sigma2_scalar = 1,
                                   prior_variance_grid = c(0.1, 0.5, 2)) {
   prior <- mfsusieR:::mf_prior_scale_mixture(
-    data, prior_variance_grid = prior_variance_grid, null_prior_weight = 1
+    data, prior_variance_grid = prior_variance_grid, null_prior_init = 0.5
   )
   params <- list(L = L, prior_weights = NULL, prior = prior,
                  cross_outcome_prior = NULL,
@@ -318,7 +318,7 @@ test_that("loglik / calculate_posterior_moments with K=1, no null reduce to susi
     pi     = lapply(seq_len(data$M), function(m) {
       matrix(1, nrow = length(data$scale_index[[m]]), ncol = 1)
     }),
-    null_prior_weight    = 0,
+    null_prior_init    = 0,
     prior_variance_scope = "per_scale"
   )
   class(prior) <- "mf_prior_scale_mixture"

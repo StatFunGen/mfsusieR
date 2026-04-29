@@ -4,7 +4,7 @@
 # helper + ash fit":
 #
 #   1. User supplies `prior_variance_grid` -- use it directly,
-#      distribute mixture weights with `null_prior_weight`. No ash
+#      distribute mixture weights with `null_prior_init`. No ash
 #      fit. Setting `length(grid) == 1` reproduces the
 #      single-Gaussian semantics of `susieR::susie()`.
 #   2. `prior_variance_grid = NULL` -- per outcome, call
@@ -19,18 +19,20 @@
 #' Distribute mixture weights with a null component
 #'
 #' Given a length-K vector of non-null variances `V_grid` and a
-#' null-component weight `null_prior_weight`, returns the (K+1)-
-#' length pi vector with `pi[1] = null_prior_weight / (K + 1)` on
-#' the null component (V = 0) and the remaining weight split
-#' uniformly across the K non-null components.
+#' direct null-component initialization mass `null_prior_init` in
+#' `[0, 1]`, returns the (K+1)-length pi vector with
+#' `pi[1] = null_prior_init` on the null component (V = 0) and
+#' the remaining weight `1 - null_prior_init` split uniformly
+#' across the K non-null components.
 #'
 #' @param K integer, number of non-null components.
-#' @param null_prior_weight numeric, weight on the null component.
+#' @param null_prior_init numeric in `[0, 1]`, initial mass on the
+#'   null component.
 #' @return numeric vector of length K + 1, sums to 1.
 #' @keywords internal
 #' @noRd
-distribute_mixture_weights <- function(K, null_prior_weight) {
-  null_pi <- null_prior_weight / (K + 1)
+distribute_mixture_weights <- function(K, null_prior_init) {
+  null_pi <- null_prior_init
   c(null_pi, rep((1 - null_pi) / K, K))
 }
 
@@ -67,7 +69,7 @@ init_scale_mixture_prior_default <- function(Y_m,
                                              groups            = NULL,
                                              grid_multiplier   = sqrt(2),
                                              lowc_idx          = integer(0),
-                                             null_prior_weight = 2,
+                                             null_prior_init = 0,
                                              na_idx            = NULL) {
   prior_class <- match.arg(prior_class,
                            c("mixture_normal", "mixture_normal_per_scale"))
@@ -104,12 +106,14 @@ init_scale_mixture_prior_default <- function(Y_m,
                      gridmult    = grid_multiplier)
 
   # Use ash's sd-grid but discard its fitted pi: under LD the iid
-  # assumption ash makes is violated. Set the init pi from
-  # `null_prior_weight` so the same parameter drives both the
+  # assumption ash makes is violated. Set the init pi directly
+  # from `null_prior_init` (a probability in `[0, 1]`); the EM
+  # M-step washes this out within a few iterations, so this is
+  # only the cold-start point. The same parameter drives both the
   # ash-driven path and the user-supplied-grid path
   # (`distribute_mixture_weights`).
-  K       <- length(t_ash$fitted_g$pi)
-  pi_null <- null_prior_weight / (K + 1)
+  K <- length(t_ash$fitted_g$pi)
+  pi_null <- null_prior_init
   t_ash$fitted_g$pi <- c(pi_null, rep((1 - pi_null) / (K - 1), K - 1))
 
   G_prior <- lapply(groups, function(idx) {
@@ -126,7 +130,7 @@ init_scale_mixture_prior_default <- function(Y_m,
 #'
 #' Constructs the per-outcome scale-mixture-of-normals prior.
 #' When `prior_variance_grid` is supplied, uses the user-given
-#' grid and distributes weights via `null_prior_weight`. When
+#' grid and distributes weights via `null_prior_init`. When
 #' `NULL`, runs the data-driven path
 #' (`init_scale_mixture_prior_default`) per outcome. Same code
 #' path for any `T_m`.
@@ -140,7 +144,9 @@ init_scale_mixture_prior_default <- function(Y_m,
 #' @param prior_variance_scope `"per_scale"` (default,
 #'   stores prior per scale per outcome) or `"per_outcome"`
 #'   (collapses the scale dimension).
-#' @param null_prior_weight scalar, default 2.
+#' @param null_prior_init scalar in `[0, 1]`, initial `pi[null]`
+#'   for the scale-mixture prior. Default `0` (the EM washes it
+#'   out within a few iterations regardless of starting value).
 #' @param grid_multiplier numeric, forwarded to `ash`.
 #' @return list of class `"mf_prior_scale_mixture"`.
 #' @references
@@ -151,7 +157,7 @@ mf_prior_scale_mixture <- function(data,
                                    prior_variance_grid = NULL,
                                    prior_variance_scope = c("per_scale",
                                                             "per_outcome"),
-                                   null_prior_weight    = 2,
+                                   null_prior_init    = 0,
                                    grid_multiplier      = sqrt(2)) {
   prior_variance_scope <- match.arg(prior_variance_scope)
   if (!inherits(data, "mf_individual")) {
@@ -196,7 +202,7 @@ mf_prior_scale_mixture <- function(data,
       # mixsqp / EM updates have a uniform interface.
       V_grid[[m]] <- prior_variance_grid
       K           <- length(prior_variance_grid)
-      pi_kvec     <- distribute_mixture_weights(K, null_prior_weight)
+      pi_kvec     <- distribute_mixture_weights(K, null_prior_init)
 
       sd_grid <- c(0, sqrt(prior_variance_grid))    # null + non-null sds
       G_prior_per_outcome[[m]] <- lapply(groups_m, function(idx) {
@@ -219,7 +225,7 @@ mf_prior_scale_mixture <- function(data,
         grid_multiplier   = grid_multiplier,
         lowc_idx          = if (!is.null(data$lowc_idx)) data$lowc_idx[[m]]
                             else integer(0),
-        null_prior_weight = null_prior_weight,
+        null_prior_init = null_prior_init,
         na_idx            = data$na_idx[[m]]   # complete-case rows for trait m
       )
       G_prior_per_outcome[[m]] <- out$G_prior
@@ -237,7 +243,7 @@ mf_prior_scale_mixture <- function(data,
     G_prior              = G_prior_per_outcome,
     V_grid               = V_grid,
     pi                   = pi_weights,
-    null_prior_weight    = null_prior_weight,
+    null_prior_init    = null_prior_init,
     prior_variance_scope = prior_variance_scope,
     update_method        = "mixsqp"
   )

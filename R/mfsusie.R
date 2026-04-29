@@ -48,8 +48,13 @@
 #'   instead of M*S_m); switch to `"per_scale"` only when you
 #'   need scale-specific mixture weights for power on shape-
 #'   varying signals.
-#' @param null_prior_weight numeric, weight on the null prior
-#'   component. Default 2.
+#' @param null_prior_init numeric in `[0, 1]`. Initial mass on the
+#'   null component of the scale-mixture prior on `b_l`. Used
+#'   directly as `pi[null]` at IBSS iter 1; the EM M-step
+#'   overwrites it from the data within a few iterations, so the
+#'   final fit is essentially insensitive to this value. Default
+#'   `0` — no prior null bias at start, signalling "the data
+#'   should decide."
 #' @param cross_outcome_prior optional object that controls how the
 #'   per-outcome log-Bayes factors are combined into the joint
 #'   log-Bayes factor used by the SER step. Each IBSS effect first
@@ -92,7 +97,7 @@
 #'   run the per-effect empirical-Bayes update of the mixture
 #'   weights `pi_V[[m]]` per (outcome, scale) using the `mixsqp`
 #'   solver. When `FALSE`, hold the prior fixed at the initial
-#'   `prior_variance_grid` / `null_prior_weight`; useful when
+#'   `prior_variance_grid` / `null_prior_init`; useful when
 #'   collapsing `mfsusie()` to `susieR::susie()` for sanity
 #'   checks.
 #' @param convergence_method one of `"pip"` (default) or
@@ -151,20 +156,14 @@
 #'   assays.
 #' @param control_mixsqp optional named list of `mixsqp` control
 #'   arguments forwarded to the per-(outcome, scale) M-step.
-#' @param mixsqp_null_penalty numeric, per-coefficient pseudo-count
-#'   on the null component of the mixsqp M-step. The total null
-#'   pseudo-count fed to mixsqp is `mixsqp_null_penalty * idx_size`,
-#'   versus a total data weight of `idx_size` from the `zeta`-
-#'   weighted variable rows; the ratio `mixsqp_null_penalty : 1` is
-#'   therefore the null:data weight ratio at the M-step. Default
-#'   `0.1` corresponds to a 10% null:data ratio, anchored to
-#'   `ashr::ash.workhorse(nullweight = 10)` over a typical
-#'   `idx_size = 128` (ratio ~0.08). For multi-outcome fits the
-#'   penalty is scaled by the number of outcomes `M` so that the
-#'   null:data balance stays invariant as the per-effect variable
-#'   posterior concentrates linearly in `M`; single-outcome fits
-#'   are unchanged.
-#'   Default `0.1`.
+#' @param null_weight numeric in `[0, 1]`. Ratio of null
+#'   pseudo-weight to total data weight in the mixsqp M-step,
+#'   regularizing the EB scale-mixture prior toward the null
+#'   component. `0` is unregularized MLE; `0.01` (default) is
+#'   light shrinkage toward null, matching upstream
+#'   `fsusieR::susiF`. Internally scaled by the number of
+#'   outcomes `M` so the null:data balance is invariant to `M`;
+#'   single-outcome fits are unchanged.
 #' @param mixsqp_alpha_eps numeric, threshold below which a
 #'   variable's per-effect posterior `alpha[l, j]` is dropped
 #'   from the mixsqp M-step input. The truncation error on the
@@ -242,7 +241,7 @@ mfsusie <- function(X, Y,
                     prior_variance_grid       = NULL,
                     prior_variance_scope      = c("per_outcome",
                                                   "per_scale"),
-                    null_prior_weight         = 2,
+                    null_prior_init           = 0,
                     cross_outcome_prior       = NULL,
                     prior_weights             = NULL,
                     residual_variance         = NULL,
@@ -268,7 +267,7 @@ mfsusie <- function(X, Y,
                     wavelet_magnitude_cutoff  = 0,
                     wavelet_qnorm             = TRUE,
                     control_mixsqp            = NULL,
-                    mixsqp_null_penalty       = 0.1,
+                    null_weight               = 0.01,
                     mixsqp_alpha_eps          = 1e-6,
                     model_init                = NULL,
                     small_sample_correction   = FALSE,
@@ -329,7 +328,7 @@ mfsusie <- function(X, Y,
     data,
     prior_variance_grid  = prior_variance_grid,
     prior_variance_scope = prior_variance_scope,
-    null_prior_weight    = null_prior_weight
+    null_prior_init    = null_prior_init
   )
 
   # 3. Assemble params for `susie_workhorse`.
@@ -356,7 +355,7 @@ mfsusie <- function(X, Y,
     standardize                = standardize,
     track_fit                  = track_fit,
     verbose                    = verbose,
-    mixsqp_null_penalty        = mixsqp_null_penalty,
+    null_weight        = null_weight,
     mixsqp_alpha_eps           = mixsqp_alpha_eps,
     control_mixsqp             = control_mixsqp,
     L_greedy                   = L_greedy,
