@@ -563,7 +563,7 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
   # we scale `null_weight` by M. See
   # `inst/notes/cross-package-audit-derivations.md` section 1
   # for the full derivation.
-  null_weight <- (params$null_weight %||% 0.01) *
+  null_weight <- (params$null_weight %||% 0.05) *
                         max(1L, data$M)
   control    <- params$control_mixsqp %||% list()
   zeta_l     <- model$alpha[l, ]

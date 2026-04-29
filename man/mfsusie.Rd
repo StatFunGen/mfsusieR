@@ -36,7 +36,7 @@ mfsusie(
   wavelet_magnitude_cutoff = 0,
   wavelet_qnorm = TRUE,
   control_mixsqp = NULL,
-  null_weight = 0.01,
+  null_weight = 0.05,
   mixsqp_alpha_eps = 1e-06,
   model_init = NULL,
   small_sample_correction = FALSE,
@@ -211,11 +211,10 @@ arguments forwarded to the per-(outcome, scale) M-step.}
 \item{null_weight}{numeric in \verb{[0, 1]}. Ratio of null
 pseudo-weight to total data weight in the mixsqp M-step,
 regularizing the EB scale-mixture prior toward the null
-component. \code{0} is unregularized MLE; \code{0.01} (default) is
-light shrinkage toward null, matching upstream
-\code{fsusieR::susiF}. Internally scaled by the number of
-outcomes \code{M} so the null:data balance is invariant to \code{M};
-single-outcome fits are unchanged.}
+component. \code{0} is unregularized MLE; \code{0.05} (default) is
+light shrinkage toward null. Internally scaled by the number
+of outcomes \code{M} so the null:data balance is invariant to
+\code{M}; single-outcome fits are unchanged.}
 
 \item{mixsqp_alpha_eps}{numeric, threshold below which a
 variable's per-effect posterior \code{alpha[l, j]} is dropped

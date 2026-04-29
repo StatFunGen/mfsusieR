@@ -120,7 +120,7 @@ mf_em_likelihood_per_scale <- function(bhat_slice, shat_slice, sd_grid,
 #' @keywords internal
 #' @noRd
 mf_em_m_step_per_scale <- function(L, zeta, idx_size,
-                                   null_weight = 0.01,
+                                   null_weight = 0.05,
                                    init_pi0_w     = 0.5,
                                    tol_null_prior = 0.001,
                                    control_mixsqp = NULL,

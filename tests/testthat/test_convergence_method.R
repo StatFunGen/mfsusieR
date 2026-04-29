@@ -17,7 +17,14 @@
     X %*% (matrix(beta, p, 1) %*% matrix(shape, 1, T_m)) +
       matrix(rnorm(n * T_m, sd = 0.3), n)
   })
-  mfsusie(wavelet_qnorm = FALSE, X, Y, L = 3, max_iter = 50, tol = 1e-4,
+  # `tol = 1e-10` drives both branches to a near-stationary fixed
+  # point so the test's bit-equivalence assertion (`tolerance =
+  # 1e-8` on alpha / pip / mu / lbf_variable) is meaningful. With a
+  # looser IBSS tol each branch can stop at a different iteration
+  # within its own convergence criterion, leaving a residual gap
+  # ~tol that breaks tight comparison.
+  mfsusie(wavelet_qnorm = FALSE, X, Y, L = 3,
+          max_iter = 200, tol = 1e-10,
           convergence_method = method, verbose = FALSE)
 }
 
