@@ -18,7 +18,7 @@ make_data <- function(n = 30, J = 8, T_per_outcome = c(64L, 128L)) {
   set.seed(mfsusier_test_seed())
   X <- matrix(rnorm(n * J), nrow = n)
   Y <- lapply(T_per_outcome, function(T_m) matrix(rnorm(n * T_m), nrow = n))
-  mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE)
+  mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = X, Y = Y, verbose = FALSE)
 }
 
 make_model <- function(data, L = 3, sigma2_scalar = 1) {

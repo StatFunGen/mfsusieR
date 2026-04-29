@@ -194,7 +194,7 @@ test_that("mf_post_smooth(method = 'HMM') populates credible_bands of correct sh
   Y <- X %*% (matrix(beta, p, 1) %*% matrix(shape, 1, T_m)) +
          matrix(rnorm(n * T_m, sd = 0.4), n)
 
-  fit   <- fsusie(Y, X, L = 1, max_iter = 30, verbose = FALSE)
+  fit   <- fsusie(wavelet_qnorm = FALSE, Y, X, L = 1, max_iter = 30, verbose = FALSE)
   fit_h <- mf_post_smooth(fit, method = "HMM")
 
   bands <- fit_h$smoothed$HMM$credible_bands

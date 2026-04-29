@@ -10,7 +10,7 @@ make_M1 <- function(L = 5, n = 80, p = 25, T_m = 64) {
   beta <- numeric(p); beta[3] <- 1; beta[10] <- -0.6
   Y <- list(X %*% matrix(rep(beta, T_m), nrow = p) +
               matrix(rnorm(n * T_m, sd = 0.5), n))
-  fit <- mfsusie(X, Y, L = L, verbose = FALSE)
+  fit <- mfsusie(wavelet_qnorm = FALSE, max_iter = 100, X, Y, L = L, verbose = FALSE)
   list(fit = fit, X = X, Y = Y, beta = beta)
 }
 
@@ -21,7 +21,7 @@ make_M2 <- function(L = 5, n = 80, p = 25, T_per = c(32L, 32L)) {
   Y <- lapply(T_per, function(T_m)
     X %*% matrix(rep(beta, T_m), nrow = p) +
       matrix(rnorm(n * T_m, sd = 0.5), n))
-  fit <- mfsusie(X, Y, L = L,
+  fit <- mfsusie(wavelet_qnorm = FALSE, max_iter = 100, X, Y, L = L,
                  prior_variance_scope = "per_outcome",
                  verbose = FALSE)
   list(fit = fit, X = X, Y = Y, beta = beta)
@@ -144,7 +144,7 @@ test_that("mfsusie_plot scalar-outcome path (T_m = 1)", {
   n <- 60; p <- 15
   X <- matrix(rnorm(n * p), n)
   Y_scalar <- list(matrix(rnorm(n), ncol = 1L))
-  fit <- mfsusie(X, Y_scalar, L = 3, verbose = FALSE)
+  fit <- mfsusie(wavelet_qnorm = FALSE, max_iter = 100, X, Y_scalar, L = 3, verbose = FALSE)
   render(mfsusie_plot(fit))
 })
 
@@ -328,7 +328,7 @@ test_that("mfsusie_plot_lfsr renders >2 outcome grid with leftover cell", {
   Y <- lapply(c(32L, 32L, 32L), function(T_m)
     X %*% matrix(rep(beta, T_m), nrow = p) +
       matrix(rnorm(n * T_m, sd = 0.5), n))
-  fit <- mfsusie(X, Y, L = 3,
+  fit <- mfsusie(wavelet_qnorm = FALSE, max_iter = 100, X, Y, L = 3,
                  prior_variance_scope = "per_outcome",
                  verbose = FALSE)
   fit_h <- mf_post_smooth(fit, method = "HMM")

@@ -15,7 +15,7 @@ test_that("fsusie() runs end-to-end on a single-modality fixture", {
   beta <- numeric(J); beta[1] <- 1
   Y <- X %*% matrix(rep(beta, T), nrow = J) + matrix(rnorm(n * T, sd = 0.3), nrow = n)
 
-  fit <- fsusie(Y, X, L = 3, max_iter = 30, verbose = FALSE)
+  fit <- fsusie(wavelet_qnorm = FALSE, Y, X, L = 3, max_iter = 30, verbose = FALSE)
 
   expect_s3_class(fit, c("mfsusie", "susie"), exact = FALSE)
   expect_identical(ncol(fit$alpha), as.integer(J))
@@ -34,8 +34,8 @@ test_that("fsusie(Y, X, pos) produces a bit-identical fit to mfsusie(X, list(Y),
   Y <- X %*% matrix(rep(beta, T), nrow = J) + matrix(rnorm(n * T, sd = 0.3), nrow = n)
   pos <- seq_len(T)
 
-  fit_w <- fsusie(Y, X, pos = pos, L = 3, max_iter = 30, verbose = FALSE)
-  fit_m <- mfsusie(X, list(Y), pos = list(pos), L = 3, max_iter = 30, verbose = FALSE)
+  fit_w <- fsusie(wavelet_qnorm = FALSE, Y, X, pos = pos, L = 3, max_iter = 30, verbose = FALSE)
+  fit_m <- mfsusie(wavelet_qnorm = FALSE, X, list(Y), pos = list(pos), L = 3, max_iter = 30, verbose = FALSE)
 
   expect_equal(fit_w$alpha,        fit_m$alpha,        tolerance = 0)
   expect_equal(fit_w$mu,           fit_m$mu,           tolerance = 0)
@@ -55,7 +55,7 @@ test_that("fsusie() coerces a numeric vector Y to a single-column matrix", {
   beta <- numeric(J); beta[1] <- 1
   y <- as.numeric(X %*% beta + rnorm(n, sd = 0.3))
 
-  fit <- fsusie(y, X, L = 3, max_iter = 30, verbose = FALSE)
+  fit <- fsusie(wavelet_qnorm = FALSE, y, X, L = 3, max_iter = 30, verbose = FALSE)
   expect_s3_class(fit, "mfsusie")
   expect_identical(ncol(fit$alpha), as.integer(J))
 })
@@ -67,7 +67,7 @@ test_that("fsusie() errors when the user passes a multi-modality argument", {
   X <- matrix(rnorm(30), nrow = 5)
   Y <- matrix(rnorm(40), nrow = 5)
   expect_error(
-    fsusie(Y, X, cross_outcome_prior = list()),
+    fsusie(wavelet_qnorm = FALSE, max_iter = 100, Y, X, cross_outcome_prior = list()),
     "single-outcome wrapper"
   )
 })
@@ -75,5 +75,5 @@ test_that("fsusie() errors when the user passes a multi-modality argument", {
 test_that("fsusie() errors on non-numeric Y", {
   X <- matrix(rnorm(30), nrow = 5)
   Y_bad <- letters[1:6]
-  expect_error(fsusie(Y_bad, X), "must be a numeric matrix")
+  expect_error(fsusie(wavelet_qnorm = FALSE, max_iter = 100, Y_bad, X), "must be a numeric matrix")
 })

@@ -1,8 +1,8 @@
 Type: Package
 Package: mfsusieR
 Title: Multi-Outcome Functional Regression with the Sum of Single Effects Model
-Version: 0.0.1
-Date: 2026-04-25
+Version: 0.0.2
+Date: 2026-04-29
 Authors@R: c(
     person("Anjing", "Liu", role = "aut"),
     person("William R. P.", "Denault", role = "aut"),

@@ -26,7 +26,7 @@ build_tiny_fit <- function(seed = 1L, T_m = 32L, p = 8L) {
   beta[2L, ] <- 1.6 * shape1
   beta[6L, ] <- -1.6 * shape2
   Y <- X %*% beta + matrix(rnorm(n * T_m, sd = 0.4), n)
-  fsusie(Y, X, pos = seq_len(T_m), L = 5, verbose = FALSE)
+  fsusie(wavelet_qnorm = FALSE, max_iter = 100, Y, X, pos = seq_len(T_m), L = 5, verbose = FALSE)
 }
 
 # ---- mfsusie_plot ---------------------------------------------------

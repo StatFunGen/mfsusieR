@@ -20,7 +20,7 @@ test_that("mf_post_smooth(method = 'scalewise') populates effect_curves and cred
   Y    <- X %*% (matrix(beta, p, 1) %*% matrix(shape, 1, T_m)) +
             matrix(rnorm(n * T_m, sd = 0.3), n)
 
-  fit  <- fsusie(Y, X, L = 1, max_iter = 30, verbose = FALSE)
+  fit  <- fsusie(wavelet_qnorm = FALSE, Y, X, L = 1, max_iter = 30, verbose = FALSE)
   fit_s <- mf_post_smooth(fit, method = "scalewise")
   payload <- fit_s$smoothed$scalewise
 
@@ -57,7 +57,7 @@ test_that("mf_post_smooth(method = 'scalewise') gracefully handles T_m = 1 (scal
   beta <- numeric(p); beta[5] <- 1.5
   Y    <- X %*% matrix(beta, p, T_m) + matrix(rnorm(n * T_m, sd = 0.4), n)
 
-  fit  <- fsusie(Y, X, L = 1, max_iter = 30, verbose = FALSE)
+  fit  <- fsusie(wavelet_qnorm = FALSE, Y, X, L = 1, max_iter = 30, verbose = FALSE)
   fit_s <- mf_post_smooth(fit, method = "scalewise")
   payload <- fit_s$smoothed$scalewise
 
@@ -79,7 +79,7 @@ test_that("mf_post_smooth(method = 'scalewise') honors threshold_factor", {
   shape <- exp(-((seq_len(T_m) - T_m / 2)^2) / (2 * 8^2))
   Y    <- X %*% (matrix(beta, p, 1) %*% matrix(shape, 1, T_m)) +
             matrix(rnorm(n * T_m, sd = 0.4), n)
-  fit  <- fsusie(Y, X, L = 1, max_iter = 20, verbose = FALSE)
+  fit  <- fsusie(wavelet_qnorm = FALSE, Y, X, L = 1, max_iter = 20, verbose = FALSE)
   c_low  <- mf_post_smooth(fit, method = "scalewise",
                            threshold_factor = 0.5)$smoothed$scalewise$effect_curves[[1L]][[1L]]
   c_high <- mf_post_smooth(fit, method = "scalewise",

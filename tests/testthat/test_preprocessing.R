@@ -88,7 +88,7 @@ test_that("wavelet_magnitude_cutoff masks zero-median wavelet columns", {
   # into the wavelet domain via the response: a constant column
   # in Y produces a zero-median scaling coefficient.
   sim$Y[, 1L] <- 0
-  fit_filter <- fsusie(sim$Y, sim$X, L = 3,
+  fit_filter <- fsusie(wavelet_qnorm = FALSE, max_iter = 100, sim$Y, sim$X, L = 3,
                        wavelet_magnitude_cutoff = 0,
                        verbose = FALSE)
   expect_true(fit_filter$converged)
@@ -99,7 +99,7 @@ test_that("wavelet_magnitude_cutoff masks zero-median wavelet columns", {
 
 test_that("wavelet_qnorm = TRUE runs to convergence", {
   sim <- build_fixture()
-  fit_qn <- fsusie(sim$Y, sim$X, L = 3,
+  fit_qn <- fsusie(max_iter = 100, sim$Y, sim$X, L = 3,
                    wavelet_qnorm = TRUE,
                    verbose = FALSE)
   expect_true(fit_qn$converged)
@@ -115,7 +115,7 @@ test_that("mf_adjust_for_covariates accepts wavelet_magnitude_cutoff", {
   Y <- Z %*% matrix(rnorm(K * T_m), K, T_m) +
        matrix(rnorm(n * T_m, sd = 0.4), n, T_m)
   out <- suppressWarnings(
-    mf_adjust_for_covariates(Y, Z, wavelet_magnitude_cutoff = 0.05))
+    mf_adjust_for_covariates(wavelet_qnorm = FALSE, Y, Z, wavelet_magnitude_cutoff = 0.05))
   expect_equal(dim(out$Y_adjusted), c(n, T_m))
   expect_true(out$sigma2 > 0)
 })

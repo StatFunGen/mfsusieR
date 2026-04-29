@@ -44,7 +44,7 @@ test_that("mf_residualize_ols X_adjusted is orthogonal to Z", {
 
 test_that("dispatcher routes method = 'ols' to mf_residualize_ols", {
   sim <- build_cov_sim()
-  a <- mf_adjust_for_covariates(sim$Y, sim$Z, method = "ols")
+  a <- mf_adjust_for_covariates(wavelet_qnorm = FALSE, sim$Y, sim$Z, method = "ols")
   b <- mfsusieR:::mf_residualize_ols(sim$Y, sim$Z)
   expect_equal(a$Y_adjusted, b$Y_adjusted, tolerance = 0)
   expect_equal(a$method, "ols")
@@ -55,7 +55,7 @@ test_that("dispatcher routes method = 'ols' to mf_residualize_ols", {
 test_that("mf_residualize_wavelet_eb returns sane structure", {
   sim <- build_cov_sim()
   out <- suppressWarnings(
-    mf_adjust_for_covariates(sim$Y, sim$Z, method = "wavelet_eb"))
+    mf_adjust_for_covariates(wavelet_qnorm = FALSE, sim$Y, sim$Z, method = "wavelet_eb"))
   expect_named(out, c("Y_adjusted", "X_adjusted", "fitted_func",
                       "sigma2", "niter", "converged", "method"))
   expect_equal(dim(out$Y_adjusted),  c(sim$n, sim$T_m))
@@ -70,7 +70,7 @@ test_that("wavelet_eb reduces to small residuals when Z explains Y", {
   sim <- build_cov_sim(seed = 5L)
   Y_clean <- sim$Z %*% sim$beta
   out <- suppressWarnings(
-    mf_adjust_for_covariates(Y_clean, sim$Z, method = "wavelet_eb"))
+    mf_adjust_for_covariates(wavelet_qnorm = FALSE, Y_clean, sim$Z, method = "wavelet_eb"))
   # Most of the variance is removed; not exact because wavelet-EB
   # adds shrinkage. Compare to OLS as an upper bound on RSS.
   ols <- mfsusieR:::mf_residualize_ols(Y_clean, sim$Z)
@@ -81,7 +81,7 @@ test_that("wavelet_eb honours the X argument with FWL residualization", {
   sim <- build_cov_sim()
   X   <- matrix(rnorm(sim$n * 8L), sim$n, 8L)
   out <- suppressWarnings(
-    mf_adjust_for_covariates(sim$Y, sim$Z, X = X, method = "wavelet_eb"))
+    mf_adjust_for_covariates(wavelet_qnorm = FALSE, sim$Y, sim$Z, X = X, method = "wavelet_eb"))
   expect_equal(dim(out$X_adjusted), c(sim$n, 8L))
   expect_lt(max(abs(crossprod(sim$Z, out$X_adjusted))), 1e-10)
 })
@@ -91,7 +91,7 @@ test_that("wavelet_eb agrees with port source up to documented bug magnitude", {
   for (seed in c(1L, 42L)) {
     sim <- build_cov_sim(seed = seed)
     ours <- suppressWarnings(
-      mf_adjust_for_covariates(sim$Y, sim$Z, method = "wavelet_eb"))
+      mf_adjust_for_covariates(wavelet_qnorm = FALSE, sim$Y, sim$Z, method = "wavelet_eb"))
     ref  <- suppressWarnings(
       fsusieR::EBmvFR(sim$Y, X = sim$Z, adjust = TRUE, verbose = FALSE))
     # The two outputs differ by the magnitude of the documented
@@ -108,11 +108,11 @@ test_that("wavelet_eb agrees with port source up to documented bug magnitude", {
 test_that("preprocessing flags accept valid values and reject bad ones", {
   sim <- build_cov_sim()
   expect_silent(suppressWarnings(
-    mf_adjust_for_covariates(sim$Y, sim$Z, wavelet_magnitude_cutoff = 0.01)))
+    mf_adjust_for_covariates(wavelet_qnorm = FALSE, sim$Y, sim$Z, wavelet_magnitude_cutoff = 0.01)))
   expect_silent(suppressWarnings(
     mf_adjust_for_covariates(sim$Y, sim$Z, wavelet_qnorm = TRUE)))
   expect_error(
-    mf_adjust_for_covariates(sim$Y, sim$Z, wavelet_magnitude_cutoff = -0.1),
+    mf_adjust_for_covariates(wavelet_qnorm = FALSE, sim$Y, sim$Z, wavelet_magnitude_cutoff = -0.1),
     "non-negative")
   expect_error(
     mf_adjust_for_covariates(sim$Y, sim$Z, wavelet_qnorm = "yes"),
@@ -122,17 +122,17 @@ test_that("preprocessing flags accept valid values and reject bad ones", {
 test_that("non-power-of-two T is rejected by wavelet_eb", {
   sim <- build_cov_sim(T_m = 50L)
   expect_error(
-    mf_adjust_for_covariates(sim$Y, sim$Z, method = "wavelet_eb"),
+    mf_adjust_for_covariates(wavelet_qnorm = FALSE, sim$Y, sim$Z, method = "wavelet_eb"),
     "power of two")
 })
 
 test_that("shape mismatches error cleanly", {
   expect_error(
-    mf_adjust_for_covariates(matrix(1, 10L, 8L),
+    mf_adjust_for_covariates(wavelet_qnorm = FALSE, matrix(1, 10L, 8L),
                              matrix(1, 12L, 3L)),
     "same number of rows")
   expect_error(
-    mf_adjust_for_covariates(matrix(1, 10L, 8L),
+    mf_adjust_for_covariates(wavelet_qnorm = FALSE, matrix(1, 10L, 8L),
                              matrix(1, 10L, 3L),
                              X = matrix(1, 11L, 5L)),
     "same number of rows")

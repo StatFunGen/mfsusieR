@@ -23,9 +23,9 @@ build_small_n_sim <- function(seed = 23L, n = 40L, T_m = 32L,
 
 test_that("small_sample_correction = FALSE leaves the fit bit-identical", {
   sim <- build_small_n_sim()
-  fit_default <- fsusie(sim$Y, sim$X, L = 5,
+  fit_default <- fsusie(wavelet_qnorm = FALSE, max_iter = 100, sim$Y, sim$X, L = 5,
                         verbose = FALSE)
-  fit_explicit <- fsusie(sim$Y, sim$X, L = 5,
+  fit_explicit <- fsusie(wavelet_qnorm = FALSE, max_iter = 100, sim$Y, sim$X, L = 5,
                          small_sample_correction = FALSE,
                          verbose = FALSE)
   expect_equal(fit_default$alpha, fit_explicit$alpha, tolerance = 0)
@@ -36,7 +36,7 @@ test_that("small_sample_correction = FALSE leaves the fit bit-identical", {
 
 test_that("small_sample_correction = TRUE runs to convergence on small n", {
   sim <- build_small_n_sim()
-  fit_johnson <- fsusie(sim$Y, sim$X, L = 5,
+  fit_johnson <- fsusie(wavelet_qnorm = FALSE, max_iter = 100, sim$Y, sim$X, L = 5,
                         small_sample_correction = TRUE,
                         verbose = FALSE)
   expect_true(fit_johnson$converged)
@@ -50,10 +50,10 @@ test_that("Johnson-t reduces PIP at known-null variants vs Wakefield", {
   # The signal variant should still be near 1 under both kernels;
   # null variants should have lower PIP under Johnson-t.
   sim <- build_small_n_sim(n = 40L, T_m = 32L, p = 30L)
-  fit_wake <- fsusie(sim$Y, sim$X, L = 5,
+  fit_wake <- fsusie(wavelet_qnorm = FALSE, max_iter = 100, sim$Y, sim$X, L = 5,
                      small_sample_correction = FALSE,
                      verbose = FALSE)
-  fit_john <- fsusie(sim$Y, sim$X, L = 5,
+  fit_john <- fsusie(wavelet_qnorm = FALSE, max_iter = 100, sim$Y, sim$X, L = 5,
                      small_sample_correction = TRUE,
                      verbose = FALSE)
   # Signal variant: both kernels recover it (PIP > 0.9).
@@ -73,7 +73,7 @@ test_that("mixture_log_bf_per_scale_johnson matches fsusieR::log_BF with df", {
   skip_if_not_installed("fsusieR")
   set.seed(7L)
   n <- 50L; J <- 15L; T_m <- 64L
-  data <- mfsusieR:::create_mf_individual(
+  data <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, 
     X = matrix(rnorm(n * J), n, J),
     Y = list(matrix(rnorm(n * T_m), n, T_m)),
     verbose = FALSE)
@@ -121,7 +121,7 @@ test_that("mixture_log_bf_per_scale_johnson matches fsusieR::log_BF with df", {
 test_that("small_sample_correction rejects non-logical input", {
   sim <- build_small_n_sim()
   expect_error(
-    fsusie(sim$Y, sim$X, L = 5,
+    fsusie(wavelet_qnorm = FALSE, max_iter = 100, sim$Y, sim$X, L = 5,
            small_sample_correction = "yes",
            verbose = FALSE),
     "TRUE` or `FALSE`"

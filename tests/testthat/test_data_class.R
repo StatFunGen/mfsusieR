@@ -28,7 +28,7 @@ test_that("create_mf_individual coerces vector Y[[m]] to a 1-column matrix", {
   n <- 20; J <- 4
   X <- matrix(rnorm(n * J), n)
   Y <- list(rnorm(n))   # plain vector, not a matrix
-  data <- mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE)
+  data <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = X, Y = Y, verbose = FALSE)
   expect_identical(ncol(data$D[[1]]), 1L)
   expect_identical(nrow(data$D[[1]]), 20L)
 })
@@ -38,7 +38,7 @@ test_that("create_mf_individual errors on non-numeric Y[[m]]", {
   X <- matrix(rnorm(20), 5)
   Y_bad <- list(matrix("not-numeric", 5, 4))
   expect_error(
-    mfsusieR:::create_mf_individual(X = X, Y = Y_bad, verbose = FALSE),
+    mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = X, Y = Y_bad, verbose = FALSE),
     "must be numeric"
   )
 })
@@ -49,7 +49,7 @@ test_that("create_mf_individual errors on wrong-length pos list", {
   Y <- list(matrix(rnorm(20), 5))
   pos_bad <- list(seq_len(3))   # length mismatch with ncol(Y[[1]]) = 4
   expect_error(
-    mfsusieR:::create_mf_individual(X = X, Y = Y, pos = pos_bad, verbose = FALSE),
+    mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = X, Y = Y, pos = pos_bad, verbose = FALSE),
     NULL
   )
 })
@@ -60,7 +60,7 @@ test_that("create_mf_individual errors on pos length mismatch with M", {
   Y <- list(matrix(rnorm(20), 5), matrix(rnorm(40), 5))
   pos_bad <- list(seq_len(4))   # length 1, but M = 2
   expect_error(
-    mfsusieR:::create_mf_individual(X = X, Y = Y, pos = pos_bad, verbose = FALSE),
+    mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = X, Y = Y, pos = pos_bad, verbose = FALSE),
     "must be a list of length"
   )
 })
@@ -83,20 +83,20 @@ test_that("mf_invert_dwt handles a length-1 D vector (vector input, T_basis=1)",
   set.seed(mfsusier_test_seed())
   X <- matrix(rnorm(10), 5)
   Y <- list(matrix(rnorm(5), 5))   # T_m = 1
-  data <- mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE)
+  data <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = X, Y = Y, verbose = FALSE)
   expect_identical(data$T_basis[1], 1L)
 })
 
 test_that("create_mf_individual rejects non-matrix X", {
   expect_error(
-    mfsusieR:::create_mf_individual(X = list(), Y = list(matrix(0, 4, 4))),
+    mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = list(), Y = list(matrix(0, 4, 4))),
     "must be a numeric matrix"
   )
 })
 
 test_that("create_mf_individual rejects empty Y", {
   expect_error(
-    mfsusieR:::create_mf_individual(X = make_X(4, 3), Y = list()),
+    mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = make_X(4, 3), Y = list()),
     "non-empty list"
   )
 })
@@ -104,14 +104,14 @@ test_that("create_mf_individual rejects empty Y", {
 test_that("create_mf_individual rejects mismatched n between X and Y", {
   X <- make_X(10, 5)
   Y <- list(matrix(0, nrow = 8, ncol = 4))
-  expect_error(mfsusieR:::create_mf_individual(X = X, Y = Y), "rows.*match")
+  expect_error(mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = X, Y = Y), "rows.*match")
 })
 
 test_that("create_mf_individual rejects pos length mismatch", {
   X <- make_X(10, 5)
   Y <- list(matrix(0, nrow = 10, ncol = 64))
   expect_error(
-    mfsusieR:::create_mf_individual(X = X, Y = Y, pos = list(seq_len(32))),
+    mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = X, Y = Y, pos = list(seq_len(32))),
     "length 32 but"
   )
 })
@@ -121,7 +121,7 @@ test_that("create_mf_individual rejects pos length mismatch", {
 test_that("M = 1 functional case stores DWT cache with the right shape", {
   X <- make_X(20, 8)
   Y <- make_Y_functional(20, 64)
-  obj <- mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE)
+  obj <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = X, Y = Y, verbose = FALSE)
 
   expect_identical(class(obj), c("mf_individual", "individual"))
   expect_identical(obj$M, 1L)
@@ -143,7 +143,7 @@ test_that("M = 1 functional case stores DWT cache with the right shape", {
 test_that("ragged modality lengths are stored without padding to a common T", {
   X <- make_X(20, 8)
   Y <- make_Y_functional(20, c(64L, 128L, 256L))
-  obj <- mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE)
+  obj <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = X, Y = Y, verbose = FALSE)
 
   expect_identical(obj$M, 3L)
   expect_identical(obj$T_basis, c(64L, 128L, 256L))
@@ -163,7 +163,7 @@ test_that("ragged modality lengths are stored without padding to a common T", {
 test_that("T_m = 1 short-circuits the wavelet machinery", {
   X <- make_X(20, 8)
   Y <- list(matrix(rnorm(20), ncol = 1))
-  obj <- mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE,
+  obj <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = X, Y = Y, verbose = FALSE,
                                          pos = list(1))
 
   expect_identical(obj$T_basis, 1L)
@@ -179,7 +179,7 @@ test_that("mixed (T_1 = 1, T_2 > 1) modalities flow through one constructor", {
   X <- make_X(20, 8)
   Y <- list(matrix(rnorm(20), ncol = 1),
             matrix(rnorm(20 * 64), nrow = 20))
-  obj <- mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE,
+  obj <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = X, Y = Y, verbose = FALSE,
                                          pos = list(1, seq_len(64)))
 
   expect_identical(obj$M, 2L)
@@ -193,7 +193,7 @@ test_that("mixed (T_1 = 1, T_2 > 1) modalities flow through one constructor", {
 test_that("X centering applied when intercept = TRUE (default)", {
   X <- make_X(20, 8)
   Y <- make_Y_functional(20, 64)
-  obj <- mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE)
+  obj <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = X, Y = Y, verbose = FALSE)
 
   expect_equal(colMeans(obj$X), rep(0, ncol(X)), tolerance = 1e-12)
   expect_equal(obj$wavelet_meta$X_center, colMeans(X), tolerance = 1e-12)
@@ -202,7 +202,7 @@ test_that("X centering applied when intercept = TRUE (default)", {
 test_that("X scaling applied when standardize = TRUE (default)", {
   X <- make_X(20, 8)
   Y <- make_Y_functional(20, 64)
-  obj <- mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE)
+  obj <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = X, Y = Y, verbose = FALSE)
 
   # After centering then scaling each column, every column has SD 1.
   col_sds <- apply(obj$X, 2, stats::sd)
@@ -213,7 +213,7 @@ test_that("zero-variance X column is preserved with csd = 1", {
   X <- make_X(20, 5)
   X[, 3] <- 1                          # constant column
   Y <- make_Y_functional(20, 64)
-  obj <- mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE)
+  obj <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = X, Y = Y, verbose = FALSE)
 
   expect_identical(obj$csd[3], 1)
   expect_true(all(is.finite(obj$X[, 3])))
@@ -222,7 +222,7 @@ test_that("zero-variance X column is preserved with csd = 1", {
 test_that("intercept = FALSE skips X centering", {
   X <- make_X(20, 8)
   Y <- make_Y_functional(20, 64)
-  obj <- mfsusieR:::create_mf_individual(X = X, Y = Y,
+  obj <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = X, Y = Y,
                                          intercept = FALSE,
                                          standardize = FALSE,
                                          verbose = FALSE)
@@ -236,7 +236,7 @@ test_that("intercept = FALSE skips X centering", {
 test_that("data object exposes the canonical fit-time slots", {
   X <- make_X(20, 8)
   Y <- make_Y_functional(20, c(64L, 128L))
-  obj <- mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE)
+  obj <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = X, Y = Y, verbose = FALSE)
 
   # Required slots used downstream by the IBSS dispatch and the
   # post-fit attach step.
@@ -274,7 +274,7 @@ test_that("the constructor's per-modality D matches a direct mf_dwt call", {
 test_that("when pos is NULL, defaults to seq_len(T_m) per modality", {
   X <- make_X(20, 8)
   Y <- make_Y_functional(20, c(64L, 128L))
-  obj <- mfsusieR:::create_mf_individual(X = X, Y = Y, verbose = FALSE)
+  obj <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = X, Y = Y, verbose = FALSE)
 
   # With regular integer pos and a power-of-two T_m, no remap is
   # applied and the pos slot mirrors the input.
