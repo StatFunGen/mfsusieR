@@ -54,7 +54,7 @@ mf_em_likelihood_per_scale <- function(bhat_slice, shat_slice, sd_grid,
 
   if (!is.null(sdmat_cache) && !is.null(log_sdmat_cache)) {
     # Loop-invariant fast path: caller pre-built sdmat once per
-    # (m, s) per IBSS iter and cached it on `model$em_cache`.
+    # (m, s) per IBSS iter and cached it on `model$iter_cache`.
     sdmat     <- sdmat_cache
     log_sdmat <- log_sdmat_cache
   } else {
