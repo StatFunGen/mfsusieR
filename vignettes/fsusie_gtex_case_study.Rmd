@@ -75,7 +75,8 @@ plot_dims
 ```
 
 ```{r plot-smoothed, fig.width = plot_dims$width, fig.height = plot_dims$height}
-mfsusie_plot(fit_s, facet_cs = "stack")
+mfsusie_plot(fit_s, facet_cs = "stack",
+             effect_variables = gtex_example$causal_snps)
 ```
 
 The three CS effect curves capture three separate gene-body
