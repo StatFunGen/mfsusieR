@@ -10,7 +10,7 @@ mfsusie(
   pos = NULL,
   L = 20,
   prior_variance_grid = NULL,
-  prior_variance_scope = c("per_outcome", "per_scale"),
+  prior_variance_scope = c("per_outcome", "per_scale", "per_scale_normal"),
   null_prior_init = 0,
   cross_outcome_prior = NULL,
   prior_weights = NULL,
@@ -65,15 +65,19 @@ the data-driven path
 (\code{compute_marginal_bhat_shat} + \code{ash}) selects the
 grid per outcome.}
 
-\item{prior_variance_scope}{\code{"per_outcome"} (default) or
-\code{"per_scale"}. Controls whether the mixture-weight matrix
-\code{pi_V[[m]]} collapses across scales (one weight vector per
-outcome) or keeps a separate row per wavelet scale. The
-per-outcome scope is the default because it is roughly
-\code{S_m}-fold cheaper per IBSS iter (M mixsqp calls per iter
-instead of M*S_m); switch to \code{"per_scale"} only when you
-need scale-specific mixture weights for power on shape-
-varying signals.}
+\item{prior_variance_scope}{one of \code{"per_outcome"}
+(default), \code{"per_scale"}, or \code{"per_scale_normal"}.
+\code{"per_outcome"} fits one mixture-of-normals prior pooled
+across wavelet scales (one mixsqp call per outcome per
+IBSS iter). \code{"per_scale"} fits a separate mixture per
+(outcome, scale) (S_m mixsqp calls per outcome per iter).
+\code{"per_scale_normal"} fits a 2-parameter point-normal
+prior per (outcome, scale) via a custom alpha-weighted
+MLE (no mixsqp); the parsimonious form trades the K+1
+mixture weights of the per-scale flavor for two
+parameters (\code{pi_0}, \code{sigma}) and is well-conditioned at
+coarse scales where the per-scale mixsqp path is data-
+starved.}
 
 \item{null_prior_init}{numeric in \verb{[0, 1]}, initial \code{pi[null]}
 for the scale-mixture prior on \code{b_l} at IBSS iter 1. The

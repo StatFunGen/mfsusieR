@@ -39,15 +39,19 @@
 #'   the data-driven path
 #'   (`compute_marginal_bhat_shat` + `ash`) selects the
 #'   grid per outcome.
-#' @param prior_variance_scope `"per_outcome"` (default) or
-#'   `"per_scale"`. Controls whether the mixture-weight matrix
-#'   `pi_V[[m]]` collapses across scales (one weight vector per
-#'   outcome) or keeps a separate row per wavelet scale. The
-#'   per-outcome scope is the default because it is roughly
-#'   `S_m`-fold cheaper per IBSS iter (M mixsqp calls per iter
-#'   instead of M*S_m); switch to `"per_scale"` only when you
-#'   need scale-specific mixture weights for power on shape-
-#'   varying signals.
+#' @param prior_variance_scope one of `"per_outcome"`
+#'   (default), `"per_scale"`, or `"per_scale_normal"`.
+#'   `"per_outcome"` fits one mixture-of-normals prior pooled
+#'   across wavelet scales (one mixsqp call per outcome per
+#'   IBSS iter). `"per_scale"` fits a separate mixture per
+#'   (outcome, scale) (S_m mixsqp calls per outcome per iter).
+#'   `"per_scale_normal"` fits a 2-parameter point-normal
+#'   prior per (outcome, scale) via a custom alpha-weighted
+#'   MLE (no mixsqp); the parsimonious form trades the K+1
+#'   mixture weights of the per-scale flavor for two
+#'   parameters (`pi_0`, `sigma`) and is well-conditioned at
+#'   coarse scales where the per-scale mixsqp path is data-
+#'   starved.
 #' @param null_prior_init numeric in `[0, 1]`, initial `pi[null]`
 #'   for the scale-mixture prior on `b_l` at IBSS iter 1. The
 #'   EM M-step overwrites it within a few iterations. Default
@@ -218,7 +222,8 @@ mfsusie <- function(X, Y,
                     L                         = 20,
                     prior_variance_grid       = NULL,
                     prior_variance_scope      = c("per_outcome",
-                                                  "per_scale"),
+                                                  "per_scale",
+                                                  "per_scale_normal"),
                     null_prior_init           = 0,
                     cross_outcome_prior       = NULL,
                     prior_weights             = NULL,

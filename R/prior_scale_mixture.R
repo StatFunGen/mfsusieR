@@ -121,8 +121,70 @@ init_scale_mixture_prior_default <- function(Y_m,
     rec$idx <- idx
     rec
   })
-  attr(G_prior, "class") <- prior_class
+  class(G_prior) <- c(prior_class, "mixsqp_mixture_prior")
 
+  list(G_prior = G_prior, tt = bs)
+}
+
+#' Init helper for `mixture_point_normal_per_scale`
+#'
+#' Builds a per-(outcome, scale) point-normal prior with two
+#' parameters per cell (`pi_0`, `sigma`). Used by
+#' `mf_prior_scale_mixture()` when
+#' `prior_variance_scope = "per_scale_normal"`.
+#'
+#' Per scale `s`, `sigma_init_s` is the data-driven
+#' debiased moment estimator
+#'   `sqrt(max(eps, mean(Bhat[, idx_s]^2) - mean(Shat[, idx_s]^2)))`
+#' when `prior_variance_grid` is `NULL`. Length-1
+#' `prior_variance_grid` forces a fixed
+#' `sigma = sqrt(prior_variance_grid)` at every scale (the
+#' susie-degenerate path). Other lengths warn and ignore.
+#'
+#' @param Y_m numeric matrix `n x T_basis[m]`.
+#' @param X numeric matrix `n x p`.
+#' @param groups list of integer index vectors per scale
+#'   (from `gen_wavelet_indx`).
+#' @param null_prior_init numeric in `[0, 1]`. Default `0`.
+#' @param prior_variance_grid optional length-1 numeric.
+#'   Default `NULL`.
+#' @return list: `G_prior` (class
+#'   `"mixture_point_normal_per_scale"`) and `tt` (per-outcome
+#'   marginal `(Bhat, Shat)`).
+#' @keywords internal
+#' @noRd
+init_point_normal_prior_per_scale <- function(Y_m, X, groups,
+                                              null_prior_init = 0,
+                                              prior_variance_grid = NULL) {
+  if (is.null(groups)) stop("`groups` is required.")
+
+  bs <- compute_marginal_bhat_shat(X, Y_m)
+
+  use_fixed <- !is.null(prior_variance_grid)
+  if (use_fixed && length(prior_variance_grid) > 1L) {
+    if (!is.null(warning_message))
+      warning_message(
+        "`prior_variance_grid` length > 1 has no meaning under per_scale_normal; ignoring.",
+        style = "hint")
+    use_fixed <- FALSE
+  }
+  fixed_sigma <- if (use_fixed) sqrt(prior_variance_grid[1L]) else NA_real_
+
+  G_prior <- lapply(groups, function(idx) {
+    sigma_s <- if (use_fixed) fixed_sigma
+               else sqrt(max(1e-8,
+                             mean(bs$Bhat[, idx, drop = FALSE]^2) -
+                             mean(bs$Shat[, idx, drop = FALSE]^2)))
+    list(
+      fitted_g = list(
+        pi   = c(null_prior_init, 1 - null_prior_init),
+        sd   = c(0, sigma_s),
+        mean = c(0, 0)
+      ),
+      idx = idx
+    )
+  })
+  class(G_prior) <- "mixture_point_normal_per_scale"
   list(G_prior = G_prior, tt = bs)
 }
 
@@ -156,7 +218,8 @@ init_scale_mixture_prior_default <- function(Y_m,
 mf_prior_scale_mixture <- function(data,
                                    prior_variance_grid = NULL,
                                    prior_variance_scope = c("per_scale",
-                                                            "per_outcome"),
+                                                            "per_outcome",
+                                                            "per_scale_normal"),
                                    null_prior_init    = 0,
                                    grid_multiplier      = sqrt(2)) {
   prior_variance_scope <- match.arg(prior_variance_scope)
@@ -167,6 +230,36 @@ mf_prior_scale_mixture <- function(data,
   M        <- data$M
   T_basis <- data$T_basis
   X        <- data$X
+
+  # Per-scale point-normal prior: separate init path, returns
+  # `mixture_point_normal_per_scale`-classed G_prior per outcome.
+  if (prior_variance_scope == "per_scale_normal") {
+    G_prior_per_outcome <- vector("list", M)
+    pi_weights          <- vector("list", M)
+    V_grid              <- vector("list", M)
+    for (m in seq_len(M)) {
+      Y_m    <- data$D[[m]]
+      groups_m <- data$scale_index[[m]]
+      init <- init_point_normal_prior_per_scale(
+        Y_m = Y_m, X = X, groups = groups_m,
+        null_prior_init = null_prior_init,
+        prior_variance_grid = prior_variance_grid)
+      G_prior_per_outcome[[m]] <- init$G_prior
+      sd_per_scale <- vapply(init$G_prior,
+                             function(g) g$fitted_g$sd[2L],
+                             numeric(1L))
+      V_grid[[m]] <- sd_per_scale^2
+      pi_weights[[m]] <- matrix(c(null_prior_init, 1 - null_prior_init),
+                                nrow = length(groups_m), ncol = 2L,
+                                byrow = TRUE)
+    }
+    out <- list(G_prior              = G_prior_per_outcome,
+                V_grid               = V_grid,
+                pi                   = pi_weights,
+                prior_variance_scope = prior_variance_scope)
+    class(out) <- "mf_prior_scale_mixture"
+    return(out)
+  }
 
   prior_class <- if (prior_variance_scope == "per_scale") {
     "mixture_normal_per_scale"
@@ -211,7 +304,7 @@ mf_prior_scale_mixture <- function(data,
           idx      = idx
         )
       })
-      attr(G_prior_per_outcome[[m]], "class") <- prior_class
+      class(G_prior_per_outcome[[m]]) <- c(prior_class, "mixsqp_mixture_prior")
       pi_weights[[m]] <- matrix(pi_kvec, nrow = length(groups_m),
                                 ncol = K + 1, byrow = TRUE)
     } else {
