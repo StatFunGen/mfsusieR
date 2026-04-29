@@ -200,3 +200,86 @@ mf_em_m_step_per_scale <- function(L, zeta, idx_size,
   if (out[1] > 1 - tol_null_prior) out <- mf_em_pi_null(K)
   out
 }
+
+
+# ---- Point-normal MLE ---------------------------------------------------
+
+#' Point-normal MLE: `pi_0 * delta_0 + (1 - pi_0) * N(0, sigma^2)`
+#'
+#' Direct numerical optim of the (optionally weighted) marginal
+#' log-likelihood
+#'   `sum_i w_i * log( pi_0 * dnorm(x_i; 0, s_i)`
+#'                  `+ (1-pi_0) * dnorm(x_i; 0, sqrt(s_i^2 + sigma^2)) )`
+#' over `(qlogis(pi_0), log(sigma))` via `optim(L-BFGS-B)`.
+#' Cached invariants (`s^2`, `x^2`, spike log-density) computed
+#' once at function entry; warm-start friendly via `pi_0_init`,
+#' `sigma_init`. Consumed by the
+#' `mixture_point_normal_per_scale` M-step.
+#'
+#' @param x numeric vector of observations.
+#' @param s numeric vector of per-observation standard errors.
+#'   Must be finite and positive.
+#' @param w optional numeric vector of observation weights.
+#'   Default `NULL` (unweighted).
+#' @param pi_0_init numeric in `[0, 1]`, initial null mass.
+#' @param sigma_init positive numeric, initial slab sd.
+#' @param control list forwarded to `optim` (L-BFGS-B). Default
+#'   `list(maxit = 100, factr = 1e6)` (~1e-10 relative convergence).
+#' @return list: `pi_0`, `sigma`, `converged`, `n`, `frozen`,
+#'   `loglik`.
+#' @importFrom stats optim qlogis plogis
+#' @keywords internal
+#' @noRd
+mf_em_point_normal <- function(x, s, w = NULL,
+                               pi_0_init,
+                               sigma_init,
+                               control = list(maxit = 100, factr = 1e6)) {
+  n <- length(x)
+  if (n == 0L) stop("`x` is empty.")
+  if (any(!is.finite(x))) stop("`x` contains non-finite values.")
+  if (any(!is.finite(s)) || any(s <= 0))
+    stop("`s` must be finite and positive.")
+  if (is.null(w)) w <- rep(1, n)
+  else if (length(w) != n) stop("`length(w)` must equal `length(x)`.")
+
+  # Rank-deficient (n <= 2): freeze at init values.
+  if (n <= 2L) {
+    return(list(pi_0 = pi_0_init, sigma = sigma_init,
+                converged = FALSE, n = n, frozen = TRUE,
+                loglik = NA_real_))
+  }
+
+  # Cached invariants.
+  s2 <- s^2
+  x2 <- x^2
+  la <- -0.5 * log(2 * pi) - log(s) - 0.5 * x2 / s2
+
+  nll <- function(par) {
+    pi_0   <- plogis(par[1])
+    sigma2 <- exp(2 * par[2])
+    var_b  <- s2 + sigma2
+    lb     <- -0.5 * log(2 * pi) - 0.5 * log(var_b) - 0.5 * x2 / var_b
+    M      <- pmax(la, lb)
+    -sum(w * (M + log(pi_0 * exp(la - M) + (1 - pi_0) * exp(lb - M))))
+  }
+
+  par_init <- c(qlogis(pi_0_init), log(sigma_init))
+  fit <- tryCatch(
+    optim(par_init, nll, method = "L-BFGS-B",
+          lower = c(-30, -20), upper = c(30, 20),
+          control = control),
+    error = function(e) NULL)
+
+  if (is.null(fit) || fit$convergence != 0) {
+    warning_message(
+        "mf_em_point_normal: optim did not converge; keeping init values.")
+    return(list(pi_0 = pi_0_init, sigma = sigma_init,
+                converged = FALSE, n = n, frozen = TRUE,
+                loglik = NA_real_))
+  }
+
+  list(pi_0 = plogis(fit$par[1]),
+       sigma = exp(fit$par[2]),
+       converged = TRUE, n = n, frozen = FALSE,
+       loglik = -fit$value)
+}
