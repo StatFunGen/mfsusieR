@@ -551,13 +551,16 @@ refresh_iter_cache.mf_individual <- function(data, model) {
 #'
 #' - `mixture_normal` / `mixture_normal_per_scale`: mixsqp via
 #'   `.opv_mixsqp()`. Builds `mf_em_likelihood_per_scale()` then
-#'   `mf_em_m_step_per_scale()`; updates `fitted_g$pi`.
+#'   `mf_em_m_step_per_scale()` on the alpha-weighted
+#'   `(|keep_idx| x |idx_s|)` rectangle of (Bhat, Shat); updates
+#'   `fitted_g$pi`.
 #' - `mixture_point_normal_per_scale`: ebnm via
 #'   `.opv_ebnm_point_normal()`. Calls `ebnm::ebnm_point_normal()`
-#'   on the lead-variable slice; updates `fitted_g`.
+#'   on the unweighted `(|keep_idx| x |idx_s|)` rectangle of
+#'   (Bhat, Shat); updates `fitted_g`.
 #' - `mixture_point_laplace_per_scale`: ebnm via
 #'   `.opv_ebnm_point_laplace()`. Calls `ebnm::ebnm_point_laplace()`
-#'   on the lead-variable slice; updates `fitted_g`.
+#'   on the same rectangle; updates `fitted_g`.
 #'
 #' Each helper mutates `model$G_prior[[m]][[s]]$fitted_g` and
 #' `model$pi_V[[m]][s, ]`. The susieR-style scalar `V[l]` is held
@@ -691,20 +694,16 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
 #' ebnm M-step on the per-(outcome, scale) point-* prior
 #'
 #' Per (outcome, scale), calls `ebnm_fn(x, s, g_init, fix_g)` on
-#' the lead-variable observation slice and writes the returned
-#' `fitted_g` into `model$G_prior[[m]][[s]]$fitted_g` and
-#' `model$pi_V[[m]][s, ]`. Mirrors `.opv_mixsqp`'s shape: same
-#' arguments, same per-(m, s) loop, just a different per-call
-#' solver. Always passes `g_init = G_m[[s]]$fitted_g`
-#' (warm-start), the analog of mixsqp's `pi_warm_start = pi_prev`;
-#' `fix_g` honors `params$estimate_prior_variance`.
-#'
-#' Lead per (m, s): `lead = keep_idx[which.max(zeta_keep)]`. The
-#' lead-variable slice replaces the alpha-thinned full Bhat /
-#' Shat rectangle that mixsqp consumes; a parametric
-#' spike-and-slab MLE on pooled data dilutes the slab signal
-#' across the noise variables, while a per-lead-variable fit
-#' gives ebnm a single signal-tracking observation set per scale.
+#' the alpha-thinned `(|keep_idx| x |idx_s|)` rectangle of
+#' (Bhat, Shat) and writes the returned `fitted_g` into
+#' `model$G_prior[[m]][[s]]$fitted_g` and
+#' `model$pi_V[[m]][s, ]`. Mirrors `.opv_mixsqp`'s data shape
+#' and per-(m, s) loop; the only differences are the solver
+#' (ebnm vs mixsqp) and the absence of per-row alpha weighting
+#' (ebnm cannot accept observation weights). Always passes
+#' `g_init = G_m[[s]]$fitted_g` (warm-start), the analog of
+#' mixsqp's `pi_warm_start = pi_prev`; `fix_g` honors
+#' `params$estimate_prior_variance`.
 #'
 #' @keywords internal
 #' @noRd
