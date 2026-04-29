@@ -77,58 +77,68 @@ anything that touches numerical paths.
 
 ## 5. M-step dispatch — `.opv_<class>` helpers, mirroring `.opv_mixsqp`
 
-- [ ] 5.1 New helper in `R/individual_data_methods.R`:
+- [x] 5.1 New helper in `R/individual_data_methods.R`:
   `.opv_ebnm_point(data, params, model, ser_stats, keep_idx,
-  zeta_keep, ebnm_fn)` per the design.md sketch. Signature
-  matches `.opv_mixsqp`'s `(data, params, model, ser_stats,
-  keep_idx, zeta_keep)` plus an `ebnm_fn` argument.
-- [ ] 5.2 Body: `lead <- keep_idx[which.max(zeta_keep)]`. For
-  each `m`, for each `s` in `seq_along(G_m)`, call
-  `ebnm_fn(x = bhat_m[lead, idx], s = shat_m[lead, idx],
+  zeta_keep, ebnm_fn)`. Signature matches `.opv_mixsqp`'s
+  `(data, params, model, ser_stats, keep_idx, zeta_keep)` plus
+  an `ebnm_fn` argument.
+- [x] 5.2 Body: for each `m`, slice
+  `bhat_m <- ser_stats$betahat[[m]][keep_idx, , drop = FALSE]`
+  and `shat_m <- sqrt(ser_stats$shat2[[m]][keep_idx, , drop = FALSE])`.
+  For each `s` in `seq_along(G_m)`, call
+  `ebnm_fn(x = as.vector(bhat_m[, idx, drop = FALSE]),
+  s = as.vector(shat_m[, idx, drop = FALSE]),
   g_init = G_m[[s]]$fitted_g,
   fix_g = !isTRUE(params$estimate_prior_variance))`. Write
   `fit$fitted_g` into `G_m[[s]]$fitted_g` and
-  `fit$fitted_g$pi` into `model$pi_V[[m]][s, ]`.
-- [ ] 5.3 Add two thin shims `.opv_ebnm_point_normal` and
-  `.opv_ebnm_point_laplace` that dispatch to `.opv_ebnm_point`
+  `fit$fitted_g$pi` into `model$pi_V[[m]][s, ]`. Multi-variable
+  by design (mirrors mixsqp's data shape minus the per-row
+  alpha weighting); avoids the lead-only `pi_0` collapse.
+- [x] 5.3 Add two thin shims `.opv_ebnm_point_normal` and
+  `.opv_ebnm_point_laplace` that delegate to `.opv_ebnm_point`
   with the matching `ebnm_fn`.
-- [ ] 5.4 Extend the dispatch arm in
+- [x] 5.4 Extend the dispatch arm in
   `optimize_prior_variance.mf_individual()` with two new
-  `else if` branches:
-  ```r
-  } else if (inherits(model$G_prior[[1L]],
-                      "mixture_point_normal_per_scale")) {
-    model <- .opv_ebnm_point_normal(data, params, model,
-                                     ser_stats, keep_idx, zeta_keep)
-  } else if (inherits(model$G_prior[[1L]],
-                      "mixture_point_laplace_per_scale")) {
-    model <- .opv_ebnm_point_laplace(data, params, model,
-                                      ser_stats, keep_idx, zeta_keep)
-  }
-  ```
-- [ ] 5.5 The new helpers do not consume `params$mixture_null_weight`
-  (no-op on the parametric form). They reuse the alpha-thinned
-  `(keep_idx, zeta_keep)` already computed by the caller; they
-  do not pool every variable's data into the M-step. Roxygen
-  documents that `mixsqp_alpha_eps` only affects which variable
-  becomes the lead via `which.max(zeta_keep)`, not the M-step
-  data set itself.
+  `else if` branches keyed on
+  `inherits(G_prior[[1L]], "mixture_point_normal_per_scale")`
+  and `inherits(G_prior[[1L]], "mixture_point_laplace_per_scale")`.
+  Each calls the matching `.opv_ebnm_point_*` helper.
+- [x] 5.5 The new helpers do not consume
+  `params$mixture_null_weight` (no-op on the parametric form).
+  They share the alpha-thinned `(keep_idx, zeta_keep)` already
+  computed by the caller using `params$alpha_thin_eps`. No
+  deferred-M-step gate is needed; the multi-variable design
+  naturally handles the iter-1 uniform-alpha case (ebnm sees
+  all p variables → conservative `pi_0`).
+- [x] 5.6 Rename `mixsqp_alpha_eps` to `alpha_thin_eps` in
+  `R/mfsusie.R` (formal + roxygen + body forwarding) and
+  `R/individual_data_methods.R` (read site). The rename
+  reflects that the threshold now drives both M-step solvers.
 
-## 6. Cache management — one-line guard
+## 6. Cache management — `iter_cache` with class-gated slots
 
-- [ ] 6.1 Update `refresh_em_cache.mf_individual()` so that the
-  mixsqp-only `sdmat` and `log_sdmat` builds run only when the
-  G_prior class inherits from `"mixsqp_mixture_prior"`. The
-  always-needed `shat2` and `sigma2_per_pos` builds run for
-  every prior class so `mf_per_outcome_bhat_shat` does not fall
-  through to its per-call recomputation
-  (`R/individual_data_methods.R:125-128`).
-- [ ] 6.2 Unit test: with `prior_variance_scope ∈
-  {"per_scale_normal", "per_scale_laplace"}`,
-  `model$em_cache$sdmat` and `model$em_cache$log_sdmat` MUST be
-  unset after `refresh_em_cache.mf_individual()` runs;
-  `model$em_cache$shat2` and `model$em_cache$sigma2_per_pos`
-  MUST be set (one entry per outcome `m`).
+- [x] 6.1 Rename `refresh_em_cache.mf_individual()` to
+  `refresh_iter_cache.mf_individual()` and the model slot
+  `model$em_cache` to `model$iter_cache`. The previous name was
+  misleading because the cache is consumed by SER calls (loglik
+  + posterior moments) too, not just the M-step.
+- [x] 6.2 Drop the `sigma2_per_pos` slot. It was populated by
+  the cache build but never read by any consumer; every reader
+  calls `mf_sigma2_per_position()` directly.
+- [x] 6.3 Add a one-line gate
+  `is_mixsqp_prior <- inherits(model$G_prior[[1L]],
+  c("mixture_normal", "mixture_normal_per_scale"))` early in the
+  function. Always build `iter_cache$shat2`. Build
+  `iter_cache$sdmat` and `iter_cache$log_sdmat` only when
+  `is_mixsqp_prior` (the K-axis precompute is mixsqp-only;
+  ebnm has no K-axis aggregate).
+- [x] 6.4 Unit test: with
+  `prior_variance_scope ∈ {"per_scale_normal",
+  "per_scale_laplace"}`, `model$iter_cache$sdmat` and
+  `model$iter_cache$log_sdmat` MUST be NULL after
+  `refresh_iter_cache.mf_individual()` runs;
+  `model$iter_cache$shat2` MUST be set (one
+  `p × T_basis[m]` matrix per outcome `m`).
 
 ## 7. Degenerate-case fidelity tests (machine precision)
 

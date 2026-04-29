@@ -36,16 +36,16 @@ with two parameters per (outcome, scale) cell estimated by empirical Bayes via `
 - **WHEN** `mfsusie()` is called with `prior_variance_scope = "per_scale_laplace"`
 - **THEN** `class(fit$G_prior[[m]])` MUST equal `"mixture_point_laplace_per_scale"` for every outcome `m`, and each `fit$G_prior[[m]][[s]]$fitted_g` MUST be a `laplacemix` record (`pi`, `scale`, `mean` of length 2 with the spike component at 0).
 
-### Requirement: M-step on the ebnm-backed prior classes SHALL call ebnm on the lead-variable slice
+### Requirement: M-step on the ebnm-backed prior classes SHALL call ebnm on the alpha-thinned multi-variable rectangle
 
-The M-step on prior class `"mixture_point_normal_per_scale"` SHALL call `ebnm::ebnm_point_normal()`, and the M-step on `"mixture_point_laplace_per_scale"` SHALL call `ebnm::ebnm_point_laplace()`, per (outcome, scale) on the lead-variable observation slice with `g_init` set to the previous IBSS iter's `fitted_g`.
+The M-step on prior class `"mixture_point_normal_per_scale"` SHALL call `ebnm::ebnm_point_normal()`, and the M-step on `"mixture_point_laplace_per_scale"` SHALL call `ebnm::ebnm_point_laplace()`, per (outcome, scale) on the flattened alpha-thinned rectangle of (Bhat, Shat) with `g_init` set to the previous IBSS iter's `fitted_g`.
 
-The data passed to ebnm is `(x = bhat_m[lead, idx_s], s = shat_m[lead, idx_s])` where `lead = keep_idx[which.max(zeta_keep)]` and `(keep_idx, zeta_keep)` are the alpha-thinned variable indices and weights computed in `optimize_prior_variance.mf_individual()` (mirroring the existing mixsqp arm). The returned `fit$fitted_g` SHALL be written into `G_m[[s]]$fitted_g` without modification, and `fit$fitted_g$pi` SHALL be written into `model$pi_V[[m]][s, ]`. The M-step on these paths SHALL NOT consume `mixture_null_weight` (the parametric form is its own regularizer; the phantom-null pseudo-row machinery does not apply).
+The data passed to ebnm is `(x = as.vector(bhat_m[keep_idx, idx_s]), s = as.vector(shat_m[keep_idx, idx_s]))` where `keep_idx` is the alpha-thinned variable indices computed in `optimize_prior_variance.mf_individual()` using `params$alpha_thin_eps` (the same threshold the mixsqp arm uses). The returned `fit$fitted_g` SHALL be written into `G_m[[s]]$fitted_g` without modification, and `fit$fitted_g$pi` SHALL be written into `model$pi_V[[m]][s, ]`. The M-step on these paths SHALL NOT consume `mixture_null_weight` (the parametric form is its own regularizer; the phantom-null pseudo-row machinery does not apply).
 
-#### Scenario: ebnm receives the lead-variable slice with warm-start g_init
+#### Scenario: ebnm receives the multi-variable rectangle with warm-start g_init
 
 - **WHEN** the M-step runs at (l, m, s) with prior class `"mixture_point_normal_per_scale"` or `"mixture_point_laplace_per_scale"`, and the previous IBSS iter wrote a `fitted_g` into `G_m[[s]]`
-- **THEN** the wrapper MUST call `ebnm_fn(x = bhat_m[lead, idx_s], s = shat_m[lead, idx_s], g_init = G_m[[s]]$fitted_g, fix_g = !isTRUE(params$estimate_prior_variance))` where `lead = keep_idx[which.max(zeta_keep)]`, MUST overwrite `G_m[[s]]$fitted_g` with `fit$fitted_g`, and MUST overwrite `model$pi_V[[m]][s, ]` with `fit$fitted_g$pi`.
+- **THEN** the wrapper MUST call `ebnm_fn(x = as.vector(bhat_m[keep_idx, idx_s]), s = as.vector(shat_m[keep_idx, idx_s]), g_init = G_m[[s]]$fitted_g, fix_g = !isTRUE(params$estimate_prior_variance))`, MUST overwrite `G_m[[s]]$fitted_g` with `fit$fitted_g`, and MUST overwrite `model$pi_V[[m]][s, ]` with `fit$fitted_g$pi`.
 
 #### Scenario: M-step is short-circuited when `estimate_prior_variance = FALSE`
 
@@ -54,8 +54,8 @@ The data passed to ebnm is `(x = bhat_m[lead, idx_s], s = shat_m[lead, idx_s])` 
 
 #### Scenario: M-step is idempotent on identical inputs
 
-- **WHEN** the M-step on either ebnm-backed class is called twice in succession with identical `(bhat_m, shat_m, keep_idx, zeta_keep, fitted_g)` inputs
-- **THEN** the two outputs MUST be bit-identical at `tol = 1e-14` for the Normal path and `tol = 1e-12` for the Laplace path (ebnm's optim is deterministic on identical inputs).
+- **WHEN** the M-step on either ebnm-backed class is called twice in succession with identical `(bhat_m, shat_m, keep_idx, fitted_g)` inputs
+- **THEN** the two outputs MUST be bit-identical at `tol = 1e-12` (ebnm's optim is deterministic on identical inputs).
 
 ### Requirement: Init step SHALL pick the per-scale lead from marginal data
 
@@ -70,12 +70,12 @@ For each scale `s` with index set `idx_s`, the helper computes `bs <- compute_ma
 
 ### Requirement: Cache refresh SHALL skip the mixsqp-only blocks on the ebnm paths
 
-`refresh_em_cache.mf_individual()` SHALL skip the mixsqp-only `sdmat` and `log_sdmat` builds when `model$G_prior[[1L]]` does not inherit from `"mixsqp_mixture_prior"`, while still building `shat2` and `sigma2_per_pos` so `mf_per_outcome_bhat_shat()` does not fall through to its per-call recomputation.
+`refresh_iter_cache.mf_individual()` SHALL skip the mixsqp-only `sdmat` and `log_sdmat` builds when `model$G_prior[[1L]]` does not inherit from `"mixture_normal"` or `"mixture_normal_per_scale"`, while still building `shat2` so `mf_per_outcome_bhat_shat()` does not fall through to its per-call recomputation. The `iter_cache` slot replaces the previous `em_cache` slot (renamed to reflect that the cache is consumed by SER calls too, not just the M-step). The previous `sigma2_per_pos` slot was dead storage and is removed.
 
 #### Scenario: ebnm path skips sdmat / log_sdmat but keeps shat2
 
-- **WHEN** `refresh_em_cache.mf_individual()` runs with `model$G_prior` tagged as `"mixture_point_normal_per_scale"` or `"mixture_point_laplace_per_scale"`
-- **THEN** `model$em_cache$sdmat` and `model$em_cache$log_sdmat` MUST be unset, and `model$em_cache$shat2` and `model$em_cache$sigma2_per_pos` MUST be set (one entry per outcome `m`).
+- **WHEN** `refresh_iter_cache.mf_individual()` runs with `model$G_prior` tagged as `"mixture_point_normal_per_scale"` or `"mixture_point_laplace_per_scale"`
+- **THEN** `model$iter_cache$sdmat` and `model$iter_cache$log_sdmat` MUST be NULL, and `model$iter_cache$shat2` MUST be set (one `p × T_basis[m]` matrix per outcome `m`).
 
 ### Requirement: `per_scale_normal` SHALL bit-match `susie()` at the degenerate case
 
