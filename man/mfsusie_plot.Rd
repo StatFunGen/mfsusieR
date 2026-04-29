@@ -17,6 +17,7 @@ mfsusie_plot(
   lwd = 2,
   add_legend = TRUE,
   truth = NULL,
+  effect_variables = NULL,
   smooth_method = NULL,
   save = NULL,
   ...
@@ -59,13 +60,23 @@ secondary axis. Default \code{0.01}.}
 \item{add_legend}{logical, show CS legend on each panel.
 Default \code{TRUE}.}
 
-\item{truth}{optional ground-truth overlay. For \code{M = 1}: a
-length-\code{T_1} numeric vector (replicated across all CS panels)
-or a length-\code{K} list of length-\code{T_1} vectors (per-CS truth).
-For \code{M > 1}: a length-\code{M} list, each entry one of those two
-shapes (or \code{NULL} to skip an outcome). Truth values are
-overlaid as dark-grey dots and added to the legend. Default
-\code{NULL} (no overlay).}
+\item{truth}{optional ground-truth overlay for the \emph{effect-target}
+panels (positions along the function where the true effect is
+non-zero). For \code{M = 1}: a length-\code{T_1} numeric vector
+(replicated across all CS panels) or a length-\code{K} list of
+length-\code{T_1} vectors (per-CS truth). For \code{M > 1}: a length-\code{M}
+list, each entry one of those two shapes (or \code{NULL} to skip an
+outcome). Truth values are overlaid as dark-grey dots in each
+effect panel. Default \code{NULL} (no overlay).}
+
+\item{effect_variables}{optional indicator of the \emph{true-effect
+variables} (column indices of \code{X} that carry a non-zero true
+effect). When non-NULL, the PIP panel draws a red bold open
+circle around each indicated variable's PIP dot, mirroring
+susieR::susie_plot()'s \code{b} argument. Accepts: integer index
+vector (1-based), length-\code{p} logical (\code{TRUE} = true effect),
+or length-\code{p} numeric (non-zero = true effect). Default
+\code{NULL}.}
 
 \item{save}{optional file path. When non-NULL the plot is
 written to the file at the dimensions returned by

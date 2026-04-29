@@ -134,10 +134,13 @@ credibly_nonzero_mask <- function(band) {
     base
 }
 
-# Internal: PIP panel.
+# Internal: PIP panel. `effect_variables` (when non-NULL) circles the
+# true-effect variables in red bold over the PIP dots, mirroring
+# susieR::susie_plot()'s `b` arg.
 .draw_pip <- function(fit, pos = NULL, main = NULL,
                       xlab = "variable", ylab = "PIP",
-                      cex = 1.2, add_legend = TRUE) {
+                      cex = 1.2, add_legend = TRUE,
+                      effect_variables = NULL) {
   pip <- fit$pip
   if (is.null(pos)) pos <- seq_along(pip)
   if (is.null(main)) main <- .pip_title(fit)
@@ -148,12 +151,49 @@ credibly_nonzero_mask <- function(band) {
        xlab = xlab, ylab = ylab, ylim = c(0, 1), main = main,
        cex.main = 1.05, font.main = 2L, las = 1)
   abline(h = 0.95, lty = 3, col = "grey50")
+  truth_idx <- .resolve_effect_variables(effect_variables, length(pip))
+  if (length(truth_idx) > 0L) {
+    points(pos[truth_idx], pip[truth_idx],
+           pch = 1L, col = "red", cex = cex * 1.6, lwd = 2.5)
+  }
   cs <- fit$sets$cs %||% list()
   if (add_legend && length(cs) > 0L) {
     pal <- mf_cs_colors(length(cs))
     legend("topleft", legend = paste0("CS", seq_along(cs)),
            col = pal, pch = 19L, bty = "n", cex = 0.75)
   }
+  if (length(truth_idx) > 0L && add_legend) {
+    legend("topright", legend = "true effect",
+           col = "red", pch = 1L, pt.lwd = 2.5, pt.cex = 1.4,
+           bty = "n", cex = 0.75)
+  }
+}
+
+# Coerce an `effect_variables` user input to integer indices in 1..p.
+# Accepts: NULL (no circles), integer indices, length-p logical, or
+# length-p numeric where non-zero marks the variable (mirrors
+# susieR::susie_plot()'s `b` arg).
+.resolve_effect_variables <- function(x, p) {
+  if (is.null(x) || length(x) == 0L) return(integer(0))
+  if (is.logical(x)) {
+    if (length(x) != p) {
+      stop(sprintf(
+        "`effect_variables`: logical vector must have length p = %d; got %d.",
+        p, length(x)))
+    }
+    return(which(x))
+  }
+  if (length(x) == p && is.numeric(x) && any(x == 0)) {
+    # Length-p numeric: nonzero entries mark causal (susie_plot `b`).
+    return(which(x != 0))
+  }
+  # Integer / numeric vector of indices.
+  idx <- as.integer(x)
+  if (any(is.na(idx)) || any(idx < 1L) || any(idx > p)) {
+    stop(sprintf(
+      "`effect_variables`: index out of bounds (must be in 1..%d).", p))
+  }
+  unique(idx)
 }
 
 # =====================================================================
@@ -548,13 +588,22 @@ credibly_nonzero_mask <- function(band) {
 #' @param lwd numeric, curve line width. Default `1.5`.
 #' @param add_legend logical, show CS legend on each panel.
 #'   Default `TRUE`.
-#' @param truth optional ground-truth overlay. For `M = 1`: a
-#'   length-`T_1` numeric vector (replicated across all CS panels)
-#'   or a length-`K` list of length-`T_1` vectors (per-CS truth).
-#'   For `M > 1`: a length-`M` list, each entry one of those two
-#'   shapes (or `NULL` to skip an outcome). Truth values are
-#'   overlaid as dark-grey dots and added to the legend. Default
-#'   `NULL` (no overlay).
+#' @param truth optional ground-truth overlay for the *effect-target*
+#'   panels (positions along the function where the true effect is
+#'   non-zero). For `M = 1`: a length-`T_1` numeric vector
+#'   (replicated across all CS panels) or a length-`K` list of
+#'   length-`T_1` vectors (per-CS truth). For `M > 1`: a length-`M`
+#'   list, each entry one of those two shapes (or `NULL` to skip an
+#'   outcome). Truth values are overlaid as dark-grey dots in each
+#'   effect panel. Default `NULL` (no overlay).
+#' @param effect_variables optional indicator of the *true-effect
+#'   variables* (column indices of `X` that carry a non-zero true
+#'   effect). When non-NULL, the PIP panel draws a red bold open
+#'   circle around each indicated variable's PIP dot, mirroring
+#'   susieR::susie_plot()'s `b` argument. Accepts: integer index
+#'   vector (1-based), length-`p` logical (`TRUE` = true effect),
+#'   or length-`p` numeric (non-zero = true effect). Default
+#'   `NULL`.
 #' @param save optional file path. When non-NULL the plot is
 #'   written to the file at the dimensions returned by
 #'   `mfsusie_plot_dimensions()`. The graphics device is selected
@@ -573,6 +622,7 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
                          lwd = 2.0,
                          add_legend = TRUE,
                          truth = NULL,
+                         effect_variables = NULL,
                          smooth_method = NULL,
                          save = NULL, ...) {
   if (!inherits(fit, "mfsusie")) {
@@ -705,7 +755,8 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
     op <- par(mar = fit_mar(c(3.8, 4, 1.6, 4),
                             n_rows = 1L + n_effect_panels))
     on.exit(par(op), add = TRUE)
-    .draw_pip(fit, pos = pos, add_legend = add_legend)
+    .draw_pip(fit, pos = pos, add_legend = add_legend,
+              effect_variables = effect_variables)
     if (n_effect_panels == 1L) {
       draw_overlay_cell(1L)
     } else {
@@ -726,7 +777,8 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
     on.exit(layout(1L), add = TRUE)
     op <- par(mar = fit_mar(c(3.8, 4, 1.6, 4), n_rows = n_cells))
     on.exit(par(op), add = TRUE)
-    .draw_pip(fit, pos = pos, add_legend = add_legend)
+    .draw_pip(fit, pos = pos, add_legend = add_legend,
+              effect_variables = effect_variables)
     for (mi in seq_len(M)) {
       is_last_outcome <- (mi == M)
       draw_stack_cells(mi, main_outer = NULL,
@@ -743,7 +795,8 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
             mar = fit_mar(c(3.8, 4, 1.6, 4), n_rows = rows))
   on.exit(par(op), add = TRUE)
 
-  .draw_pip(fit, pos = pos, add_legend = add_legend)
+  .draw_pip(fit, pos = pos, add_legend = add_legend,
+              effect_variables = effect_variables)
   for (mi in seq_len(M)) draw_overlay_cell(mi)
   remaining <- rows * cols - n_panels
   if (remaining > 0L) {
