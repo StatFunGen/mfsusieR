@@ -71,7 +71,6 @@ multiomic_example$causal_snps
 ```{r fit}
 fit <- mfsusie(multiomic_example$X, Y_list, pos = pos_list,
                L = 15, L_greedy = 5,
-               prior_variance_scope = "per_outcome",
                verbose = TRUE)
 fit$niter; fit$converged
 length(fit$sets$cs)
@@ -173,12 +172,15 @@ sapply(B_hat, dim)
 
 ## Choosing `prior_variance_scope`
 
-- `"per_outcome"` (used above): one mixture-of-normals prior shared
-  across every wavelet scale of a outcome. Faster; appropriate when
-  the scales are exchangeable a priori.
-- `"per_scale"` (default): one mixture per (outcome, scale),
-  letting different scales adapt independently. More flexible at the
-  cost of a larger M-step.
+- `"per_outcome"` (default; used above): one mixture-of-normals
+  prior shared across every wavelet scale of an outcome.
+  Appropriate when scales are exchangeable a priori, and roughly
+  `S_m`-fold cheaper per IBSS iter (one mixsqp call per outcome
+  instead of one per (outcome, scale)).
+- `"per_scale"`: one mixture per (outcome, scale), letting
+  different scales adapt independently. More flexible at the cost
+  of an `S_m`-fold larger M-step; useful when shape varies
+  systematically with scale.
 
 Switch between them by changing one argument; the rest of the API and
 the fit object structure are identical.
