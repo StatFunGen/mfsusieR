@@ -135,8 +135,13 @@ init_scale_mixture_prior_default <- function(Y_m,
 #' `which.max(rowMeans(Bhat[, idx_s]^2))` and fits a 2-component
 #' point-* prior on the lead variable's per-scale slice via the
 #' matching `ebnm::ebnm_point_*()` call. The lead picker at init
-#' is alpha-independent because `alpha` is uniform `1/p` at IBSS
-#' iter 0 and `which.max` would tie-break to variable 1.
+#' is alpha-independent (alpha is uniform `1/p` at IBSS iter 0).
+#' This gives ebnm one signal-tracking observation set per scale
+#' rather than the moment estimate over the full
+#' `(p, idx_size)` rectangle. The IBSS-loop M-step refits ebnm
+#' on the alpha-thinned multi-variable rectangle (see
+#' `.opv_ebnm_point()`); the init helper's per-scale fit only
+#' seeds `fitted_g` for the warm-start.
 #'
 #' @param Y_m numeric matrix `n x T_basis[m]` of wavelet
 #'   coefficients for outcome m.
