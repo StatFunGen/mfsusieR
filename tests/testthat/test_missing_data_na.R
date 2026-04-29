@@ -62,7 +62,7 @@ test_that("na_idx = seq_len(n) and xtx_diag_list == xtx_diag when Y has no NA", 
   Y <- list(matrix(rnorm(n * 8), n, 8),
             matrix(rnorm(n * 4), n, 4))
   rt <- with_runtime("create_mf_individual (no NA)", {
-    mfsusieR:::create_mf_individual(X, Y, verbose = FALSE)
+    mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X, Y, verbose = FALSE)
   })
   data <- rt$result
   expect_lt(rt$elapsed, rt$budget_sec)
@@ -83,7 +83,7 @@ test_that("na_idx excludes NA rows and xtx_diag_list < xtx_diag for trait with N
   Y[[2]][na_rows, ] <- NA
 
   rt <- with_runtime("create_mf_individual (NA trait)", {
-    mfsusieR:::create_mf_individual(X, Y, verbose = FALSE)
+    mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X, Y, verbose = FALSE)
   })
   data <- rt$result
   expect_lt(rt$elapsed, rt$budget_sec)
@@ -108,7 +108,7 @@ test_that("each trait gets an independent na_idx when missing rows differ", {
   Y[[2]][6:12, ] <- NA
   # Y[[3]] complete
 
-  data <- mfsusieR:::create_mf_individual(X, Y, verbose = FALSE)
+  data <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X, Y, verbose = FALSE)
 
   expect_false(identical(data$na_idx[[1]], data$na_idx[[2]]))
   expect_identical(data$na_idx[[3]], seq_len(n))

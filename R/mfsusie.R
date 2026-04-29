@@ -1,6 +1,4 @@
-# Public entry point for mfsusieR.
-#
-# `mfsusie()` is a thin orchestrator over susieR's IBSS workhorse:
+# `mfsusie()` is multi-outcome functional regression using susieR's IBSS workhorse:
 #   1. construct the `mf_individual` data class (wavelet decomposition,
 #      X centering / scaling, prior init);
 #   2. assemble the `params` list expected by `susie_workhorse`;
@@ -10,8 +8,7 @@
 #   4. return the resulting `mfsusie` fit.
 #
 # The wavelet-specific work happens at step 1 (data prep) and step 4
-# (post-processors, separate API). The IBSS loop itself
-# is susieR's, end-to-end.
+# (post-processors, separate API). 
 
 #' Multi-functional, multi-outcome SuSiE
 #'
@@ -19,8 +16,8 @@
 #' (mfSuSiE) regression model. Each outcome `m` carries a per-sample
 #' functional response `Y_m` of length `T_m`; `T_m` may differ across
 #' outcomes, and either `T_m = 1` (univariate response) or `T_m > 1`
-#' (functional response on a regular grid) is supported. mfsusieR runs
-#' a per-outcome wavelet decomposition, then dispatches into susieR's
+#' (functional response on a regular grid) is supported; for the latter
+#' mfsusieR runs a per-outcome wavelet decomposition, then dispatches into susieR's
 #' IBSS workhorse with mfsusieR-specific S3 methods that handle the
 #' per-(scale, outcome) mixture-of-normals prior and residual
 #' variance.
@@ -439,4 +436,54 @@ mfsusie <- function(X, Y,
   )
 
   fit
+}
+
+# ---------------------------------------------------------------
+# Single-outcome wrapper. Canonicalises (Y, X, pos) into
+# (X, list(Y), list(pos)) and forwards to `mfsusie()`. No numerics.
+
+#' Single-outcome functional SuSiE
+#'
+#' Convenience wrapper around `mfsusie()` for the single-outcome
+#' case (`M = 1`). The response `Y` may be scalar (`T = 1`,
+#' susieR-degenerate path) or functional (`T > 1`, wavelet-basis
+#' path). Internally `fsusie(Y, X, pos, ...)` is equivalent to
+#' `mfsusie(X, list(Y), list(pos), ...)`.
+#'
+#' Multi-outcome-only arguments (e.g. `cross_outcome_prior`) are
+#' rejected with an explicit error to keep the wrapper honest about
+#' its `M = 1` scope.
+#'
+#' @param Y numeric matrix `n x T` of functional responses on a
+#'   regular position grid (or numeric vector for `T = 1`).
+#' @param X numeric matrix `n x p` of covariates.
+#' @param pos optional numeric vector of length `T` recording
+#'   sampling positions. Defaults to `seq_len(ncol(Y))`.
+#' @param ... forwarded to `mfsusie()`. See `?mfsusie` for the full
+#'   parameter set; arguments that only make sense in the
+#'   multi-outcome case (currently just `cross_outcome_prior`)
+#'   error out.
+#'
+#' @return a list of class `c("mfsusie", "susie")`. See `?mfsusie`
+#'   for the documented field set.
+#' @export
+fsusie <- function(Y, X, pos = NULL, ...) {
+  args <- list(...)
+
+  # Reject arguments that only make sense for M >= 2.
+  forbidden_mv <- c("cross_outcome_prior")
+  bad <- intersect(names(args), forbidden_mv)
+  if (length(bad) > 0L) {
+    stop(sprintf(
+      "`fsusie()` is the single-outcome wrapper. The following arguments are only meaningful for multi-outcome fits and SHALL not be passed here: %s. Use `mfsusie()` directly.",
+      paste(bad, collapse = ", ")))
+  }
+
+  if (!is.matrix(Y)) {
+    if (is.numeric(Y)) Y <- matrix(Y, ncol = 1)
+    else stop("`Y` must be a numeric matrix or numeric vector.")
+  }
+
+  pos_arg <- if (is.null(pos)) NULL else list(pos)
+  do.call(mfsusie, c(list(X = X, Y = list(Y), pos = pos_arg), args))
 }

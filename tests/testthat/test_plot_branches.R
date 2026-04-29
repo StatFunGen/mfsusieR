@@ -28,7 +28,7 @@ build_multi_outcome_fit <- function(seed = 5L) {
         matrix(rnorm(n * 32L, sd = 0.3), n)
   Y2 <- X %*% (matrix(beta, p, 1) %*% matrix(shape2, 1, 64L)) +
         matrix(rnorm(n * 64L, sd = 0.3), n)
-  mfsusie(X, list(Y1, Y2), L = 3, max_iter = 30, verbose = FALSE)
+  mfsusie(wavelet_qnorm = FALSE, X, list(Y1, Y2), L = 3, max_iter = 30, verbose = FALSE)
 }
 
 build_three_outcome_fit <- function(seed = 7L) {
@@ -43,7 +43,7 @@ build_three_outcome_fit <- function(seed = 7L) {
         matrix(rnorm(n * 32L, sd = 0.4), n)
   Y3 <- X %*% (matrix(beta, p, 1) %*% matrix(shape, 1, 32L)) +
         matrix(rnorm(n * 32L, sd = 0.5), n)
-  mfsusie(X, list(Y1, Y2, Y3), L = 3, max_iter = 30, verbose = FALSE)
+  mfsusie(wavelet_qnorm = FALSE, X, list(Y1, Y2, Y3), L = 3, max_iter = 30, verbose = FALSE)
 }
 
 # --- Multi-modality grid layout ---------------------------------
@@ -176,7 +176,7 @@ test_that(".resolve_facet picks 'stack' for K = 2 with disjoint affected masks",
   beta[2L, ] <- 1.6 * shape1
   beta[6L, ] <- -1.6 * shape2
   Y <- X %*% beta + matrix(rnorm(n * T_m, sd = 0.3), n)
-  fit <- fsusie(Y, X, pos = seq_len(T_m), L = 4, verbose = FALSE)
+  fit <- fsusie(wavelet_qnorm = FALSE, max_iter = 100, Y, X, pos = seq_len(T_m), L = 4, verbose = FALSE)
   fit_h <- mf_post_smooth(fit, method = "HMM")
 
   null_device()
@@ -197,7 +197,7 @@ test_that("mfsusie_plot draws the dot-plot panel on a scalar outcome", {
   Y_func   <- X %*% (matrix(beta, p, 1) %*%
                      matrix(exp(-((1:32 - 16)^2 / 8)), 1, 32L)) +
               matrix(rnorm(n * 32, sd = 0.3), n)
-  fit <- mfsusie(X, list(matrix(Y_scalar, n, 1L), Y_func),
+  fit <- mfsusie(wavelet_qnorm = FALSE, X, list(matrix(Y_scalar, n, 1L), Y_func),
                  L = 2, max_iter = 30, verbose = FALSE)
   expect_silent(mfsusie_plot(fit))
   expect_silent(mfsusie_plot(fit, m = 1L))   # scalar focus

@@ -17,7 +17,7 @@
     X %*% (matrix(beta, p, 1) %*% matrix(shape, 1, T_m)) +
       matrix(rnorm(n * T_m, sd = 0.3), n)
   })
-  mfsusie(X, Y, L = 3, max_iter = 50, tol = 1e-4,
+  mfsusie(wavelet_qnorm = FALSE, X, Y, L = 3, max_iter = 50, tol = 1e-4,
           convergence_method = method, verbose = FALSE)
 }
 
@@ -75,7 +75,7 @@ test_that("convergence_method = 'pip' respects pip_stall_window", {
       matrix(rnorm(n * T_m, sd = 0.3), n)
   })
   fit <- suppressWarnings(
-    mfsusie(X, Y, L = 3, max_iter = 50, tol = 1e-30,
+    mfsusie(wavelet_qnorm = FALSE, X, Y, L = 3, max_iter = 50, tol = 1e-30,
             convergence_method = "pip", pip_stall_window = 2L,
             verbose = FALSE)
   )

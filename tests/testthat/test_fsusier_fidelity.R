@@ -18,7 +18,7 @@ test_that("mixture_log_bf_per_scale summed over scales matches fsusieR::log_BF a
   skip_if_no_fsusier()
   set.seed(mfsusier_test_seed())
   n <- 50; J <- 20
-  data <- mfsusieR:::create_mf_individual(
+  data <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, 
     X = matrix(rnorm(n * J), n),
     Y = list(matrix(rnorm(n * 64), n)),
     verbose = FALSE
@@ -70,7 +70,7 @@ test_that("mixture_posterior_per_scale matches fsusieR::post_mat_mean / post_mat
   skip_if_no_fsusier()
   set.seed(mfsusier_test_seed())
   n <- 50; J <- 20
-  data <- mfsusieR:::create_mf_individual(
+  data <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, 
     X = matrix(rnorm(n * J), n),
     Y = list(matrix(rnorm(n * 64), n)),
     verbose = FALSE
