@@ -37,7 +37,7 @@ mfsusie(
   wavelet_qnorm = TRUE,
   control_mixsqp = NULL,
   mixture_null_weight = 0.05,
-  mixsqp_alpha_eps = 1e-06,
+  mixsqp_alpha_eps = 5e-05,
   model_init = NULL,
   small_sample_correction = FALSE,
   attach_smoothing_inputs = TRUE
@@ -75,13 +75,10 @@ instead of M*S_m); switch to \code{"per_scale"} only when you
 need scale-specific mixture weights for power on shape-
 varying signals.}
 
-\item{null_prior_init}{numeric in \verb{[0, 1]}. Initial mass on the
-null component of the scale-mixture prior on \code{b_l}. Used
-directly as \code{pi[null]} at IBSS iter 1; the EM M-step
-overwrites it from the data within a few iterations, so the
-final fit is essentially insensitive to this value. Default
-\code{0} — no prior null bias at start, signalling "the data
-should decide."}
+\item{null_prior_init}{numeric in \verb{[0, 1]}, initial \code{pi[null]}
+for the scale-mixture prior on \code{b_l} at IBSS iter 1. The
+EM M-step overwrites it within a few iterations. Default
+\code{0}.}
 
 \item{cross_outcome_prior}{optional object that controls how the
 per-outcome log-Bayes factors are combined into the joint
@@ -142,27 +139,14 @@ collapsing \code{mfsusie()} to \code{susieR::susie()} for sanity
 checks.}
 
 \item{convergence_method}{one of \code{"pip"} (default) or
-\code{"elbo"}. Selects the IBSS convergence criterion.
-\code{"pip"} stops when \code{max(abs(prev_alpha - alpha))} falls
-below \code{tol} (PIP-difference convergence) with stall
-detection -- the default because alpha is robust to the
-small per-iteration ELBO oscillations that arise from
-mixsqp's approximate M-step (Generalized EM residual:
-\code{ELBO(t+1) >= ELBO(t) - O(eps_mixsqp * L * M * S_m)},
-Neal & Hinton 1998). \code{"elbo"} stops when the change in
-ELBO falls below \code{tol}; the per-iteration ELBO is a
-coherent variational free energy thanks to the
-\code{get_objective.mfsusie} post-iteration KL refresh
-(\code{refresh_lbf_kl.mf_individual}) which evaluates per-
-effect \code{KL[l]} against the iter-final pi_V rather than the
-pi_V state at the moment effect l was updated.}
+\code{"elbo"}. \code{"pip"} stops when
+\code{max(abs(prev_alpha - alpha)) < tol}, with stall detection
+via \code{pip_stall_window}. \code{"elbo"} stops when the per-iter
+ELBO change is below \code{tol}.}
 
-\item{pip_stall_window}{integer. Number of consecutive
-iterations without PIP-difference improvement after which
-the PIP-based convergence path declares convergence even
-when \code{tol} has not been reached. Default 5. Only consulted
-when \code{convergence_method = "pip"} (or when ELBO produces
-non-finite values and the PIP fallback fires).}
+\item{pip_stall_window}{integer, number of consecutive
+iterations without PIP improvement after which \code{"pip"}
+convergence declares done. Default \code{5}.}
 
 \item{estimate_residual_variance}{logical. When \code{TRUE}
 (default), update \code{sigma2} per IBSS iteration via
@@ -170,8 +154,7 @@ non-finite values and the PIP fallback fires).}
 at the initial value across iterations; useful for
 sensitivity analysis.}
 
-\item{verbose}{logical. Default \code{TRUE}; set to \code{FALSE} for
-silent runs.}
+\item{verbose}{logical, default \code{TRUE}.}
 
 \item{track_fit}{logical, retain a per-iteration tracking list on
 the fit. Default \code{FALSE}.}
@@ -208,20 +191,17 @@ assays.}
 \item{control_mixsqp}{optional named list of \code{mixsqp} control
 arguments forwarded to the per-(outcome, scale) M-step.}
 
-\item{mixture_null_weight}{numeric in \verb{[0, 1]}. Ratio of null
-pseudo-weight to total data weight in the mixsqp M-step,
-regularizing the EB scale-mixture prior toward the null
-component. \code{0} is unregularized MLE; \code{0.05} (default) is
-light shrinkage toward null. Internally scaled by the number
-of outcomes \code{M} so the null:data balance is invariant to
-\code{M}; single-outcome fits are unchanged.}
+\item{mixture_null_weight}{numeric in \verb{[0, 1]}, ratio of
+null-pseudo-weight to data weight in the mixsqp M-step.
+Regularizes the EB mixture prior toward null. \code{0} is
+unregularized MLE. Internally scaled by \code{M} so the
+null:data balance is invariant to outcome count; single-
+outcome fits are unchanged. Default \code{0.05}.}
 
 \item{mixsqp_alpha_eps}{numeric, threshold below which a
 variable's per-effect posterior \code{alpha[l, j]} is dropped
-from the mixsqp M-step input. The truncation error on the
-M-step gradient is bounded by \verb{sum_\{j outside\} alpha_j * max_k(L_jk)}, well under floating-point precision for
-typical concentrated SuSiE posteriors. Set to \code{0} to use
-every variable regardless of \code{alpha[l, j]}. Default \code{1e-6}.}
+from the mixsqp M-step input. Set to \code{0} to use every
+variable. Default \code{5e-5}.}
 
 \item{model_init}{optional \code{mfsusie} fit object from a prior
 call. When supplied, the IBSS loop is seeded from the

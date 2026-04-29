@@ -48,13 +48,10 @@
 #'   instead of M*S_m); switch to `"per_scale"` only when you
 #'   need scale-specific mixture weights for power on shape-
 #'   varying signals.
-#' @param null_prior_init numeric in `[0, 1]`. Initial mass on the
-#'   null component of the scale-mixture prior on `b_l`. Used
-#'   directly as `pi[null]` at IBSS iter 1; the EM M-step
-#'   overwrites it from the data within a few iterations, so the
-#'   final fit is essentially insensitive to this value. Default
-#'   `0` — no prior null bias at start, signalling "the data
-#'   should decide."
+#' @param null_prior_init numeric in `[0, 1]`, initial `pi[null]`
+#'   for the scale-mixture prior on `b_l` at IBSS iter 1. The
+#'   EM M-step overwrites it within a few iterations. Default
+#'   `0`.
 #' @param cross_outcome_prior optional object that controls how the
 #'   per-outcome log-Bayes factors are combined into the joint
 #'   log-Bayes factor used by the SER step. Each IBSS effect first
@@ -101,33 +98,19 @@
 #'   collapsing `mfsusie()` to `susieR::susie()` for sanity
 #'   checks.
 #' @param convergence_method one of `"pip"` (default) or
-#'   `"elbo"`. Selects the IBSS convergence criterion.
-#'   `"pip"` stops when `max(abs(prev_alpha - alpha))` falls
-#'   below `tol` (PIP-difference convergence) with stall
-#'   detection -- the default because alpha is robust to the
-#'   small per-iteration ELBO oscillations that arise from
-#'   mixsqp's approximate M-step (Generalized EM residual:
-#'   `ELBO(t+1) >= ELBO(t) - O(eps_mixsqp * L * M * S_m)`,
-#'   Neal & Hinton 1998). `"elbo"` stops when the change in
-#'   ELBO falls below `tol`; the per-iteration ELBO is a
-#'   coherent variational free energy thanks to the
-#'   `get_objective.mfsusie` post-iteration KL refresh
-#'   (`refresh_lbf_kl.mf_individual`) which evaluates per-
-#'   effect `KL[l]` against the iter-final pi_V rather than the
-#'   pi_V state at the moment effect l was updated.
-#' @param pip_stall_window integer. Number of consecutive
-#'   iterations without PIP-difference improvement after which
-#'   the PIP-based convergence path declares convergence even
-#'   when `tol` has not been reached. Default 5. Only consulted
-#'   when `convergence_method = "pip"` (or when ELBO produces
-#'   non-finite values and the PIP fallback fires).
+#'   `"elbo"`. `"pip"` stops when
+#'   `max(abs(prev_alpha - alpha)) < tol`, with stall detection
+#'   via `pip_stall_window`. `"elbo"` stops when the per-iter
+#'   ELBO change is below `tol`.
+#' @param pip_stall_window integer, number of consecutive
+#'   iterations without PIP improvement after which `"pip"`
+#'   convergence declares done. Default `5`.
 #' @param estimate_residual_variance logical. When `TRUE`
 #'   (default), update `sigma2` per IBSS iteration via
 #'   `update_variance_components`. When `FALSE`, hold `sigma2`
 #'   at the initial value across iterations; useful for
 #'   sensitivity analysis.
-#' @param verbose logical. Default `TRUE`; set to `FALSE` for
-#'   silent runs.
+#' @param verbose logical, default `TRUE`.
 #' @param track_fit logical, retain a per-iteration tracking list on
 #'   the fit. Default `FALSE`.
 #' @param max_padded_log2 integer, log2 cap on the post-remap grid
@@ -156,20 +139,16 @@
 #'   assays.
 #' @param control_mixsqp optional named list of `mixsqp` control
 #'   arguments forwarded to the per-(outcome, scale) M-step.
-#' @param mixture_null_weight numeric in `[0, 1]`. Ratio of null
-#'   pseudo-weight to total data weight in the mixsqp M-step,
-#'   regularizing the EB scale-mixture prior toward the null
-#'   component. `0` is unregularized MLE; `0.05` (default) is
-#'   light shrinkage toward null. Internally scaled by the number
-#'   of outcomes `M` so the null:data balance is invariant to
-#'   `M`; single-outcome fits are unchanged.
+#' @param mixture_null_weight numeric in `[0, 1]`, ratio of
+#'   null-pseudo-weight to data weight in the mixsqp M-step.
+#'   Regularizes the EB mixture prior toward null. `0` is
+#'   unregularized MLE. Internally scaled by `M` so the
+#'   null:data balance is invariant to outcome count; single-
+#'   outcome fits are unchanged. Default `0.05`.
 #' @param mixsqp_alpha_eps numeric, threshold below which a
 #'   variable's per-effect posterior `alpha[l, j]` is dropped
-#'   from the mixsqp M-step input. The truncation error on the
-#'   M-step gradient is bounded by `sum_{j outside} alpha_j *
-#'   max_k(L_jk)`, well under floating-point precision for
-#'   typical concentrated SuSiE posteriors. Set to `0` to use
-#'   every variable regardless of `alpha[l, j]`. Default `1e-6`.
+#'   from the mixsqp M-step input. Set to `0` to use every
+#'   variable. Default `5e-5`.
 #' @param small_sample_correction logical. When `TRUE`, replaces
 #'   the per-variable Wakefield Normal marginal Bayes factor in
 #'   the SER step with a Johnson 2005 scaled Student-t marginal
@@ -267,7 +246,7 @@ mfsusie <- function(X, Y,
                     wavelet_qnorm             = TRUE,
                     control_mixsqp            = NULL,
                     mixture_null_weight               = 0.05,
-                    mixsqp_alpha_eps          = 1e-6,
+                    mixsqp_alpha_eps          = 5e-5,
                     model_init                = NULL,
                     small_sample_correction   = FALSE,
                     attach_smoothing_inputs   = TRUE) {
