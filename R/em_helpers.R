@@ -206,10 +206,9 @@ mf_em_m_step_per_scale <- function(L, zeta, idx_size,
 
 #' Point-normal MLE: `pi_0 * delta_0 + (1 - pi_0) * N(0, sigma^2)`
 #'
-#' Direct numerical optim of the (optionally weighted) marginal
-#' log-likelihood
-#'   `sum_i w_i * log( pi_0 * dnorm(x_i; 0, s_i)`
-#'                  `+ (1-pi_0) * dnorm(x_i; 0, sqrt(s_i^2 + sigma^2)) )`
+#' Direct numerical optim of the marginal log-likelihood
+#'   `sum_i log( pi_0 * dnorm(x_i; 0, s_i)`
+#'             `+ (1-pi_0) * dnorm(x_i; 0, sqrt(s_i^2 + sigma^2)) )`
 #' over `(qlogis(pi_0), log(sigma))` via `optim(L-BFGS-B)`.
 #' Cached invariants (`s^2`, `x^2`, spike log-density) computed
 #' once at function entry; warm-start friendly via `pi_0_init`,
@@ -219,8 +218,6 @@ mf_em_m_step_per_scale <- function(L, zeta, idx_size,
 #' @param x numeric vector of observations.
 #' @param s numeric vector of per-observation standard errors.
 #'   Must be finite and positive.
-#' @param w optional numeric vector of observation weights.
-#'   Default `NULL` (unweighted).
 #' @param pi_0_init numeric in `[0, 1]`, initial null mass.
 #' @param sigma_init positive numeric, initial slab sd.
 #' @param control list forwarded to `optim` (L-BFGS-B). Default
@@ -230,7 +227,7 @@ mf_em_m_step_per_scale <- function(L, zeta, idx_size,
 #' @importFrom stats optim qlogis plogis
 #' @keywords internal
 #' @noRd
-mf_em_point_normal <- function(x, s, w = NULL,
+mf_em_point_normal <- function(x, s,
                                pi_0_init,
                                sigma_init,
                                control = list(maxit = 100, factr = 1e6)) {
@@ -239,8 +236,6 @@ mf_em_point_normal <- function(x, s, w = NULL,
   if (any(!is.finite(x))) stop("`x` contains non-finite values.")
   if (any(!is.finite(s)) || any(s <= 0))
     stop("`s` must be finite and positive.")
-  if (is.null(w)) w <- rep(1, n)
-  else if (length(w) != n) stop("`length(w)` must equal `length(x)`.")
 
   # Rank-deficient (n <= 2): freeze at init values.
   if (n <= 2L) {
@@ -260,7 +255,7 @@ mf_em_point_normal <- function(x, s, w = NULL,
     var_b  <- s2 + sigma2
     lb     <- -0.5 * log(2 * pi) - 0.5 * log(var_b) - 0.5 * x2 / var_b
     M      <- pmax(la, lb)
-    -sum(w * (M + log(pi_0 * exp(la - M) + (1 - pi_0) * exp(lb - M))))
+    -sum(M + log(pi_0 * exp(la - M) + (1 - pi_0) * exp(lb - M)))
   }
 
   # `qlogis(0)` and `qlogis(1)` are infinite; L-BFGS-B starts on

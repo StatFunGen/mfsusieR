@@ -636,24 +636,45 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
   model
 }
 
-# Point-normal branch: alpha-weighted MLE per (outcome, scale) via
-# `mf_em_point_normal`. No mixsqp, no `mixture_null_weight`, no
-# em_cache (the parametric MLE recomputes from scratch each call).
+# Point-normal branch: lead-variable MLE per (outcome, scale) via
+# `mf_em_point_normal`. The lead variable is `keep_idx[which.max(zeta_keep)]`
+# under the current effect's posterior `alpha[l, ]`.
+#
+# No mixsqp, no `mixture_null_weight`, no em_cache (the parametric
+# MLE recomputes from scratch each call).
 .opv_point_normal <- function(data, params, model, ser_stats,
                               keep_idx, zeta_keep) {
+  # Defer M-step when alpha is essentially uniform.
+  #
+  # At IBSS iter 1, `alpha[l, ]` is `1/p` uniform; `which.max` picks
+  # the first variable (a deterministic tie-break) and feeds a noise
+  # column to `mf_em_point_normal`. The MLE on noise drives sigma to
+  # the lower box of `optim` (warning: "did not converge"), the
+  # freeze fallback writes a near-degenerate prior, and the SER step
+  # under that prior returns uniform alpha again -- a fixed point at
+  # "no signal." Trace evidence in the sparse-fine-scale failure:
+  # iters 1-5 all stuck at alpha = 1/p, lead = 1 (noise). The
+  # moment-estimator init from `init_point_normal_prior_per_scale`
+  # (which uses the full marginal Bhat across all p variables) is
+  # already informative; defer until the SER concentrates alpha
+  # before letting the lead-variable MLE refine it.
+  p_full <- ncol(model$alpha)
+  alpha_concentration_threshold <- 2.0 / p_full
+  if (max(zeta_keep) < alpha_concentration_threshold) return(model)
+
+  lead <- keep_idx[which.max(zeta_keep)]
   for (m in seq_len(data$M)) {
     bhat_m <- ser_stats$betahat[[m]]
     shat_m <- sqrt(ser_stats$shat2[[m]])
     G_m    <- model$G_prior[[m]]
     for (s in seq_along(G_m)) {
       idx <- G_m[[s]]$idx
-      x   <- as.vector(bhat_m[keep_idx, idx, drop = FALSE])
-      sv  <- as.vector(shat_m[keep_idx, idx, drop = FALSE])
-      w   <- rep(zeta_keep, times = length(idx))
+      x   <- as.vector(bhat_m[lead, idx, drop = FALSE])
+      sv  <- as.vector(shat_m[lead, idx, drop = FALSE])
       pi_prev    <- G_m[[s]]$fitted_g$pi
       sigma_prev <- G_m[[s]]$fitted_g$sd[2L]
       fit <- mf_em_point_normal(
-        x = x, s = sv, w = w,
+        x = x, s = sv,
         pi_0_init  = pi_prev[1L],
         sigma_init = max(sigma_prev, 1e-8))
       new_pi <- c(fit$pi_0, 1 - fit$pi_0)
