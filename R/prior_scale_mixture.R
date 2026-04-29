@@ -83,13 +83,9 @@ init_scale_mixture_prior_default <- function(Y_m,
   }
   bs <- compute_marginal_bhat_shat(X, Y_m)
 
-  if (length(lowc_idx) > 0L) {
-    pool_Bhat <- bs$Bhat[, -lowc_idx, drop = FALSE]
-    pool_Shat <- bs$Shat[, -lowc_idx, drop = FALSE]
-  } else {
-    pool_Bhat <- bs$Bhat
-    pool_Shat <- bs$Shat
-  }
+  keep_cols <- if (length(lowc_idx) > 0L) -lowc_idx else TRUE
+  pool_Bhat <- bs$Bhat[, keep_cols, drop = FALSE]
+  pool_Shat <- bs$Shat[, keep_cols, drop = FALSE]
 
   sample_size <- if (prior_class == "mixture_normal_per_scale") 50000 else 5000
   pool_dim    <- prod(dim(pool_Bhat))
@@ -259,6 +255,8 @@ mf_prior_scale_mixture <- function(data,
   pi_weights           <- vector("list", M)
 
   use_user_grid <- !is.null(prior_variance_grid)
+  fill_pi_weights <- function(pi_kvec, n_groups)
+    matrix(pi_kvec, nrow = n_groups, ncol = length(pi_kvec), byrow = TRUE)
 
   for (m in seq_len(M)) {
     # Column-index groups covered by each G_prior entry. The IBSS
@@ -286,27 +284,25 @@ mf_prior_scale_mixture <- function(data,
         # laplacemix for `per_scale_laplace`) without calling ebnm
         # at init; pairs with `estimate_prior_variance = FALSE` to
         # hold the prior fixed across IBSS (susie-degenerate lock).
-        sigma <- sqrt(prior_variance_grid[1L])
+        sigma   <- sqrt(prior_variance_grid[1L])
         pi_kvec <- c(null_prior_init, 1 - null_prior_init)
-        if (prior_class == "mixture_point_normal_per_scale") {
-          fg_proto <- structure(
-            list(pi = pi_kvec, mean = c(0, 0), sd = c(0, sigma)),
-            class = "normalmix", row.names = c(1L, 2L))
-        } else {
-          # Match the Laplace slab variance to V = sigma^2:
-          # Laplace variance = 2 * scale^2, so scale = sigma / sqrt(2).
-          fg_proto <- structure(
-            list(pi = pi_kvec, mean = c(0, 0),
-                 scale = c(0, sigma / sqrt(2))),
-            class = "laplacemix", row.names = c(1L, 2L))
-        }
+        # Match slab variance to V = sigma^2: Normal slab uses sd
+        # = sigma; Laplace variance is 2*scale^2 so scale =
+        # sigma / sqrt(2).
+        spec <- if (prior_class == "mixture_point_normal_per_scale")
+                  list(slot = "sd",    val = c(0, sigma),               cls = "normalmix")
+                else
+                  list(slot = "scale", val = c(0, sigma / sqrt(2)),     cls = "laplacemix")
+        fg_proto <- structure(
+          c(list(pi = pi_kvec, mean = c(0, 0)),
+            setNames(list(spec$val), spec$slot)),
+          class = spec$cls, row.names = c(1L, 2L))
         G_prior_per_outcome[[m]] <- lapply(groups_m, function(idx) {
           list(fitted_g = fg_proto, idx = idx)
         })
         attr(G_prior_per_outcome[[m]], "class") <- prior_class
-        pi_weights[[m]] <- matrix(pi_kvec, nrow = length(groups_m),
-                                  ncol = 2L, byrow = TRUE)
-        V_grid[[m]] <- rep(prior_variance_grid[1L], length(groups_m))
+        pi_weights[[m]] <- fill_pi_weights(pi_kvec, length(groups_m))
+        V_grid[[m]]     <- rep(prior_variance_grid[1L], length(groups_m))
       } else {
         out <- init_ebnm_prior_per_scale(
           Y_m         = data$D[[m]],
@@ -316,9 +312,8 @@ mf_prior_scale_mixture <- function(data,
           na_idx      = data$na_idx[[m]]
         )
         G_prior_per_outcome[[m]] <- out$G_prior
-        pi_kvec <- out$G_prior[[1L]]$fitted_g$pi
-        pi_weights[[m]] <- matrix(pi_kvec, nrow = length(groups_m),
-                                  ncol = length(pi_kvec), byrow = TRUE)
+        pi_kvec         <- out$G_prior[[1L]]$fitted_g$pi
+        pi_weights[[m]] <- fill_pi_weights(pi_kvec, length(groups_m))
         V_grid[[m]] <- vapply(out$G_prior, function(g) {
           sl <- g$fitted_g
           # Slab variance: sd[2]^2 for normalmix, scale[2]^2 * 2 for
@@ -345,8 +340,7 @@ mf_prior_scale_mixture <- function(data,
         )
       })
       attr(G_prior_per_outcome[[m]], "class") <- prior_class
-      pi_weights[[m]] <- matrix(pi_kvec, nrow = length(groups_m),
-                                ncol = K + 1, byrow = TRUE)
+      pi_weights[[m]] <- fill_pi_weights(pi_kvec, length(groups_m))
     } else {
       # Data-driven path: susieR helper -> ash. Helper
       # returns one G_prior entry per group, with `$idx` attached.
@@ -363,12 +357,10 @@ mf_prior_scale_mixture <- function(data,
       )
       G_prior_per_outcome[[m]] <- out$G_prior
 
-      sd_grid <- out$G_prior[[1]]$fitted_g$sd
-      V_grid[[m]] <- sd_grid^2
-      K_total <- length(sd_grid)
-      pi_kvec <- out$G_prior[[1]]$fitted_g$pi
-      pi_weights[[m]] <- matrix(pi_kvec, nrow = length(groups_m),
-                                ncol = K_total, byrow = TRUE)
+      sd_grid         <- out$G_prior[[1]]$fitted_g$sd
+      V_grid[[m]]     <- sd_grid^2
+      pi_kvec         <- out$G_prior[[1]]$fitted_g$pi
+      pi_weights[[m]] <- fill_pi_weights(pi_kvec, length(groups_m))
     }
   }
 

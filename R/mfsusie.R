@@ -146,12 +146,16 @@
 #'   assays.
 #' @param control_mixsqp optional named list of `mixsqp` control
 #'   arguments forwarded to the per-(outcome, scale) M-step.
-#' @param mixture_null_weight numeric in `[0, 1]`, ratio of
-#'   null-pseudo-weight to data weight in the mixsqp M-step.
-#'   Regularizes the EB mixture prior toward null. `0` is
-#'   unregularized MLE. Internally scaled by `M` so the
+#' @param mixture_null_weight numeric in `[0, 1]` or `NULL`,
+#'   ratio of null-pseudo-weight to data weight in the mixsqp
+#'   M-step. Regularizes the EB mixture prior toward null. `0`
+#'   is unregularized MLE. Internally scaled by `M` so the
 #'   null:data balance is invariant to outcome count; single-
-#'   outcome fits are unchanged. Default `0.05`.
+#'   outcome fits are unchanged. `NULL` (default) resolves to
+#'   `0.05` internally. Ignored on `prior_variance_scope \in
+#'   {"per_scale_normal", "per_scale_laplace"}` (the spike
+#'   weight `pi_0` is fit by ebnm); a non-`NULL` value passed
+#'   on those paths emits a warning.
 #' @param alpha_thin_eps numeric, threshold below which a
 #'   variable's per-effect posterior `alpha[l, j]` is dropped
 #'   from the M-step input. Applies to every M-step solver
@@ -256,7 +260,7 @@ mfsusie <- function(X, Y,
                     wavelet_magnitude_cutoff  = 0,
                     wavelet_qnorm             = TRUE,
                     control_mixsqp            = NULL,
-                    mixture_null_weight               = 0.05,
+                    mixture_null_weight               = NULL,
                     alpha_thin_eps            = 5e-5,
                     model_init                = NULL,
                     small_sample_correction   = FALSE,
@@ -268,6 +272,14 @@ mfsusie <- function(X, Y,
   }
   prior_variance_scope    <- match.arg(prior_variance_scope)
   residual_variance_scope <- match.arg(residual_variance_scope)
+
+  if (!is.null(mixture_null_weight) &&
+      prior_variance_scope %in% c("per_scale_normal",
+                                  "per_scale_laplace")) {
+    warning_message(sprintf(
+      "`mixture_null_weight` is ignored when `prior_variance_scope = \"%s\"`; the spike weight `pi_0` is fit from data by ebnm.",
+      prior_variance_scope), style = "hint")
+  }
   convergence_method      <- match.arg(convergence_method)
 
   # Translate `estimate_prior_variance` to susieR's internal

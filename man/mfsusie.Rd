@@ -37,7 +37,7 @@ mfsusie(
   wavelet_magnitude_cutoff = 0,
   wavelet_qnorm = TRUE,
   control_mixsqp = NULL,
-  mixture_null_weight = 0.05,
+  mixture_null_weight = NULL,
   alpha_thin_eps = 5e-05,
   model_init = NULL,
   small_sample_correction = FALSE,
@@ -199,12 +199,15 @@ assays.}
 \item{control_mixsqp}{optional named list of \code{mixsqp} control
 arguments forwarded to the per-(outcome, scale) M-step.}
 
-\item{mixture_null_weight}{numeric in \verb{[0, 1]}, ratio of
-null-pseudo-weight to data weight in the mixsqp M-step.
-Regularizes the EB mixture prior toward null. \code{0} is
-unregularized MLE. Internally scaled by \code{M} so the
+\item{mixture_null_weight}{numeric in \verb{[0, 1]} or \code{NULL},
+ratio of null-pseudo-weight to data weight in the mixsqp
+M-step. Regularizes the EB mixture prior toward null. \code{0}
+is unregularized MLE. Internally scaled by \code{M} so the
 null:data balance is invariant to outcome count; single-
-outcome fits are unchanged. Default \code{0.05}.}
+outcome fits are unchanged. \code{NULL} (default) resolves to
+\code{0.05} internally. Ignored on \verb{prior_variance_scope \\in \{"per_scale_normal", "per_scale_laplace"\}} (the spike
+weight \code{pi_0} is fit by ebnm); a non-\code{NULL} value passed
+on those paths emits a warning.}
 
 \item{alpha_thin_eps}{numeric, threshold below which a
 variable's per-effect posterior \code{alpha[l, j]} is dropped
