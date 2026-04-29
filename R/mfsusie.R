@@ -39,18 +39,22 @@
 #'   the data-driven path
 #'   (`compute_marginal_bhat_shat` + `ash`) selects the
 #'   grid per outcome.
-#' @param prior_variance_scope one of `"per_outcome"`
-#'   (default), `"per_scale"`, or `"per_scale_normal"`.
-#'   `"per_outcome"` fits one mixture-of-normals prior pooled
-#'   across wavelet scales (one mixsqp call per outcome per
-#'   IBSS iter). `"per_scale"` fits a separate mixture per
-#'   (outcome, scale) (S_m mixsqp calls per outcome per iter).
-#'   `"per_scale_normal"` fits a 2-parameter point-normal
-#'   prior per (outcome, scale) via a custom MLE on the lead
-#'   variant (the variable with the largest current
-#'   `alpha[l, ]`); no mixsqp, no `mixture_null_weight`. The
-#'   parsimonious form trades the K+1 mixture weights of the
-#'   per-scale flavor for two parameters (`pi_0`, `sigma`).
+#' @param prior_variance_scope one of `"per_outcome"` (default),
+#'   `"per_scale"`, `"per_scale_normal"`, or `"per_scale_laplace"`.
+#'   Controls the mixture-weight layout and the M-step solver.
+#'   `"per_outcome"` collapses across scales (one weight vector per
+#'   outcome) and fits the K+1-component scale-mixture-of-normals
+#'   prior with `mixsqp`; this is the default because it is
+#'   roughly `S_m`-fold cheaper per IBSS iter (M mixsqp calls per
+#'   iter instead of M*S_m). `"per_scale"` keeps a separate K+1
+#'   weight vector per (outcome, scale), still fit with `mixsqp`.
+#'   `"per_scale_normal"` and `"per_scale_laplace"` switch the
+#'   per-(outcome, scale) prior to a 2-component point-* spike-
+#'   and-slab fit by `ebnm::ebnm_point_normal()` or
+#'   `ebnm::ebnm_point_laplace()` respectively; they are the
+#'   right choice when each wavelet scale has a single
+#'   characteristic effect-size scale and the K+1-component
+#'   mixsqp fit is under-determined on coarse scales.
 #' @param null_prior_init numeric in `[0, 1]`, initial `pi[null]`
 #'   for the scale-mixture prior on `b_l` at IBSS iter 1. The
 #'   EM M-step overwrites it within a few iterations. Default
@@ -222,7 +226,8 @@ mfsusie <- function(X, Y,
                     prior_variance_grid       = NULL,
                     prior_variance_scope      = c("per_outcome",
                                                   "per_scale",
-                                                  "per_scale_normal"),
+                                                  "per_scale_normal",
+                                                  "per_scale_laplace"),
                     null_prior_init           = 0,
                     cross_outcome_prior       = NULL,
                     prior_weights             = NULL,
