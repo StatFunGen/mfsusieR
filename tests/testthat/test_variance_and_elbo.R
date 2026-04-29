@@ -23,7 +23,7 @@ make_data_for_ev <- function(n = 30, J = 8, T_per_outcome = c(64L, 128L)) {
 
 make_model_with_post <- function(data, L = 2, sigma2_scalar = 1) {
   prior <- mfsusieR:::mf_prior_scale_mixture(
-    data, prior_variance_grid = c(0.1, 0.5, 2), null_prior_weight = 1
+    data, prior_variance_grid = c(0.1, 0.5, 2), null_prior_init = 0.5
   )
   params <- list(L = L, prior_weights = NULL, prior = prior,
                  cross_outcome_prior = NULL,
@@ -362,7 +362,7 @@ test_that("mf_em_m_step_per_scale matches a hand-rolled mixsqp invocation at <= 
 
   L_mat <- mfsusieR:::mf_em_likelihood_per_scale(bhat, shat, sd_grid)
   ours  <- mfsusieR:::mf_em_m_step_per_scale(L_mat, zeta, idx_size,
-                                             mixsqp_null_penalty = 0.7)
+                                             null_weight = 0.7)
 
   # Hand mixsqp (same arguments, same control).
   w <- c(0.7 * idx_size, rep(zeta, idx_size))
@@ -500,7 +500,7 @@ test_that("init_scale_mixture_prior_default errors on NULL groups", {
 test_that("initialize_susie_model.mf_individual reads cross_outcome_prior from params when supplied", {
   data <- make_data_for_ev()
   prior <- mfsusieR:::mf_prior_scale_mixture(
-    data, prior_variance_grid = c(0.1, 0.5), null_prior_weight = 1)
+    data, prior_variance_grid = c(0.1, 0.5), null_prior_init = 0.5)
   custom_xmod <- mfsusieR:::cross_outcome_prior_independent()
   class(custom_xmod) <- c("custom_combiner", class(custom_xmod))
 
@@ -530,7 +530,7 @@ test_that("mf_prior_scale_mixture per_outcome scope on data-driven path returns 
   prior <- mfsusieR:::mf_prior_scale_mixture(
     data, prior_variance_grid = NULL,
     prior_variance_scope = "per_outcome",
-    null_prior_weight = 1
+    null_prior_init = 0.5
   )
   for (m in seq_len(data$M)) {
     expect_identical(nrow(prior$pi[[m]]), 1L)

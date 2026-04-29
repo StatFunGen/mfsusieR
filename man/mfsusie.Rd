@@ -11,7 +11,7 @@ mfsusie(
   L = 20,
   prior_variance_grid = NULL,
   prior_variance_scope = c("per_outcome", "per_scale"),
-  null_prior_weight = 2,
+  null_prior_init = 0,
   cross_outcome_prior = NULL,
   prior_weights = NULL,
   residual_variance = NULL,
@@ -36,7 +36,7 @@ mfsusie(
   wavelet_magnitude_cutoff = 0,
   wavelet_qnorm = TRUE,
   control_mixsqp = NULL,
-  mixsqp_null_penalty = 0.1,
+  null_weight = 0.01,
   mixsqp_alpha_eps = 1e-06,
   model_init = NULL,
   small_sample_correction = FALSE,
@@ -75,8 +75,13 @@ instead of M*S_m); switch to \code{"per_scale"} only when you
 need scale-specific mixture weights for power on shape-
 varying signals.}
 
-\item{null_prior_weight}{numeric, weight on the null prior
-component. Default 2.}
+\item{null_prior_init}{numeric in \verb{[0, 1]}. Initial mass on the
+null component of the scale-mixture prior on \code{b_l}. Used
+directly as \code{pi[null]} at IBSS iter 1; the EM M-step
+overwrites it from the data within a few iterations, so the
+final fit is essentially insensitive to this value. Default
+\code{0} — no prior null bias at start, signalling "the data
+should decide."}
 
 \item{cross_outcome_prior}{optional object that controls how the
 per-outcome log-Bayes factors are combined into the joint
@@ -132,7 +137,7 @@ greedy outer loop. Default 0.1.}
 run the per-effect empirical-Bayes update of the mixture
 weights \code{pi_V[[m]]} per (outcome, scale) using the \code{mixsqp}
 solver. When \code{FALSE}, hold the prior fixed at the initial
-\code{prior_variance_grid} / \code{null_prior_weight}; useful when
+\code{prior_variance_grid} / \code{null_prior_init}; useful when
 collapsing \code{mfsusie()} to \code{susieR::susie()} for sanity
 checks.}
 
@@ -203,20 +208,14 @@ assays.}
 \item{control_mixsqp}{optional named list of \code{mixsqp} control
 arguments forwarded to the per-(outcome, scale) M-step.}
 
-\item{mixsqp_null_penalty}{numeric, per-coefficient pseudo-count
-on the null component of the mixsqp M-step. The total null
-pseudo-count fed to mixsqp is \code{mixsqp_null_penalty * idx_size},
-versus a total data weight of \code{idx_size} from the \code{zeta}-
-weighted variable rows; the ratio \code{mixsqp_null_penalty : 1} is
-therefore the null:data weight ratio at the M-step. Default
-\code{0.1} corresponds to a 10\% null:data ratio, anchored to
-\code{ashr::ash.workhorse(nullweight = 10)} over a typical
-\code{idx_size = 128} (ratio ~0.08). For multi-outcome fits the
-penalty is scaled by the number of outcomes \code{M} so that the
-null:data balance stays invariant as the per-effect variable
-posterior concentrates linearly in \code{M}; single-outcome fits
-are unchanged.
-Default \code{0.1}.}
+\item{null_weight}{numeric in \verb{[0, 1]}. Ratio of null
+pseudo-weight to total data weight in the mixsqp M-step,
+regularizing the EB scale-mixture prior toward the null
+component. \code{0} is unregularized MLE; \code{0.01} (default) is
+light shrinkage toward null, matching upstream
+\code{fsusieR::susiF}. Internally scaled by the number of
+outcomes \code{M} so the null:data balance is invariant to \code{M};
+single-outcome fits are unchanged.}
 
 \item{mixsqp_alpha_eps}{numeric, threshold below which a
 variable's per-effect posterior \code{alpha[l, j]} is dropped

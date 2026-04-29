@@ -23,7 +23,7 @@
 #'   `L` (effect-count upper bound), `prior_weights` (length-p
 #'   variable-selection prior, defaults to uniform `1/p` if NULL),
 #'   `prior` (an `mf_prior_scale_mixture` object containing
-#'   `V_grid`, `pi`, `null_prior_weight`), and
+#'   `V_grid`, `pi`, `null_prior_init`), and
 #'   `residual_variance` (initial sigma2; either a length-M list
 #'   of scalars for the per-outcome mode or a length-M list of
 #'   length-`S_m` vectors for the per-(scale, outcome) mode).
@@ -57,11 +57,11 @@ initialize_susie_model.mf_individual <- function(data, params, var_y, ...) {
 
   # Prior structure. V_grid: list[M] of length-K vectors (or list[M]
   # of S_m x K matrices for `per_scale`). pi_V: list[M] of
-  # S_m x K mixture-weight matrices. null_prior_weight: scalar.
+  # S_m x K mixture-weight matrices. null_prior_init: scalar.
   prior <- params$prior
   V_grid             <- if (is.null(prior)) NULL else prior$V_grid
   pi_V               <- if (is.null(prior)) NULL else prior$pi
-  null_prior_weight  <- if (is.null(prior)) 0   else prior$null_prior_weight
+  null_prior_init  <- if (is.null(prior)) 0   else prior$null_prior_init
   G_prior            <- if (is.null(prior)) NULL else prior$G_prior
 
   # Cross-outcome combiner. Defaults to the trivial independence
@@ -110,7 +110,7 @@ initialize_susie_model.mf_individual <- function(data, params, var_y, ...) {
     V                 = V,
     V_grid            = V_grid,
     pi_V              = pi_V,
-    null_prior_weight = null_prior_weight,
+    null_prior_init = null_prior_init,
     G_prior           = G_prior,
     cross_outcome_combiner = cross_outcome_combiner,
     KL                = rep(NA_real_, L),

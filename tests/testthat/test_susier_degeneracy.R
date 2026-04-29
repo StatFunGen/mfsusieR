@@ -3,7 +3,7 @@
 #
 #   M = 1, T_1 = 1 (univariate trait, DWT short-circuits)
 #   prior_variance_grid of length 1 (single mixture component)
-#   null_prior_weight = 0 (no null component)
+#   null_prior_init = 0 (no null component)
 #   prior_variance_scope = "per_outcome"
 #   residual_variance_scope = "per_outcome"
 #   estimate_prior_method = "none" (V held fixed; equivalent to
@@ -54,7 +54,7 @@ c1_fit_pair <- function(X, y, L = 5, V = 0.2) {
     L                        = L,
     prior_variance_grid      = V,
     prior_variance_scope     = "per_outcome",
-    null_prior_weight        = 0,
+    null_prior_init        = 0,
     residual_variance_scope = "per_outcome",
     estimate_prior_variance = FALSE,
     convergence_method       = "elbo",

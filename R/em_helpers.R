@@ -87,7 +87,7 @@ mf_em_likelihood_per_scale <- function(bhat_slice, shat_slice, sd_grid,
 #'
 #' For `is_ebmvfr = FALSE` (default; mfsusie path):
 #' builds the weight vector
-#' `w = (mixsqp_null_penalty * idx_size, zeta_repeated)`,
+#' `w = (null_weight * idx_size, zeta_repeated)`,
 #' prepended with the null-component penalty pseudo-observation.
 #'
 #' For `is_ebmvfr = TRUE` (covariate-adjustment path): omits the
@@ -106,7 +106,7 @@ mf_em_likelihood_per_scale <- function(bhat_slice, shat_slice, sd_grid,
 #'   alpha for the SER step that triggered this update).
 #'   Ignored when `is_ebmvfr = TRUE`.
 #' @param idx_size integer, |idx_s|, positions in this scale.
-#' @param mixsqp_null_penalty numeric, null-component penalty weight.
+#' @param null_weight numeric, null-component penalty weight.
 #' @param init_pi0_w numeric, starting null-component mass.
 #' @param tol_null_prior numeric, threshold below which non-null
 #'   mass collapses to zero.
@@ -120,7 +120,7 @@ mf_em_likelihood_per_scale <- function(bhat_slice, shat_slice, sd_grid,
 #' @keywords internal
 #' @noRd
 mf_em_m_step_per_scale <- function(L, zeta, idx_size,
-                                   mixsqp_null_penalty = 0.1,
+                                   null_weight = 0.01,
                                    init_pi0_w     = 0.5,
                                    tol_null_prior = 0.001,
                                    control_mixsqp = NULL,
@@ -133,7 +133,7 @@ mf_em_m_step_per_scale <- function(L, zeta, idx_size,
     # null-component penalty row.
     rep(zeta, idx_size)
   } else {
-    c(mixsqp_null_penalty * idx_size, rep(zeta, idx_size))
+    c(null_weight * idx_size, rep(zeta, idx_size))
   }
 
   # mixsqp defaults tuned for warm-started inner-loop use. tol.svd = 0

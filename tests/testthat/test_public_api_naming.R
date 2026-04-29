@@ -13,7 +13,6 @@ test_that("mfsusie() arguments do not use any forbidden / abbreviated name", {
   forbidden <- c(
     # Legacy abbreviations from mvf.susie.alpha / fsusieR.
     "max_SNP_EM",
-    "null_weight",
     "max_scale",
     "min_scale",
     "init_pi0_w",
@@ -51,7 +50,7 @@ test_that("mfsusie() argument names are snake_case (apart from SuSiE lineage)", 
 
 test_that("mfsusie() argument list contains the canonical public-API names", {
   required <- c("X", "Y", "pos", "L", "prior_variance_grid",
-                "null_prior_weight", "residual_variance_scope",
+                "null_prior_init", "residual_variance_scope",
                 "max_iter", "tol",
                 "L_greedy", "greedy_lbf_cutoff",
                 "estimate_prior_variance",

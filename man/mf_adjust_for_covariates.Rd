@@ -13,7 +13,6 @@ mf_adjust_for_covariates(
   wavelet_family = "DaubLeAsymm",
   max_iter = 50L,
   tol = 0.001,
-  null_prior_weight = 10,
   init_pi0_w = 1,
   control_mixsqp = list(verbose = FALSE, eps = 1e-06, numiter.em = 4L),
   grid_mult = sqrt(2),
@@ -45,9 +44,6 @@ wavelet-EB path. Default \code{50}.}
 \item{tol}{numeric, convergence tolerance on the per-scale
 prior weights \verb{||pi - pi_prev|| / log(K) < tol}.
 Default \code{1e-3}.}
-
-\item{null_prior_weight}{numeric, penalty on the null component
-(passed through to the EB prior init). Default \code{10}.}
 
 \item{init_pi0_w}{numeric, starting null-component mass for
 mixsqp. Default \code{1}.}

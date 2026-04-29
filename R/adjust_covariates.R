@@ -56,8 +56,6 @@
 #' @param tol numeric, convergence tolerance on the per-scale
 #'   prior weights `||pi - pi_prev|| / log(K) < tol`.
 #'   Default `1e-3`.
-#' @param null_prior_weight numeric, penalty on the null component
-#'   (passed through to the EB prior init). Default `10`.
 #' @param init_pi0_w numeric, starting null-component mass for
 #'   mixsqp. Default `1`.
 #' @param control_mixsqp optional named list of `mixsqp` control
@@ -94,7 +92,6 @@ mf_adjust_for_covariates <- function(Y, Z, X = NULL,
                                      wavelet_family        = "DaubLeAsymm",
                                      max_iter              = 50L,
                                      tol                   = 1e-3,
-                                     null_prior_weight     = 10,
                                      init_pi0_w            = 1,
                                      control_mixsqp        = list(verbose = FALSE,
                                                                   eps = 1e-6,
@@ -128,7 +125,6 @@ mf_adjust_for_covariates <- function(Y, Z, X = NULL,
                             wavelet_family        = wavelet_family,
                             max_iter              = max_iter,
                             tol                   = tol,
-                            null_prior_weight     = null_prior_weight,
                             init_pi0_w            = init_pi0_w,
                             control_mixsqp        = control_mixsqp,
                             grid_mult             = grid_mult,
@@ -179,7 +175,6 @@ mf_residualize_wavelet_eb <- function(Y, Z, X = NULL,
                                       wavelet_family        = "DaubLeAsymm",
                                       max_iter              = 50L,
                                       tol                   = 1e-3,
-                                      null_prior_weight     = 10,
                                       init_pi0_w            = 1,
                                       control_mixsqp        = list(verbose = FALSE,
                                                                    eps = 1e-6,
@@ -315,7 +310,6 @@ mf_residualize_wavelet_eb <- function(Y, Z, X = NULL,
         L              = L,
         zeta           = rep(1 / K, K),
         idx_size       = length(idx_s),
-        mixsqp_null_penalty = null_prior_weight,
         init_pi0_w     = init_pi0_w,
         tol_null_prior = 0.001,
         control_mixsqp = control_mixsqp,
