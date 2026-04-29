@@ -1,4 +1,4 @@
-# Reference tests for the `low_count_filter` and `quantile_norm`
+# Reference tests for the `wavelet_magnitude_cutoff` and `wavelet_qnorm`
 # preprocessing options on `mfsusie()` / `fsusie()` /
 # `mf_adjust_for_covariates()`.
 #
@@ -8,16 +8,16 @@
 #    Both at tolerance = 0.
 #
 # 2. Public-API behavior:
-#    - Defaults (low_count_filter = 0, quantile_norm = FALSE)
-#      reproduce the pre-feature mfsusieR fit bit-identically
-#      (no behavior change).
+#    - Implicit defaults (wavelet_magnitude_cutoff = 0,
+#      wavelet_qnorm = TRUE) match the same call with the values
+#      passed explicitly.
 #    - Non-default flags route through the wavelet-domain
 #      mask / transform; the public API runs to completion and
 #      lowc_idx / Y_wd state matches the upstream pipeline at
 #      the helper level.
 #
 # 3. mf_adjust_for_covariates: lifts the v1 reject; both flags
-#    accepted; round-trip on Y_adjusted units when quantile_norm
+#    accepted; round-trip on Y_adjusted units when wavelet_qnorm
 #    is TRUE.
 
 # --- 1. Helpers vs upstream --------------------------------------
@@ -66,31 +66,30 @@ build_fixture <- function(seed = 11L, n = 100L, T_m = 64L,
   list(X = X, Y = Y, p = p, T_m = T_m, n = n)
 }
 
-test_that("default flags leave the fit bit-identical to pre-feature mfsusieR", {
-  # The defaults `low_count_filter = 0` and `quantile_norm = FALSE`
-  # leave the wavelet matrix unchanged when no column has a
-  # zero absolute-value median. The fit is therefore identical
-  # to what the same call without the new arguments produces.
+test_that("implicit defaults match explicitly-passed defaults", {
+  # `fsusie()` with implicit defaults must match the same call with
+  # `wavelet_magnitude_cutoff = 0, wavelet_qnorm = TRUE` passed
+  # explicitly: the defaulting layer adds no surprise.
   sim <- build_fixture()
   fit_default <- fsusie(sim$Y, sim$X, L = 5,
                         verbose = FALSE)
   fit_explicit <- fsusie(sim$Y, sim$X, L = 5,
-                         low_count_filter = 0,
-                         quantile_norm    = FALSE,
+                         wavelet_magnitude_cutoff = 0,
+                         wavelet_qnorm            = TRUE,
                          verbose = FALSE)
   expect_equal(fit_default$alpha, fit_explicit$alpha, tolerance = 0)
   expect_equal(fit_default$pip,   fit_explicit$pip,   tolerance = 0)
   expect_equal(fit_default$mu,    fit_explicit$mu,    tolerance = 0)
 })
 
-test_that("low_count_filter masks zero-median wavelet columns", {
+test_that("wavelet_magnitude_cutoff masks zero-median wavelet columns", {
   sim <- build_fixture()
   # Force a zero-median column by injecting a column of zeros
   # into the wavelet domain via the response: a constant column
   # in Y produces a zero-median scaling coefficient.
   sim$Y[, 1L] <- 0
   fit_filter <- fsusie(sim$Y, sim$X, L = 3,
-                       low_count_filter = 0,
+                       wavelet_magnitude_cutoff = 0,
                        verbose = FALSE)
   expect_true(fit_filter$converged)
   # The lowc_idx attribute is propagated through dwt_meta when
@@ -98,10 +97,10 @@ test_that("low_count_filter masks zero-median wavelet columns", {
   # confirms the run completes without error and converges.
 })
 
-test_that("quantile_norm = TRUE runs to convergence", {
+test_that("wavelet_qnorm = TRUE runs to convergence", {
   sim <- build_fixture()
   fit_qn <- fsusie(sim$Y, sim$X, L = 3,
-                   quantile_norm = TRUE,
+                   wavelet_qnorm = TRUE,
                    verbose = FALSE)
   expect_true(fit_qn$converged)
   expect_equal(length(fit_qn$pip), sim$p)
@@ -109,26 +108,26 @@ test_that("quantile_norm = TRUE runs to convergence", {
 
 # --- 3. mf_adjust_for_covariates ---------------------------------
 
-test_that("mf_adjust_for_covariates accepts low_count_filter", {
+test_that("mf_adjust_for_covariates accepts wavelet_magnitude_cutoff", {
   set.seed(31L)
   n <- 60L; T_m <- 64L; K <- 2L
   Z <- matrix(rnorm(n * K), n, K)
   Y <- Z %*% matrix(rnorm(K * T_m), K, T_m) +
        matrix(rnorm(n * T_m, sd = 0.4), n, T_m)
   out <- suppressWarnings(
-    mf_adjust_for_covariates(Y, Z, low_count_filter = 0.05))
+    mf_adjust_for_covariates(Y, Z, wavelet_magnitude_cutoff = 0.05))
   expect_equal(dim(out$Y_adjusted), c(n, T_m))
   expect_true(out$sigma2 > 0)
 })
 
-test_that("mf_adjust_for_covariates accepts quantile_norm", {
+test_that("mf_adjust_for_covariates accepts wavelet_qnorm", {
   set.seed(32L)
   n <- 60L; T_m <- 64L; K <- 2L
   Z <- matrix(rnorm(n * K), n, K)
   Y <- Z %*% matrix(rnorm(K * T_m), K, T_m) +
        matrix(rnorm(n * T_m, sd = 0.4), n, T_m)
   out <- suppressWarnings(
-    mf_adjust_for_covariates(Y, Z, quantile_norm = TRUE))
+    mf_adjust_for_covariates(Y, Z, wavelet_qnorm = TRUE))
   expect_equal(dim(out$Y_adjusted), c(n, T_m))
   expect_true(out$sigma2 > 0)
 })

@@ -45,12 +45,14 @@
 #' @param X optional `n x p` numeric matrix; the genotype matrix
 #'   to FWL-residualize. Default `NULL`.
 #' @param method `"wavelet_eb"` (default) or `"ols"`.
-#' @param wavelet_filter_number integer, the `filter.number`
-#'   argument to `wd`. Default `1L`.
+#' @param wavelet_basis_order integer, selects the wavelet basis
+#'   member within `wavelet_family` (number of vanishing moments
+#'   for Daubechies families). Forwarded to `wavethresh::wd`'s
+#'   `filter.number`. Default `10L`.
 #' @param wavelet_family character, the `family` argument to
 #'   `wd`. Default `"DaubExPhase"`.
 #' @param max_iter integer, maximum outer iterations for the
-#'   wavelet-EB path. Default `100`.
+#'   wavelet-EB path. Default `50`.
 #' @param tol numeric, convergence tolerance on the per-scale
 #'   prior weights `||pi - pi_prev|| / log(K) < tol`.
 #'   Default `1e-3`.
@@ -63,19 +65,16 @@
 #'   numiter.em = 4L)`.
 #' @param grid_mult numeric, multiplier for the ash mixture grid.
 #'   Default `sqrt(2)`.
-#' @param low_count_filter non-negative numeric. Wavelet-domain
-#'   columns of `Y` with `median(|column|) <= low_count_filter`
-#'   are flagged uninformative (`Bhat = 0`, `Shat = 1`) at every
-#'   outer iteration. Default `0`. Useful for sparse-coverage
-#'   responses where many wavelet columns carry negligible
-#'   signal.
-#' @param quantile_norm logical. When `TRUE`, applies a
+#' @param wavelet_magnitude_cutoff non-negative numeric. Wavelet
+#'   columns whose `median(|column|)` is at or below this cutoff
+#'   are zeroed and treated as uninformative (`Bhat = 0`,
+#'   `Shat = 1`) at every outer iteration. Default `0`.
+#' @param wavelet_qnorm logical. When `TRUE` (default), applies a
 #'   column-wise rank-based normal quantile transform to the
 #'   wavelet-domain response before the EB regression loop. The
-#'   returned `Y_adjusted` is on the original (un-transformed)
-#'   position scale so downstream `fsusie(Y_adjusted, X)` calls
-#'   operate on the same units as the input `Y`. Default
-#'   `FALSE`.
+#'   returned `Y_adjusted` is on the original position scale so
+#'   downstream `fsusie(Y_adjusted, X)` calls operate on the same
+#'   units as the input `Y`.
 #' @return A named list with:
 #'   \describe{
 #'     \item{`Y_adjusted`}{`n x T` matrix, the residualized response.}
@@ -97,18 +96,18 @@
 #' @export
 mf_adjust_for_covariates <- function(Y, Z, X = NULL,
                                      method = c("wavelet_eb", "ols"),
-                                     wavelet_filter_number = 10L,
+                                     wavelet_basis_order = 10L,
                                      wavelet_family        = "DaubLeAsymm",
-                                     max_iter              = 100L,
+                                     max_iter              = 50L,
                                      tol                   = 1e-3,
                                      null_prior_weight     = 10,
                                      init_pi0_w            = 1,
                                      control_mixsqp        = list(verbose = FALSE,
                                                                   eps = 1e-6,
                                                                   numiter.em = 4L),
-                                     grid_mult             = sqrt(2),
-                                     low_count_filter      = 0,
-                                     quantile_norm         = FALSE) {
+                                     grid_mult                = sqrt(2),
+                                     wavelet_magnitude_cutoff = 0,
+                                     wavelet_qnorm            = TRUE) {
   method <- match.arg(method)
 
   if (!is.matrix(Y) || !is.numeric(Y))
@@ -123,18 +122,18 @@ mf_adjust_for_covariates <- function(Y, Z, X = NULL,
     if (nrow(X) != nrow(Y))
       stop("`X` and `Y` must have the same number of rows.")
   }
-  if (!is.numeric(low_count_filter) || length(low_count_filter) != 1L ||
-      low_count_filter < 0)
-    stop("`low_count_filter` must be a non-negative scalar.")
-  if (!is.logical(quantile_norm) || length(quantile_norm) != 1L)
-    stop("`quantile_norm` must be `TRUE` or `FALSE`.")
+  if (!is.numeric(wavelet_magnitude_cutoff) || length(wavelet_magnitude_cutoff) != 1L ||
+      wavelet_magnitude_cutoff < 0)
+    stop("`wavelet_magnitude_cutoff` must be a non-negative scalar.")
+  if (!is.logical(wavelet_qnorm) || length(wavelet_qnorm) != 1L)
+    stop("`wavelet_qnorm` must be `TRUE` or `FALSE`.")
 
   if (method == "ols") {
     return(mf_residualize_ols(Y, Z, X))
   }
 
   mf_residualize_wavelet_eb(Y, Z, X = X,
-                            wavelet_filter_number = wavelet_filter_number,
+                            wavelet_basis_order = wavelet_basis_order,
                             wavelet_family        = wavelet_family,
                             max_iter              = max_iter,
                             tol                   = tol,
@@ -142,8 +141,8 @@ mf_adjust_for_covariates <- function(Y, Z, X = NULL,
                             init_pi0_w            = init_pi0_w,
                             control_mixsqp        = control_mixsqp,
                             grid_mult             = grid_mult,
-                            low_count_filter      = low_count_filter,
-                            quantile_norm         = quantile_norm)
+                            wavelet_magnitude_cutoff      = wavelet_magnitude_cutoff,
+                            wavelet_qnorm         = wavelet_qnorm)
 }
 
 #' OLS Frisch-Waugh-Lovell residualization
@@ -186,18 +185,18 @@ mf_residualize_ols <- function(Y, Z, X = NULL) {
 #' @keywords internal
 #' @noRd
 mf_residualize_wavelet_eb <- function(Y, Z, X = NULL,
-                                      wavelet_filter_number = 10L,
+                                      wavelet_basis_order = 10L,
                                       wavelet_family        = "DaubLeAsymm",
-                                      max_iter              = 100L,
+                                      max_iter              = 50L,
                                       tol                   = 1e-3,
                                       null_prior_weight     = 10,
                                       init_pi0_w            = 1,
                                       control_mixsqp        = list(verbose = FALSE,
                                                                    eps = 1e-6,
                                                                    numiter.em = 4L),
-                                      grid_mult             = sqrt(2),
-                                      low_count_filter      = 0,
-                                      quantile_norm         = FALSE) {
+                                      grid_mult                = sqrt(2),
+                                      wavelet_magnitude_cutoff = 0,
+                                      wavelet_qnorm            = TRUE) {
   n     <- nrow(Y)
   T_pos <- ncol(Y)
 
@@ -215,7 +214,7 @@ mf_residualize_wavelet_eb <- function(Y, Z, X = NULL,
 
   # Step 2: row-wise DWT.
   W       <- dwt_matrix(Y_cent,
-                        filter_number = wavelet_filter_number,
+                        filter_number = wavelet_basis_order,
                         family        = wavelet_family,
                         max_scale     = log2(T_pos))
   Y_wd    <- cbind(W$D, W$C)        # n x T_basis
@@ -224,14 +223,14 @@ mf_residualize_wavelet_eb <- function(Y, Z, X = NULL,
   indx_lst <- gen_wavelet_indx(lev_res)
 
   # Optional preprocessing on the wavelet-domain matrix.
-  # `quantile_norm` is applied first; the median-based low-count
+  # `wavelet_qnorm` is applied first; the median-based low-count
   # mask is computed on the (possibly transformed) coefficients
   # so flagged columns are treated as uninformative for the rest
   # of the run.
-  if (quantile_norm) {
+  if (wavelet_qnorm) {
     Y_wd <- mf_quantile_normalize(Y_wd)
   }
-  lowc_idx <- mf_low_count_indices(Y_wd, threshold = low_count_filter)
+  lowc_idx <- mf_low_count_indices(Y_wd, threshold = wavelet_magnitude_cutoff)
   if (length(lowc_idx) > 0L) {
     Y_wd[, lowc_idx] <- 0
   }
@@ -359,7 +358,7 @@ mf_residualize_wavelet_eb <- function(Y, Z, X = NULL,
       D_packed      = matrix(fitted_wc[j, ], nrow = 1L),
       column_center = rep(0, T_pos),
       column_scale  = rep(1, T_pos),
-      filter_number = wavelet_filter_number,
+      filter_number = wavelet_basis_order,
       family        = wavelet_family)
     fitted_func[j, ] <- as.numeric(fc_row) / csd_Z[j]
   }

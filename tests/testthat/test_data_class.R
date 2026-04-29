@@ -256,7 +256,10 @@ test_that("the constructor's per-modality D matches a direct mf_dwt call", {
   X <- make_X(20, 8)
   Y <- make_Y_functional(20, 64)
   pos <- list(seq_len(64))
+  # Disable wavelet_qnorm so the constructor's D is the raw DWT
+  # output (matches the direct `mf_dwt` call below).
   obj <- mfsusieR:::create_mf_individual(X = X, Y = Y, pos = pos,
+                                         wavelet_qnorm = FALSE,
                                          verbose = FALSE)
 
   out <- mfsusieR:::mf_dwt(Y[[1]], pos[[1]], verbose = FALSE)

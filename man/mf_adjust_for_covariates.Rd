@@ -9,16 +9,16 @@ mf_adjust_for_covariates(
   Z,
   X = NULL,
   method = c("wavelet_eb", "ols"),
-  wavelet_filter_number = 10L,
+  wavelet_basis_order = 10L,
   wavelet_family = "DaubLeAsymm",
-  max_iter = 100L,
+  max_iter = 50L,
   tol = 0.001,
   null_prior_weight = 10,
   init_pi0_w = 1,
   control_mixsqp = list(verbose = FALSE, eps = 1e-06, numiter.em = 4L),
   grid_mult = sqrt(2),
-  low_count_filter = 0,
-  quantile_norm = FALSE
+  wavelet_magnitude_cutoff = 0,
+  wavelet_qnorm = TRUE
 )
 }
 \arguments{
@@ -32,14 +32,16 @@ to FWL-residualize. Default \code{NULL}.}
 
 \item{method}{\code{"wavelet_eb"} (default) or \code{"ols"}.}
 
-\item{wavelet_filter_number}{integer, the \code{filter.number}
-argument to \code{wd}. Default \code{1L}.}
+\item{wavelet_basis_order}{integer, selects the wavelet basis
+member within \code{wavelet_family} (number of vanishing moments
+for Daubechies families). Forwarded to \code{wavethresh::wd}'s
+\code{filter.number}. Default \code{10L}.}
 
 \item{wavelet_family}{character, the \code{family} argument to
 \code{wd}. Default \code{"DaubExPhase"}.}
 
 \item{max_iter}{integer, maximum outer iterations for the
-wavelet-EB path. Default \code{100}.}
+wavelet-EB path. Default \code{50}.}
 
 \item{tol}{numeric, convergence tolerance on the per-scale
 prior weights \verb{||pi - pi_prev|| / log(K) < tol}.
@@ -57,20 +59,17 @@ args. Default \code{list(verbose = FALSE, eps = 1e-6, numiter.em = 4L)}.}
 \item{grid_mult}{numeric, multiplier for the ash mixture grid.
 Default \code{sqrt(2)}.}
 
-\item{low_count_filter}{non-negative numeric. Wavelet-domain
-columns of \code{Y} with \verb{median(|column|) <= low_count_filter}
-are flagged uninformative (\code{Bhat = 0}, \code{Shat = 1}) at every
-outer iteration. Default \code{0}. Useful for sparse-coverage
-responses where many wavelet columns carry negligible
-signal.}
+\item{wavelet_magnitude_cutoff}{non-negative numeric. Wavelet
+columns whose \verb{median(|column|)} is at or below this cutoff
+are zeroed and treated as uninformative (\code{Bhat = 0},
+\code{Shat = 1}) at every outer iteration. Default \code{0}.}
 
-\item{quantile_norm}{logical. When \code{TRUE}, applies a
+\item{wavelet_qnorm}{logical. When \code{TRUE} (default), applies a
 column-wise rank-based normal quantile transform to the
 wavelet-domain response before the EB regression loop. The
-returned \code{Y_adjusted} is on the original (un-transformed)
-position scale so downstream \code{fsusie(Y_adjusted, X)} calls
-operate on the same units as the input \code{Y}. Default
-\code{FALSE}.}
+returned \code{Y_adjusted} is on the original position scale so
+downstream \code{fsusie(Y_adjusted, X)} calls operate on the same
+units as the input \code{Y}.}
 }
 \value{
 A named list with:

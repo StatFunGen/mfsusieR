@@ -14,8 +14,8 @@ two simulated cell types.}
 Normal marginal Bayes factor).}
 \item{\code{johnson}}{\code{mfsusie} fit with
 \code{small_sample_correction = TRUE} (Johnson-t marginal).}
-\item{\code{lowcount}}{\code{mfsusie} fit with \code{low_count_filter = 0.02}.}
-\item{\code{qn}}{\code{mfsusie} fit with \code{quantile_norm = TRUE}.}
+\item{\code{lowcount}}{\code{mfsusie} fit with \code{wavelet_magnitude_cutoff = 0.02}.}
+\item{\code{qn}}{\code{mfsusie} fit with \code{wavelet_qnorm = TRUE}.}
 \item{\code{combined}}{\code{mfsusie} fit with all three corrections
 enabled.}
 }

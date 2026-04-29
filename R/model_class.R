@@ -99,17 +99,9 @@ initialize_susie_model.mf_individual <- function(data, params, var_y, ...) {
 
   # `lbf_variable_outcome` is an L x p x M array of per-(effect, variant,
   # outcome) log Bayes factors, populated by `loglik.mf_individual`
-  # during the IBSS sweep when allocated. Gated by
-  # `params$attach_lbf_variable_outcome` (default behaviour: allocate). When
-  # NULL on the model, the IBSS skips per-outcome BF storage and
-  # downstream `susie_post_outcome_configuration(fit, by = "outcome")`
-  # falls back to the lazy reconstruction path.
-  attach_lbf_variable_outcome <- isTRUE(params$attach_lbf_variable_outcome)
-  lbf_variable_outcome <- if (attach_lbf_variable_outcome) {
-    array(NA_real_, dim = c(L, p, M))
-  } else {
-    NULL
-  }
+  # during the IBSS sweep. Always allocated; consumed by
+  # `susie_post_outcome_configuration(fit, by = "outcome")`.
+  lbf_variable_outcome <- array(NA_real_, dim = c(L, p, M))
 
   model <- list(
     alpha             = matrix(1 / p, nrow = L, ncol = p),

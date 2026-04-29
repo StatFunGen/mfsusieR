@@ -191,15 +191,16 @@ the fit object structure are identical.
 Two arguments control preprocessing of the per-outcome wavelet
 matrix before the IBSS loop:
 
-- `low_count_filter` (default `0`): wavelet columns with
-  `median(|column|) <= low_count_filter` are masked, contributing
+- `wavelet_magnitude_cutoff` (default `0`): wavelet columns with
+  `median(|column|) <= wavelet_magnitude_cutoff` are masked, contributing
   `(Bhat = 0, Shat = 1)` to the SER step. Use a small positive
   value when the response has sparse non-zero entries (e.g.,
   ATAC-seq read pileups).
-- `quantile_norm` (default `FALSE`): when `TRUE`, applies a
-  column-wise rank-based normal quantile transform to the
-  wavelet matrix. Use when the per-outcome residuals are
-  heavy-tailed or visibly non-Gaussian.
+- `wavelet_qnorm` (default `TRUE`): applies a column-wise
+  rank-based normal quantile transform to the wavelet matrix.
+  Useful when the per-outcome residuals are heavy-tailed or
+  visibly non-Gaussian. Set to `FALSE` to skip the transform when
+  the wavelet coefficients are already approximately Gaussian.
 
 Both flags route through `mf_adjust_for_covariates()` as well.
 
@@ -221,8 +222,8 @@ for every outcome. Set the corresponding rows of `Y[[m]]` to `NA` before
 calling `mfsusie()`; the package automatically restricts every
 regression and variance update to the observed rows for that trait.
 
-Both `quantile_norm = FALSE` (the statistically correct path) and
-`quantile_norm = TRUE` handle missing rows correctly.
+Both `wavelet_qnorm = TRUE` (the default) and `wavelet_qnorm = FALSE`
+handle missing rows correctly.
 
 ```{r missing-data-setup}
 set.seed(42)
@@ -244,24 +245,23 @@ Y_miss[[3]][sample(n, 24), ] <- NA
 sapply(Y_miss, function(y) sum(complete.cases(y)))
 ```
 
-### `quantile_norm = FALSE`
+### `wavelet_qnorm = FALSE`
 
 ```{r missing-noqnorm}
 t_noq <- system.time(
   fit_noq <- mfsusie(X_miss, Y_miss, L = 10,
-                     quantile_norm = FALSE, verbose = FALSE)
+                     wavelet_qnorm = FALSE, verbose = FALSE)
 )
 cat(sprintf("Runtime: %.1f s   niter: %d   CS: %d\n",
             t_noq["elapsed"], fit_noq$niter, length(fit_noq$sets$cs)))
 fit_noq$pip[causal_j]                    # causal PIP
 ```
 
-### `quantile_norm = TRUE`
+### `wavelet_qnorm = TRUE` (default)
 
 ```{r missing-qnorm}
 t_q <- system.time(
-  fit_q <- mfsusie(X_miss, Y_miss, L = 10,
-                   quantile_norm = TRUE, verbose = FALSE)
+  fit_q <- mfsusie(X_miss, Y_miss, L = 10, verbose = FALSE)
 )
 cat(sprintf("Runtime: %.1f s   niter: %d   CS: %d\n",
             t_q["elapsed"], fit_q$niter, length(fit_q$sets$cs)))

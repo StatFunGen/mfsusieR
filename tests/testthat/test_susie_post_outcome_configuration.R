@@ -163,25 +163,3 @@ test_that("susie_post_outcome_configuration on a real mfsusie fit returns the do
               info = "Diagonal coloc-pairs should be H4-dominated for the planted shared causal.")
 })
 
-# -----------------------------------------------------------------------------
-# Opt-out path: when attach_lbf_variable_outcome = FALSE, by = "outcome"
-# should error with a clear directive.
-# -----------------------------------------------------------------------------
-test_that("susie_post_outcome_configuration errors cleanly when lbf_variable_outcome is missing", {
-  set.seed(3L)
-  n <- 40L; p <- 8L; M <- 2L
-  X <- matrix(rnorm(n * p), n)
-  Y <- lapply(seq_len(M), function(m) matrix(rnorm(n * 8L), n))
-
-  fit <- mfsusie(X, Y, L = 2, max_iter = 5, verbose = FALSE,
-                 attach_lbf_variable_outcome = FALSE)
-  expect_null(fit$lbf_variable_outcome)
-
-  # Pass cs_only = FALSE so the sets-check doesn't fire first; the next
-  # validation step then raises the lbf_variable_outcome error.
-  expect_error(
-    susieR::susie_post_outcome_configuration(fit, by = "outcome",
-                                              cs_only = FALSE),
-    "lbf_variable_outcome"
-  )
-})

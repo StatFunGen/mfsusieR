@@ -53,7 +53,7 @@ distribute_mixture_weights <- function(K, null_prior_weight) {
 #' @param grid_multiplier numeric, forwarded to `ash` as
 #'   `gridmult`.
 #' @param lowc_idx integer vector of column indices in `Y_m`
-#'   masked by `low_count_filter`. When non-empty, those
+#'   masked by `wavelet_magnitude_cutoff`. When non-empty, those
 #'   columns are excluded from the ash sampling pool so
 #'   masked-zero coefficients do not pull the prior toward a
 #'   degenerate spike.

@@ -19,11 +19,19 @@
 #'   to `seq_len(T_m)` per outcome.
 #' @param max_padded_log2 integer, log2 cap on the post-remap grid
 #'   length per outcome. Default 10.
-#' @param wavelet_filter_number integer, see
-#'   `filter.select`.
+#' @param wavelet_basis_order integer, selects the wavelet basis
+#'   member within `wavelet_family` (number of vanishing moments
+#'   for Daubechies families). Forwarded to `wavethresh::wd`'s
+#'   `filter.number`. See `filter.select`.
 #' @param wavelet_family character, see `wd`.
 #' @param standardize logical, scale `X` columns to unit variance.
 #' @param intercept logical, center `X` columns to mean zero.
+#' @param wavelet_magnitude_cutoff non-negative numeric. Wavelet
+#'   columns whose `median(|column|)` is at or below this cutoff
+#'   are zeroed and treated as uninformative.
+#' @param wavelet_qnorm logical. When `TRUE`, applies a column-wise
+#'   rank-based normal quantile transform to the wavelet-domain
+#'   response before downstream steps.
 #' @param verbose logical, forwarded to `mf_dwt`'s remap step.
 #' @return list of class `c("mf_individual", "individual")`.
 #' @references
@@ -33,15 +41,15 @@
 #' @noRd
 create_mf_individual <- function(X,
                                  Y,
-                                 pos                   = NULL,
-                                 max_padded_log2       = 10,
-                                 wavelet_filter_number = 10,
-                                 wavelet_family        = "DaubLeAsymm",
-                                 standardize           = TRUE,
-                                 intercept             = TRUE,
-                                 low_count_filter      = 0,
-                                 quantile_norm         = FALSE,
-                                 verbose               = FALSE) {
+                                 pos                      = NULL,
+                                 max_padded_log2          = 10,
+                                 wavelet_basis_order      = 10,
+                                 wavelet_family           = "DaubLeAsymm",
+                                 standardize              = TRUE,
+                                 intercept                = TRUE,
+                                 wavelet_magnitude_cutoff = 0,
+                                 wavelet_qnorm            = TRUE,
+                                 verbose                  = FALSE) {
   # ---- Input validation --------------------------------------------------
   if (!is.matrix(X) || !is.numeric(X)) {
     stop("`X` must be a numeric matrix.")
@@ -112,7 +120,7 @@ create_mf_individual <- function(X,
     out <- mf_dwt(Y[[m]],
                   pos[[m]],
                   max_padded_log2 = max_padded_log2,
-                  filter_number   = wavelet_filter_number,
+                  filter_number   = wavelet_basis_order,
                   family          = wavelet_family,
                   verbose         = verbose)
     D[[m]]             <- out$D
@@ -132,9 +140,9 @@ create_mf_individual <- function(X,
     lowc_idx[[m]]   <- integer(0)
     Y_remapped[[m]] <- Y[[m]]
     if (T_basis[m] > 1L) {
-      if (quantile_norm) D[[m]] <- mf_quantile_normalize(D[[m]])
+      if (wavelet_qnorm) D[[m]] <- mf_quantile_normalize(D[[m]])
       lowc_idx[[m]] <- mf_low_count_indices(D[[m]],
-                                            threshold = low_count_filter)
+                                            threshold = wavelet_magnitude_cutoff)
       if (length(lowc_idx[[m]]) > 0L) {
         D[[m]][, lowc_idx[[m]]] <- 0
       }
@@ -168,7 +176,7 @@ create_mf_individual <- function(X,
     intercept    = intercept,
     standardize  = standardize,
     wavelet_meta = list(
-      filter_number = wavelet_filter_number,
+      filter_number = wavelet_basis_order,
       family        = wavelet_family,
       column_center = column_center,
       column_scale  = column_scale,

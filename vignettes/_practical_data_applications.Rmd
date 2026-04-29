@@ -24,12 +24,12 @@ This vignette walks through three preprocessing and inference
 options on `mfsusie()` that matter on real-world functional
 fine-mapping data:
 
-- `low_count_filter`: mask wavelet columns whose
+- `wavelet_magnitude_cutoff`: mask wavelet columns whose
   absolute-value median is at or below a user-supplied
   threshold. Columns that carry no signal contribute noise to
   the prior init and the SER step; masking them removes that
   noise.
-- `quantile_norm`: apply a column-wise rank-based normal
+- `wavelet_qnorm`: apply a column-wise rank-based normal
   quantile transform to the wavelet matrix. Heavy-tailed
   wavelet coefficients (a common signature of sparse-count
   assays) violate the Normal-likelihood assumption underlying
@@ -85,7 +85,7 @@ the three options in turn.
 
 ## Low-count filtering
 
-`low_count_filter = c` masks wavelet-domain columns with
+`wavelet_magnitude_cutoff = c` masks wavelet-domain columns with
 `median(|column|) <= c`. The masked columns contribute
 `(Bhat = 0, Shat = 1)` at every IBSS iteration and are
 excluded from the ash sampling pool that initializes the
@@ -101,32 +101,32 @@ unmasked inflates the SER residual variance and pulls the
 mixture prior toward a degenerate spike at zero.
 
 In the simulated dataset, outcome 1 carries a block of 8 bins
-at very low SNR. Setting `low_count_filter = 0.02` masks those
+at very low SNR. Setting `wavelet_magnitude_cutoff = 0.02` masks those
 bins; the per-variable PIP at the signal SNP is unchanged on
 this clean simulation, but the SER residual variance is no
 longer inflated by the masked columns.
 
 ```{r usage-low-count, eval = FALSE}
 fit <- mfsusie(X, Y_list,
-               low_count_filter = 0.02,
+               wavelet_magnitude_cutoff = 0.02,
                L = 8)
 ```
 
-```{r plot-low-count, fig.cap = "PIP comparison: default vs low_count_filter."}
+```{r plot-low-count, fig.cap = "PIP comparison: default vs wavelet_magnitude_cutoff."}
 pip_default  <- practical_fits$default$pip
 pip_lowcount <- practical_fits$lowcount$pip
 plot(pip_default, pip_lowcount,
      xlim = c(0, 1), ylim = c(0, 1),
      pch = 16, cex = 0.9, col = "#1f78b4",
      xlab = "PIP (default)",
-     ylab = "PIP (low_count_filter = 0.02)",
-     main = "low_count_filter")
+     ylab = "PIP (wavelet_magnitude_cutoff = 0.02)",
+     main = "wavelet_magnitude_cutoff")
 abline(0, 1, lty = 3, col = "grey50")
 ```
 
 ## Quantile normalization
 
-`quantile_norm = TRUE` applies a column-wise rank-based normal
+`wavelet_qnorm = TRUE` applies a column-wise rank-based normal
 quantile transform to the per-outcome wavelet matrix before the
 IBSS loop. After the transform every wavelet column is
 marginally standard Gaussian, which restores the SuSiE Bayes
@@ -140,37 +140,37 @@ biased toward over-confidence at variants where the heavy
 tails happen to align.
 
 In the simulated dataset, outcome 2 carries 18% per-cell heavy
-contamination. Setting `quantile_norm = TRUE` Gaussianizes the
+contamination. Setting `wavelet_qnorm = TRUE` Gaussianizes the
 wavelet coefficients and the SER step receives a marginal
 matching the SuSiE assumption. On this dataset
-`quantile_norm = TRUE` reduces PIP at the signal SNP from
+`wavelet_qnorm = TRUE` reduces PIP at the signal SNP from
 `1.000` to `0.903`. The reduction reflects the more honest
 uncertainty estimate once heavy-tail outliers are no longer
 inflating per-variable Bayes factors.
 
 ```{r usage-qn, eval = FALSE}
 fit <- mfsusie(X, Y_list,
-               quantile_norm = TRUE,
+               wavelet_qnorm = TRUE,
                L = 8)
 ```
 
-```{r plot-qn, fig.cap = "PIP comparison: default vs quantile_norm."}
+```{r plot-qn, fig.cap = "PIP comparison: default vs wavelet_qnorm."}
 pip_qn <- practical_fits$qn$pip
 plot(pip_default, pip_qn,
      xlim = c(0, 1), ylim = c(0, 1),
      pch = 16, cex = 0.9, col = "#1f78b4",
      xlab = "PIP (default)",
-     ylab = "PIP (quantile_norm = TRUE)",
-     main = "quantile_norm")
+     ylab = "PIP (wavelet_qnorm = TRUE)",
+     main = "wavelet_qnorm")
 abline(0, 1, lty = 3, col = "grey50")
 ```
 
-`quantile_norm` is most useful on outcomes with heavy-tailed
+`wavelet_qnorm` is most useful on outcomes with heavy-tailed
 wavelet coefficients and non-trivial signal density. On
 outcomes that are mostly zero (e.g. cell types with very low
 coverage), the rank transform turns the zeros into uniform
 Gaussian noise and can dilute weak signals; pair it with
-`low_count_filter` so the no-information columns are masked
+`wavelet_magnitude_cutoff` so the no-information columns are masked
 before the rank transform sees them.
 
 ## Small-sample correction
@@ -227,8 +227,8 @@ combine without conflict:
 
 | Option | Acts on | When to use |
 |---|---|---|
-| `low_count_filter` | wavelet columns with `median(|.|) <= c` | sparse-coverage assays where some cell types have many near-zero bins |
-| `quantile_norm` | wavelet matrix per outcome | heavy-tailed wavelet coefficients (e.g. log1p of sparse counts) |
+| `wavelet_magnitude_cutoff` | wavelet columns with `median(|.|) <= c` | sparse-coverage assays where some cell types have many near-zero bins |
+| `wavelet_qnorm` | wavelet matrix per outcome | heavy-tailed wavelet coefficients (e.g. log1p of sparse counts) |
 | `small_sample_correction` | per-variable SER Bayes factor | small `n` (here `n = 40`); rule-of-thumb `n <= 100` |
 
 A typical small-cohort sparse-count fit might combine all
@@ -236,8 +236,8 @@ three:
 
 ```{r combined, eval = FALSE}
 fit <- mfsusie(X, Y_list,
-               low_count_filter        = 0.02,
-               quantile_norm           = TRUE,
+               wavelet_magnitude_cutoff        = 0.02,
+               wavelet_qnorm           = TRUE,
                small_sample_correction = TRUE,
                L = 8)
 ```
