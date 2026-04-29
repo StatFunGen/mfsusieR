@@ -55,19 +55,55 @@ fit_susie_degen <- function(scope, X, y, sigma2 = 0.2, L = 5L) {
     verbose = FALSE)
 }
 
-# ============================================================
-# Section 4. Init helper (`init_ebnm_prior_per_scale`)
-# ============================================================
-
-test_that("4: init helper returns the documented G_prior shape (Normal)", {
-  fx <- make_sparse_fixture()
+# Build the data class on the sparse fixture (used by every test
+# that needs the wavelet-decomposed `mf_individual` view).
+make_sparse_data <- function() {
+  fx   <- make_sparse_fixture()
   data <- mfsusieR:::create_mf_individual(
     X = fx$X, Y = list(fx$Y), pos = list(seq_len(fx$T_m)),
     standardize = TRUE, intercept = TRUE,
     max_padded_log2 = 10, wavelet_basis_order = 10,
     wavelet_family = "DaubLeAsymm",
-    wavelet_magnitude_cutoff = 0,
-    wavelet_qnorm = TRUE, verbose = FALSE)
+    wavelet_magnitude_cutoff = 0, wavelet_qnorm = TRUE,
+    verbose = FALSE)
+  list(fx = fx, data = data)
+}
+
+# Synthetic ser_stats matching the data fixture's (p, T_basis[1])
+# shape; used by the dispatch / wrapper-level tests.
+make_ser_stats <- function(data) list(
+  betahat = list(matrix(rnorm(data$p * data$T_basis[1L]),
+                         nrow = data$p)),
+  shat2   = list(matrix(0.04, nrow = data$p,
+                         ncol = data$T_basis[1L])))
+
+# Minimal model state for the dispatch tests: one outcome,
+# uniform alpha, prior just constructed.
+make_seed_model <- function(data, prior) list(
+  M       = data$M,
+  G_prior = prior$G_prior,
+  pi_V    = prior$pi,
+  alpha   = matrix(1 / data$p, nrow = 1L, ncol = data$p))
+
+# Run mfsusie on the sparse fixture under the named scope. Used
+# by the end-to-end shape and power tests.
+fit_sparse <- function(scope, fx = make_sparse_fixture(), L = 5L,
+                       max_iter = 50L) {
+  set.seed(1L)
+  suppressWarnings(mfsusieR::mfsusie(
+    fx$X, list(fx$Y), pos = list(seq_len(fx$T_m)),
+    L = L, prior_variance_scope = scope,
+    estimate_prior_variance = TRUE,
+    L_greedy = NULL, max_iter = max_iter, tol = 1e-3,
+    verbose = FALSE))
+}
+
+# ============================================================
+# Section 4. Init helper (`init_ebnm_prior_per_scale`)
+# ============================================================
+
+test_that("4: init helper returns the documented G_prior shape (Normal)", {
+  data <- make_sparse_data()$data
   out <- mfsusieR:::init_ebnm_prior_per_scale(
     Y_m         = data$D[[1L]],
     X           = data$X,
@@ -84,14 +120,7 @@ test_that("4: init helper returns the documented G_prior shape (Normal)", {
 })
 
 test_that("4: init helper returns the documented G_prior shape (Laplace)", {
-  fx <- make_sparse_fixture()
-  data <- mfsusieR:::create_mf_individual(
-    X = fx$X, Y = list(fx$Y), pos = list(seq_len(fx$T_m)),
-    standardize = TRUE, intercept = TRUE,
-    max_padded_log2 = 10, wavelet_basis_order = 10,
-    wavelet_family = "DaubLeAsymm",
-    wavelet_magnitude_cutoff = 0,
-    wavelet_qnorm = TRUE, verbose = FALSE)
+  data <- make_sparse_data()$data
   out <- mfsusieR:::init_ebnm_prior_per_scale(
     Y_m         = data$D[[1L]],
     X           = data$X,
@@ -106,15 +135,8 @@ test_that("4: init helper returns the documented G_prior shape (Laplace)", {
 })
 
 test_that("4: marginal-data lead picker selects a signal-bearing variable on sparse fixture", {
-  fx   <- make_sparse_fixture()
-  data <- mfsusieR:::create_mf_individual(
-    X = fx$X, Y = list(fx$Y), pos = list(seq_len(fx$T_m)),
-    standardize = TRUE, intercept = TRUE,
-    max_padded_log2 = 10, wavelet_basis_order = 10,
-    wavelet_family = "DaubLeAsymm",
-    wavelet_magnitude_cutoff = 0, wavelet_qnorm = TRUE,
-    verbose = FALSE)
-  out <- mfsusieR:::init_ebnm_prior_per_scale(
+  sp   <- make_sparse_data(); fx <- sp$fx; data <- sp$data
+  out  <- mfsusieR:::init_ebnm_prior_per_scale(
     Y_m         = data$D[[1L]],
     X           = data$X,
     prior_class = "mixture_point_normal_per_scale",
@@ -136,15 +158,7 @@ test_that("4: marginal-data lead picker selects a signal-bearing variable on spa
 # ============================================================
 
 test_that("5: end-to-end mfsusie() builds a fit on per_scale_normal", {
-  fx  <- make_sparse_fixture()
-  set.seed(1L)
-  fit <- mfsusieR::mfsusie(
-    fx$X, list(fx$Y), pos = list(seq_len(fx$T_m)),
-    L = 5L,
-    prior_variance_scope = "per_scale_normal",
-    estimate_prior_variance = TRUE,
-    L_greedy = NULL, max_iter = 50L, tol = 1e-3,
-    verbose = FALSE)
+  fit <- fit_sparse("per_scale_normal")
   expect_s3_class(fit, "mfsusie")
   expect_s3_class(fit, "susie")
   expect_equal(class(fit$G_prior[[1L]]),
@@ -157,15 +171,7 @@ test_that("5: end-to-end mfsusie() builds a fit on per_scale_normal", {
 })
 
 test_that("5: end-to-end mfsusie() builds a fit on per_scale_laplace", {
-  fx <- make_sparse_fixture()
-  set.seed(1L)
-  fit <- suppressWarnings(mfsusieR::mfsusie(
-    fx$X, list(fx$Y), pos = list(seq_len(fx$T_m)),
-    L = 5L,
-    prior_variance_scope = "per_scale_laplace",
-    estimate_prior_variance = TRUE,
-    L_greedy = NULL, max_iter = 50L, tol = 1e-3,
-    verbose = FALSE))
+  fit <- fit_sparse("per_scale_laplace")
   expect_s3_class(fit, "mfsusie")
   expect_equal(class(fit$G_prior[[1L]]),
                 "mixture_point_laplace_per_scale")
@@ -177,15 +183,7 @@ test_that("5: end-to-end mfsusie() builds a fit on per_scale_laplace", {
 test_that("5: ebnm M-step writes both fitted_g and pi_V", {
   # Dispatch wires `fit$fitted_g` -> `G_prior$fitted_g` and
   # `fit$fitted_g$pi` -> `pi_V[[m]][s, ]`. Pin the equality.
-  fx  <- make_sparse_fixture()
-  set.seed(1L)
-  fit <- mfsusieR::mfsusie(
-    fx$X, list(fx$Y), pos = list(seq_len(fx$T_m)),
-    L = 5L,
-    prior_variance_scope = "per_scale_normal",
-    estimate_prior_variance = TRUE,
-    L_greedy = NULL, max_iter = 50L, tol = 1e-3,
-    verbose = FALSE)
+  fit <- fit_sparse("per_scale_normal")
   for (s in seq_along(fit$G_prior[[1L]])) {
     expect_equal(fit$pi_V[[1L]][s, ],
                  fit$G_prior[[1L]][[s]]$fitted_g$pi,
@@ -198,27 +196,12 @@ test_that("5: ebnm M-step writes both fitted_g and pi_V", {
 # ============================================================
 
 test_that("5e: .opv_ebnm_point forwards (x, s, g_init, fix_g) to ebnm correctly", {
-  fx <- make_sparse_fixture()
-  data <- mfsusieR:::create_mf_individual(
-    X = fx$X, Y = list(fx$Y), pos = list(seq_len(fx$T_m)),
-    standardize = TRUE, intercept = TRUE,
-    max_padded_log2 = 10, wavelet_basis_order = 10,
-    wavelet_family = "DaubLeAsymm",
-    wavelet_magnitude_cutoff = 0, wavelet_qnorm = TRUE,
-    verbose = FALSE)
-  prior <- mfsusieR:::mf_prior_scale_mixture(data,
-              prior_variance_scope = "per_scale_normal",
-              null_prior_init = 0)
-  ser_stats <- list(
-    betahat = list(matrix(rnorm(data$p * data$T_basis[1L]),
-                           nrow = data$p)),
-    shat2   = list(matrix(0.04, nrow = data$p,
-                           ncol = data$T_basis[1L])))
-  model <- list(
-    M = data$M,
-    G_prior = prior$G_prior,
-    pi_V    = prior$pi,
-    alpha   = matrix(1 / data$p, nrow = 1L, ncol = data$p))
+  data      <- make_sparse_data()$data
+  prior     <- mfsusieR:::mf_prior_scale_mixture(data,
+                  prior_variance_scope = "per_scale_normal",
+                  null_prior_init = 0)
+  ser_stats <- make_ser_stats(data)
+  model     <- make_seed_model(data, prior)
 
   call_log <- list()
   fake_ebnm <- function(x, s, mode, g_init, fix_g, ...) {
@@ -246,25 +229,12 @@ test_that("5e: .opv_ebnm_point forwards (x, s, g_init, fix_g) to ebnm correctly"
 })
 
 test_that("5e: fix_g = TRUE when estimate_prior_variance = FALSE", {
-  fx <- make_sparse_fixture()
-  data <- mfsusieR:::create_mf_individual(
-    X = fx$X, Y = list(fx$Y), pos = list(seq_len(fx$T_m)),
-    standardize = TRUE, intercept = TRUE,
-    max_padded_log2 = 10, wavelet_basis_order = 10,
-    wavelet_family = "DaubLeAsymm",
-    wavelet_magnitude_cutoff = 0, wavelet_qnorm = TRUE,
-    verbose = FALSE)
-  prior <- mfsusieR:::mf_prior_scale_mixture(data,
-              prior_variance_scope = "per_scale_normal",
-              null_prior_init = 0)
-  ser_stats <- list(
-    betahat = list(matrix(rnorm(data$p * data$T_basis[1L]),
-                           nrow = data$p)),
-    shat2   = list(matrix(0.04, nrow = data$p,
-                           ncol = data$T_basis[1L])))
-  model <- list(
-    M = data$M, G_prior = prior$G_prior, pi_V = prior$pi,
-    alpha = matrix(1 / data$p, nrow = 1L, ncol = data$p))
+  data      <- make_sparse_data()$data
+  prior     <- mfsusieR:::mf_prior_scale_mixture(data,
+                  prior_variance_scope = "per_scale_normal",
+                  null_prior_init = 0)
+  ser_stats <- make_ser_stats(data)
+  model     <- make_seed_model(data, prior)
 
   fix_g_seen <- NA
   fake_ebnm <- function(x, s, mode, g_init, fix_g, ...) {
@@ -284,27 +254,13 @@ test_that("5e: fix_g = TRUE when estimate_prior_variance = FALSE", {
 })
 
 test_that("5e: g_init warm-starts across consecutive M-step calls", {
-  fx <- make_sparse_fixture()
-  data <- mfsusieR:::create_mf_individual(
-    X = fx$X, Y = list(fx$Y), pos = list(seq_len(fx$T_m)),
-    standardize = TRUE, intercept = TRUE,
-    max_padded_log2 = 10, wavelet_basis_order = 10,
-    wavelet_family = "DaubLeAsymm",
-    wavelet_magnitude_cutoff = 0, wavelet_qnorm = TRUE,
-    verbose = FALSE)
-  prior <- mfsusieR:::mf_prior_scale_mixture(data,
-              prior_variance_scope = "per_scale_normal",
-              null_prior_init = 0)
-  ser_stats <- list(
-    betahat = list(matrix(rnorm(data$p * data$T_basis[1L]),
-                           nrow = data$p)),
-    shat2   = list(matrix(0.04, nrow = data$p,
-                           ncol = data$T_basis[1L])))
-  model <- list(M = data$M, G_prior = prior$G_prior,
-                pi_V = prior$pi,
-                alpha = matrix(1 / data$p, nrow = 1L,
-                                ncol = data$p))
-  S_m <- length(prior$G_prior[[1L]])
+  data      <- make_sparse_data()$data
+  prior     <- mfsusieR:::mf_prior_scale_mixture(data,
+                  prior_variance_scope = "per_scale_normal",
+                  null_prior_init = 0)
+  ser_stats <- make_ser_stats(data)
+  model     <- make_seed_model(data, prior)
+  S_m       <- length(prior$G_prior[[1L]])
 
   # Each call returns a sentinel `fitted_g` so the next call's
   # `g_init` is detectable as the previous call's return value.
@@ -345,12 +301,7 @@ test_that("5e: g_init warm-starts across consecutive M-step calls", {
 
 test_that("6: iter_cache skips sdmat / log_sdmat on the ebnm path", {
   fx  <- make_sparse_fixture()
-  set.seed(1L)
-  fit <- suppressWarnings(mfsusieR::mfsusie(
-    fx$X, list(fx$Y), pos = list(seq_len(fx$T_m)),
-    L = 5L, prior_variance_scope = "per_scale_normal",
-    estimate_prior_variance = TRUE, L_greedy = NULL,
-    max_iter = 50L, tol = 1e-3, verbose = FALSE))
+  fit <- fit_sparse("per_scale_normal", fx = fx)
   expect_true(!is.null(fit$iter_cache$shat2[[1L]]))
   # shat2 is `p x T_basis` per outcome.
   expect_equal(nrow(fit$iter_cache$shat2[[1L]]), ncol(fx$X))
@@ -359,13 +310,7 @@ test_that("6: iter_cache skips sdmat / log_sdmat on the ebnm path", {
 })
 
 test_that("6: iter_cache keeps sdmat / log_sdmat on the mixsqp path", {
-  fx  <- make_sparse_fixture()
-  set.seed(1L)
-  fit <- suppressWarnings(mfsusieR::mfsusie(
-    fx$X, list(fx$Y), pos = list(seq_len(fx$T_m)),
-    L = 5L, prior_variance_scope = "per_outcome",
-    estimate_prior_variance = TRUE, L_greedy = NULL,
-    max_iter = 50L, tol = 1e-3, verbose = FALSE))
+  fit <- fit_sparse("per_outcome")
   expect_false(is.null(fit$iter_cache$shat2[[1L]]))
   expect_false(is.null(fit$iter_cache$sdmat[[1L]][[1L]]))
   expect_false(is.null(fit$iter_cache$log_sdmat[[1L]][[1L]]))
@@ -507,16 +452,7 @@ test_that("7f.4 / 7f.5: signal recovery + noise recovery sanity", {
 # Section 7g. End-to-end shape contract (downstream methods)
 # ============================================================
 
-test_that("7g.4: predict / coef / fitted / summary / print return non-trivial output on per_scale_normal", {
-  fx  <- make_sparse_fixture()
-  set.seed(1L)
-  fit <- mfsusieR::mfsusie(
-    fx$X, list(fx$Y), pos = list(seq_len(fx$T_m)),
-    L = 3L,
-    prior_variance_scope = "per_scale_normal",
-    estimate_prior_variance = TRUE,
-    L_greedy = NULL, max_iter = 30L, tol = 1e-3,
-    verbose = FALSE)
+expect_downstream_methods <- function(fit) {
   pr <- predict(fit)
   expect_true(is.numeric(pr) || is.list(pr))
   expect_true(all(is.finite(unlist(pr))))
@@ -525,26 +461,16 @@ test_that("7g.4: predict / coef / fitted / summary / print return non-trivial ou
   expect_no_error(fitted(fit))
   expect_s3_class(summary(fit), "summary.mfsusie")
   expect_no_error(print(fit))
+}
+
+test_that("7g.4: predict / coef / fitted / summary / print return non-trivial output on per_scale_normal", {
+  expect_downstream_methods(fit_sparse("per_scale_normal",
+                                        L = 3L, max_iter = 30L))
 })
 
 test_that("7g.4: predict / coef / fitted / summary / print return non-trivial output on per_scale_laplace", {
-  fx <- make_sparse_fixture()
-  set.seed(1L)
-  fit <- suppressWarnings(mfsusieR::mfsusie(
-    fx$X, list(fx$Y), pos = list(seq_len(fx$T_m)),
-    L = 3L,
-    prior_variance_scope = "per_scale_laplace",
-    estimate_prior_variance = TRUE,
-    L_greedy = NULL, max_iter = 30L, tol = 1e-3,
-    verbose = FALSE))
-  pr <- predict(fit)
-  expect_true(is.numeric(pr) || is.list(pr))
-  expect_true(all(is.finite(unlist(pr))))
-  cf <- coef(fit)
-  expect_true(is.list(cf) || is.numeric(cf))
-  expect_no_error(fitted(fit))
-  expect_s3_class(summary(fit), "summary.mfsusie")
-  expect_no_error(print(fit))
+  expect_downstream_methods(fit_sparse("per_scale_laplace",
+                                        L = 3L, max_iter = 30L))
 })
 
 # ============================================================
@@ -576,26 +502,12 @@ test_that("8.4: per_scale_normal recovers shared causal across M=2 outcomes", {
 # ============================================================
 
 test_that("7e.4: estimate_prior_variance = FALSE leaves G_prior$fitted_g unchanged", {
-  fx   <- make_sparse_fixture()
-  data <- mfsusieR:::create_mf_individual(
-    X = fx$X, Y = list(fx$Y), pos = list(seq_len(fx$T_m)),
-    standardize = TRUE, intercept = TRUE,
-    max_padded_log2 = 10, wavelet_basis_order = 10,
-    wavelet_family = "DaubLeAsymm",
-    wavelet_magnitude_cutoff = 0, wavelet_qnorm = TRUE,
-    verbose = FALSE)
-  prior <- mfsusieR:::mf_prior_scale_mixture(data,
-              prior_variance_scope = "per_scale_normal",
-              null_prior_init = 0)
-  ser_stats <- list(
-    betahat = list(matrix(rnorm(data$p * data$T_basis[1L]),
-                           nrow = data$p)),
-    shat2   = list(matrix(0.04, nrow = data$p,
-                           ncol = data$T_basis[1L])))
-  model <- list(M = data$M, G_prior = prior$G_prior,
-                pi_V = prior$pi,
-                alpha = matrix(1 / data$p, nrow = 1L,
-                                ncol = data$p))
+  data      <- make_sparse_data()$data
+  prior     <- mfsusieR:::mf_prior_scale_mixture(data,
+                  prior_variance_scope = "per_scale_normal",
+                  null_prior_init = 0)
+  ser_stats <- make_ser_stats(data)
+  model     <- make_seed_model(data, prior)
   before <- lapply(model$G_prior[[1L]],
                     function(g) g$fitted_g)
   m_after <- mfsusieR:::.opv_ebnm_point(
@@ -616,27 +528,13 @@ test_that("7e.4: estimate_prior_variance = FALSE leaves G_prior$fitted_g unchang
 # ============================================================
 
 test_that("7e.5: M-step is bit-idempotent on identical inputs (Normal + Laplace)", {
-  fx   <- make_sparse_fixture()
-  data <- mfsusieR:::create_mf_individual(
-    X = fx$X, Y = list(fx$Y), pos = list(seq_len(fx$T_m)),
-    standardize = TRUE, intercept = TRUE,
-    max_padded_log2 = 10, wavelet_basis_order = 10,
-    wavelet_family = "DaubLeAsymm",
-    wavelet_magnitude_cutoff = 0, wavelet_qnorm = TRUE,
-    verbose = FALSE)
+  data <- make_sparse_data()$data
   for (scope in c("per_scale_normal", "per_scale_laplace")) {
-    prior <- mfsusieR:::mf_prior_scale_mixture(data,
-                prior_variance_scope = scope,
-                null_prior_init = 0)
-    ser_stats <- list(
-      betahat = list(matrix(rnorm(data$p * data$T_basis[1L]),
-                             nrow = data$p)),
-      shat2   = list(matrix(0.04, nrow = data$p,
-                             ncol = data$T_basis[1L])))
-    model <- list(M = data$M, G_prior = prior$G_prior,
-                  pi_V = prior$pi,
-                  alpha = matrix(1 / data$p, nrow = 1L,
-                                  ncol = data$p))
+    prior     <- mfsusieR:::mf_prior_scale_mixture(data,
+                    prior_variance_scope = scope,
+                    null_prior_init = 0)
+    ser_stats <- make_ser_stats(data)
+    model     <- make_seed_model(data, prior)
     ebnm_fn <- if (scope == "per_scale_normal") ebnm::ebnm_point_normal
                else                              ebnm::ebnm_point_laplace
     m1 <- mfsusieR:::.opv_ebnm_point(
@@ -662,32 +560,20 @@ test_that("7e.5: M-step is bit-idempotent on identical inputs (Normal + Laplace)
 # Section 8. End-to-end power tests
 # ============================================================
 
-test_that("8.1: per_scale_normal recovers planted causals on sparse fixture", {
+expect_recovers_sparse_signals <- function(scope) {
   fx  <- make_sparse_fixture()
-  set.seed(1L)
-  fit <- suppressWarnings(mfsusieR::mfsusie(
-    fx$X, list(fx$Y), pos = list(seq_len(fx$T_m)),
-    L = 5L, prior_variance_scope = "per_scale_normal",
-    estimate_prior_variance = TRUE,
-    L_greedy = NULL, max_iter = 50L, tol = 1e-3,
-    verbose = FALSE))
+  fit <- fit_sparse(scope, fx = fx)
   expect_gte(fit$pip[fx$signal_idx[1L]], 0.9)
   expect_gte(fit$pip[fx$signal_idx[2L]], 0.9)
   expect_equal(length(fit$sets$cs), 2L)
+}
+
+test_that("8.1: per_scale_normal recovers planted causals on sparse fixture", {
+  expect_recovers_sparse_signals("per_scale_normal")
 })
 
 test_that("8.1: per_scale_laplace recovers planted causals on sparse fixture", {
-  fx  <- make_sparse_fixture()
-  set.seed(1L)
-  fit <- suppressWarnings(mfsusieR::mfsusie(
-    fx$X, list(fx$Y), pos = list(seq_len(fx$T_m)),
-    L = 5L, prior_variance_scope = "per_scale_laplace",
-    estimate_prior_variance = TRUE,
-    L_greedy = NULL, max_iter = 50L, tol = 1e-3,
-    verbose = FALSE))
-  expect_gte(fit$pip[fx$signal_idx[1L]], 0.9)
-  expect_gte(fit$pip[fx$signal_idx[2L]], 0.9)
-  expect_equal(length(fit$sets$cs), 2L)
+  expect_recovers_sparse_signals("per_scale_laplace")
 })
 
 test_that("8.4: null locus returns no spurious CSes (per_scale_normal)", {
@@ -780,23 +666,27 @@ test_that("9b: mixture_log_bf_laplace_per_scale handles single-component laplace
 # Section 10. mixture_null_weight is a no-op on the ebnm paths
 # ============================================================
 
-test_that("10: mixture_null_weight is silently ignored on per_scale_normal", {
+test_that("10: mixture_null_weight has no numerical effect on per_scale_normal (and warns)", {
   fx <- make_sparse_fixture()
-  set.seed(1L)
-  fit_a <- suppressWarnings(mfsusieR::mfsusie(
-    fx$X, list(fx$Y), pos = list(seq_len(fx$T_m)),
-    L = 5L, prior_variance_scope = "per_scale_normal",
-    estimate_prior_variance = TRUE,
-    L_greedy = NULL, max_iter = 50L, tol = 1e-3,
-    verbose = FALSE))
-  set.seed(1L)
+  fit_a <- fit_sparse("per_scale_normal", fx = fx)
   fit_b <- suppressWarnings(mfsusieR::mfsusie(
     fx$X, list(fx$Y), pos = list(seq_len(fx$T_m)),
     L = 5L, prior_variance_scope = "per_scale_normal",
-    mixture_null_weight = 0.5,                # very different value
+    mixture_null_weight = 0.5,
     estimate_prior_variance = TRUE,
     L_greedy = NULL, max_iter = 50L, tol = 1e-3,
     verbose = FALSE))
   expect_equal(fit_a$alpha, fit_b$alpha, tolerance = 1e-12)
   expect_equal(fit_a$pip,   fit_b$pip,   tolerance = 1e-12)
+
+  # The user-facing warning fires at the front-door call.
+  expect_message(
+    suppressWarnings(mfsusieR::mfsusie(
+      fx$X, list(fx$Y), pos = list(seq_len(fx$T_m)),
+      L = 2L, prior_variance_scope = "per_scale_normal",
+      mixture_null_weight = 0.5,
+      estimate_prior_variance = TRUE,
+      L_greedy = NULL, max_iter = 5L, tol = 1e-3,
+      verbose = FALSE)),
+    regexp = "mixture_null_weight.*ignored")
 })

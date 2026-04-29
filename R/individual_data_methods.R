@@ -184,21 +184,18 @@ loglik.mf_individual <- function(data, params, model, V, ser_stats, l = NULL,
     for (s in seq_along(G_m)) {
       idx <- G_m[[s]]$idx
       g_s <- G_m[[s]]$fitted_g
+      b_sub <- Bhat_m[, idx, drop = FALSE]
+      s_sub <- Shat_m[, idx, drop = FALSE]
       lbf_m <- lbf_m + if (inherits(g_s, "laplacemix")) {
-        mixture_log_bf_laplace_per_scale(
-          Bhat_m[, idx, drop = FALSE],
-          Shat_m[, idx, drop = FALSE],
-          fitted_g = g_s, V_scale = V)
+        mixture_log_bf_laplace_per_scale(b_sub, s_sub,
+                                          fitted_g = g_s, V_scale = V)
       } else if (use_johnson) {
-        mixture_log_bf_per_scale_johnson(
-          Bhat_m[, idx, drop = FALSE],
-          Shat_m[, idx, drop = FALSE],
-          g_s$sd, g_s$pi, V_scale = V, df = df)
+        mixture_log_bf_per_scale_johnson(b_sub, s_sub,
+                                          g_s$sd, g_s$pi,
+                                          V_scale = V, df = df)
       } else {
-        mixture_log_bf_per_scale(
-          Bhat_m[, idx, drop = FALSE],
-          Shat_m[, idx, drop = FALSE],
-          g_s$sd, g_s$pi, V_scale = V)
+        mixture_log_bf_per_scale(b_sub, s_sub,
+                                  g_s$sd, g_s$pi, V_scale = V)
       }
     }
     outcome_lbfs[[m]] <- lbf_m
@@ -290,18 +287,16 @@ calculate_posterior_moments.mf_individual <- function(data, params, model, V, l,
     mu_lm  <- matrix(0, nrow = p, ncol = data$T_basis[m])
     mu2_lm <- matrix(0, nrow = p, ncol = data$T_basis[m])
     for (s in seq_along(G_m)) {
-      idx <- G_m[[s]]$idx
-      g_s <- G_m[[s]]$fitted_g
+      idx   <- G_m[[s]]$idx
+      g_s   <- G_m[[s]]$fitted_g
+      b_sub <- bhat_m[, idx, drop = FALSE]
+      s_sub <- shat_m[, idx, drop = FALSE]
       out <- if (inherits(g_s, "laplacemix")) {
-        mixture_posterior_laplace_per_scale(
-          bhat_m[, idx, drop = FALSE],
-          shat_m[, idx, drop = FALSE],
-          fitted_g = g_s, V_scale = V)
+        mixture_posterior_laplace_per_scale(b_sub, s_sub,
+                                             fitted_g = g_s, V_scale = V)
       } else {
-        mixture_posterior_per_scale(
-          bhat_m[, idx, drop = FALSE],
-          shat_m[, idx, drop = FALSE],
-          g_s$sd, g_s$pi, V_scale = V)
+        mixture_posterior_per_scale(b_sub, s_sub,
+                                     g_s$sd, g_s$pi, V_scale = V)
       }
       mu_lm[, idx]  <- out$pmean
       mu2_lm[, idx] <- out$pmean2
@@ -595,16 +590,15 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
   if (length(keep_idx) < 1L) keep_idx <- which.max(zeta_l)
   zeta_keep <- zeta_l[keep_idx]
 
-  G1 <- model$G_prior[[1L]]
-  if (inherits(G1, c("mixture_normal", "mixture_normal_per_scale"))) {
-    model <- .opv_mixsqp(data, params, model, ser_stats, keep_idx, zeta_keep)
-  } else if (inherits(G1, c("mixture_point_normal_per_scale",
-                            "mixture_point_laplace_per_scale"))) {
-    ebnm_fn <- if (inherits(G1, "mixture_point_normal_per_scale"))
-                 ebnm::ebnm_point_normal
-               else
-                 ebnm::ebnm_point_laplace
+  G1      <- model$G_prior[[1L]]
+  ebnm_fn <- switch(class(G1)[1L],
+    mixture_point_normal_per_scale  = ebnm::ebnm_point_normal,
+    mixture_point_laplace_per_scale = ebnm::ebnm_point_laplace,
+    NULL)
+  if (!is.null(ebnm_fn)) {
     model <- .opv_ebnm_point(data, params, model, ser_stats, keep_idx, ebnm_fn)
+  } else if (inherits(G1, c("mixture_normal", "mixture_normal_per_scale"))) {
+    model <- .opv_mixsqp(data, params, model, ser_stats, keep_idx, zeta_keep)
   } else {
     stop("Unknown prior class on G_prior[[1]]: ",
          paste(class(G1), collapse = ", "))
@@ -713,25 +707,15 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
     G_m    <- model$G_prior[[m]]
     for (s in seq_along(G_m)) {
       idx <- G_m[[s]]$idx
-      # `mode = 0` is the assumption baked into the SuSiE
-      # coefficient model (the slab is centered at zero). When
-      # `fix_g = TRUE` ebnm uses `g_init$mean` and ignores
-      # `mode`, emitting a warning if both are passed; skip
-      # `mode` on that path.
-      fit <- if (fix_g) {
-        ebnm_fn(
-          x      = as.vector(bhat_m[, idx, drop = FALSE]),
-          s      = as.vector(shat_m[, idx, drop = FALSE]),
-          g_init = G_m[[s]]$fitted_g,
-          fix_g  = TRUE)
-      } else {
-        ebnm_fn(
-          x      = as.vector(bhat_m[, idx, drop = FALSE]),
-          s      = as.vector(shat_m[, idx, drop = FALSE]),
-          mode   = 0,
-          g_init = G_m[[s]]$fitted_g,
-          fix_g  = FALSE)
-      }
+      # `mode = 0` locks the slab at zero (the SuSiE coefficient
+      # is centered there). Skip when `fix_g = TRUE`; ebnm uses
+      # `g_init$mean` and warns if both are passed.
+      args <- list(x      = as.vector(bhat_m[, idx, drop = FALSE]),
+                   s      = as.vector(shat_m[, idx, drop = FALSE]),
+                   g_init = G_m[[s]]$fitted_g,
+                   fix_g  = fix_g)
+      if (!fix_g) args$mode <- 0
+      fit <- do.call(ebnm_fn, args)
       model$G_prior[[m]][[s]]$fitted_g <- fit$fitted_g
       model$pi_V[[m]][s, ]              <- fit$fitted_g$pi
     }
