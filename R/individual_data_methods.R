@@ -560,10 +560,10 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
   # concentrate ~M-fold relative to the M = 1 case. The mixsqp
   # M-step's regularization-to-data balance is set by
   # `nullweight / max_alpha`; to hold this ratio fixed across M
-  # we scale `null_weight` by M. See
+  # we scale `mixture_null_weight` by M. See
   # `inst/notes/cross-package-audit-derivations.md` section 1
   # for the full derivation.
-  null_weight <- (params$null_weight %||% 0.05) *
+  mixture_null_weight <- (params$mixture_null_weight %||% 0.05) *
                         max(1L, data$M)
   control    <- params$control_mixsqp %||% list()
   zeta_l     <- model$alpha[l, ]
@@ -623,7 +623,7 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
       pi_prev <- model$G_prior[[m]][[s]]$fitted_g$pi
       new_pi  <- mf_em_m_step_per_scale(
         L_mat, zeta_keep, idx_size = length(idx),
-        null_weight = null_weight,
+        mixture_null_weight = mixture_null_weight,
         control_mixsqp = control,
         pi_warm_start  = pi_prev)
       model$G_prior[[m]][[s]]$fitted_g$pi <- new_pi

@@ -362,7 +362,7 @@ test_that("mf_em_m_step_per_scale matches a hand-rolled mixsqp invocation at <= 
 
   L_mat <- mfsusieR:::mf_em_likelihood_per_scale(bhat, shat, sd_grid)
   ours  <- mfsusieR:::mf_em_m_step_per_scale(L_mat, zeta, idx_size,
-                                             null_weight = 0.7)
+                                             mixture_null_weight = 0.7)
 
   # Hand mixsqp (same arguments, same control).
   w <- c(0.7 * idx_size, rep(zeta, idx_size))

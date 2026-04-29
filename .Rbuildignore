@@ -1,11 +1,11 @@
 ^inst/bench$
 ^inst/bootstrap-mfsusieR\.sh$
 ^inst/CLAUDE\.md$
-^inst/data-raw$
 ^inst/notes$
 ^inst/openspec$
 ^inst/README-SETUP\.md$
 ^inst/scripts$
+^data-raw$
 ^\.claude$
 ^\.github$
 ^\.Rbuildignore$
