@@ -140,7 +140,7 @@
 #'   null:data balance stays invariant as the per-effect variable
 #'   posterior concentrates linearly in `M`; single-outcome fits
 #'   are unchanged.
-#'   Default 0.7.
+#'   Default `0.1`.
 #' @param mixsqp_alpha_eps numeric, threshold below which a
 #'   variable's per-effect posterior `alpha[l, j]` is dropped
 #'   from the mixsqp M-step input. The truncation error on the
@@ -397,9 +397,12 @@ mfsusie <- function(X, Y,
     for (m in seq_len(data$M)) {
       fit$Y_grid[[m]] <- data$Y[[m]]
     }
-    L <- nrow(fit$alpha)
-    fit$X_eff <- vector("list", L)
-    for (l in seq_len(L)) {
+    # Use the post-greedy effect count from the fit; in the
+    # L-greedy outer loop the workhorse may return fewer effects
+    # than the requested `L`.
+    L_eff <- nrow(fit$alpha)
+    fit$X_eff <- vector("list", L_eff)
+    for (l in seq_len(L_eff)) {
       # data$X is centered + standardized; multiply by data$csd
       # (X_scale) to get the raw-X column equivalent of the
       # alpha-weighted aggregate.

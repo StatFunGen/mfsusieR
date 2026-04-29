@@ -29,9 +29,10 @@ compute_residuals.mf_individual <- function(data, params, model, l, ...) {
   X <- data$X
   M <- data$M
 
-  if (is.null(model$residuals))      model$residuals      <- vector("list", M)
-  if (is.null(model$fitted_without_l)) model$fitted_without_l <- vector("list", M)
-  if (is.null(model$raw_residuals))  model$raw_residuals  <- vector("list", M)
+  # `model$residuals`, `fitted_without_l`, `raw_residuals` are
+  # preallocated as length-M lists by
+  # `initialize_susie_model.mf_individual` and overwritten in
+  # place per effect.
 
   alpha_l <- model$alpha[l, ]
   for (m in seq_len(M)) {
@@ -583,6 +584,18 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
   zeta_keep <- zeta_l[keep_idx]
 
   cache <- model$em_cache
+  p_full <- length(zeta_l)
+  # The cached sdmat / log_sdmat are laid out in column-major order
+  # over `(j = 1..p_full, t in idx)`. Restricting to the rows that
+  # correspond to `keep_idx` is the same index expression for both
+  # caches, so we factor it once per `(m, s)`.
+  cache_row_keep <- function(idx) {
+    as.vector(outer(keep_idx, (seq_along(idx) - 1L) * p_full, "+"))
+  }
+  cache_subset <- function(cache_ms, idx) {
+    if (is.null(cache_ms)) NULL
+    else cache_ms[cache_row_keep(idx), , drop = FALSE]
+  }
   for (m in seq_len(data$M)) {
     bhat_m <- ser_stats$betahat[[m]]
     shat_m <- sqrt(ser_stats$shat2[[m]])
@@ -599,24 +612,8 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
       sd_grid <- G_m[[s]]$fitted_g$sd
       bhat_sub <- bhat_m[keep_idx, idx, drop = FALSE]
       shat_sub <- shat_m[keep_idx, idx, drop = FALSE]
-      sdmat_sub <- if (!is.null(cache_m_sdmat[[s]])) {
-        # The cached sdmat is laid out in column-major order over
-        # (j = 1..p, t in idx). Restrict to rows corresponding to
-        # `keep_idx`. The full sdmat is `(p * |idx|) x K`; the
-        # subset is `(length(keep_idx) * |idx|) x K`.
-        p_full <- length(zeta_l)
-        row_keep <- as.vector(outer(keep_idx,
-                                    (seq_along(idx) - 1L) * p_full,
-                                    "+"))
-        cache_m_sdmat[[s]][row_keep, , drop = FALSE]
-      } else NULL
-      log_sdmat_sub <- if (!is.null(cache_m_log_sdmat[[s]])) {
-        p_full <- length(zeta_l)
-        row_keep <- as.vector(outer(keep_idx,
-                                    (seq_along(idx) - 1L) * p_full,
-                                    "+"))
-        cache_m_log_sdmat[[s]][row_keep, , drop = FALSE]
-      } else NULL
+      sdmat_sub     <- cache_subset(cache_m_sdmat[[s]],     idx)
+      log_sdmat_sub <- cache_subset(cache_m_log_sdmat[[s]], idx)
       L_mat <- mf_em_likelihood_per_scale(
         bhat_slice      = bhat_sub,
         shat_slice      = shat_sub,

@@ -237,19 +237,16 @@ get_scale_factors.mf_individual <- function(data, params, ...) {
 
 #' Per-outcome intercepts (length `M`)
 #'
-#' Reconstructs the intercept per outcome on the original Y scale.
 #' Returns a list of length `M`; each entry is a length-`T_basis[m]`
-#' vector. Computed from per-effect posterior means projected back
-#' through the inverse wavelet transform when `T_basis[m] > 1`.
+#' zero vector. mfsusieR centers Y per-outcome, per-column at
+#' construction, so the wavelet-domain intercept is identically
+#' zero. The on-original-Y-scale reconstruction (per
+#' `predict.mfsusie`) folds the per-column center back in via
+#' `dwt_meta$column_center[[m]]` rather than through this method.
 #'
 #' @keywords internal
 #' @noRd
 get_intercept.mf_individual <- function(data, params, model, ...) {
-  if (!isTRUE(params$intercept)) {
-    return(lapply(data$T_basis, function(T_m) rep(0, T_m)))
-  }
-  # mfsusieR centers Y per-outcome, per-column at construction.
-  # Intercept reconstruction returns 0.
   lapply(data$T_basis, function(T_m) rep(0, T_m))
 }
 
@@ -273,6 +270,11 @@ get_variable_names.mf_individual <- function(data, model, ...) {
 }
 
 #' Univariate z-scores not exposed for `mf_individual`
+#'
+#' Override the `.individual` default (which would crash on the
+#' list-shaped `data$D`). mfsusieR does not surface per-variable
+#' z-scores; use `fit$lbf_variable` for per-variable evidence.
+#'
 #' @keywords internal
 #' @noRd
 get_zscore.mf_individual <- function(data, params, model, ...) {
