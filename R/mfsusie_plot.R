@@ -95,6 +95,29 @@ credibly_nonzero_mask <- function(band) {
   band[, 1L] > 0 | band[, 2L] < 0
 }
 
+# Canonical per-CS label vector, one entry per CS in
+# `fit$sets$cs`. susieR's `susie_get_cs()` populates
+# `names(fit$sets$cs) <- paste0("L", effect_indices)` after the
+# purity-based reordering, so the i-th entry of `cs`, the i-th
+# row of `purity`, the i-th color from `mf_cs_colors`, and the
+# i-th label all refer to the SAME effect. Errors if the names
+# slot is missing or empty (which would indicate a malformed fit
+# or a non-susieR-compliant cs object); we don't fall back to a
+# positional `paste0("CS", i)` because that would silently
+# disagree with the legend conventions used everywhere else.
+.cs_labels <- function(fit) {
+  cs <- fit$sets$cs
+  if (length(cs) == 0L) return(character(0L))
+  nm <- names(cs)
+  if (is.null(nm) || any(!nzchar(nm)) || any(is.na(nm))) {
+    stop("`fit$sets$cs` must be a named list with susieR's ",
+         "convention `names(cs) <- paste0(\"L\", effect_indices)`. ",
+         "Got ", if (is.null(nm)) "an unnamed list" else "missing/empty names",
+         ". This indicates a malformed fit.", call. = FALSE)
+  }
+  nm
+}
+
 # Resolve facet_cs: "auto" -> "stack" or "overlay". Stack when
 # length(cs) >= 3 OR when affected-region masks are pairwise
 # disjoint (and length(cs) >= 2). Overlay otherwise.
@@ -157,16 +180,60 @@ credibly_nonzero_mask <- function(band) {
            pch = 1L, col = "red", cex = cex * 1.6, lwd = 2.5)
   }
   cs <- fit$sets$cs %||% list()
-  if (add_legend && length(cs) > 0L) {
-    pal <- mf_cs_colors(length(cs))
-    legend("topleft", legend = paste0("CS", seq_along(cs)),
-           col = pal, pch = 19L, bty = "n", cex = 0.75)
+  if (add_legend && (length(cs) > 0L || length(truth_idx) > 0L)) {
+    .pip_legend(fit, cs, truth_present = length(truth_idx) > 0L)
   }
-  if (length(truth_idx) > 0L && add_legend) {
-    legend("topright", legend = "true effect",
-           col = "red", pch = 1L, pt.lwd = 2.5, pt.cex = 1.4,
-           bty = "n", cex = 0.75)
+}
+
+# Internal: compose the bottom-right PIP legend.
+#
+# Each CS gets one line `CS=<index>/size=<n>/min(|r|)=<rho>`,
+# colored by the per-CS palette. When true-effect variables are
+# also drawn, a final line "true effect" with the red open-circle
+# glyph stacks under the CS lines (one combined `legend()` call
+# keeps the lines vertically flush).
+.pip_legend <- function(fit, cs, truth_present) {
+  pal <- if (length(cs) > 0L) mf_cs_colors(length(cs)) else character(0L)
+  cs_names <- if (length(cs) > 0L) .cs_labels(fit) else character(0L)
+  pur    <- fit$sets$purity
+  has_pur <- is.data.frame(pur) && "min.abs.corr" %in% colnames(pur)
+
+  cs_labels <- if (length(cs) > 0L) {
+    vapply(seq_along(cs), function(i) {
+      size_i <- length(cs[[i]])
+      # Singletons have no within-CS correlation, so min(|r|) is
+      # uninformative (and undefined in `fit$sets$purity` when the
+      # purity machinery skips length-1 CSes). Mirrors susieR's
+      # `susie_plot()` which drops the R= field for singletons.
+      if (size_i == 1L) {
+        sprintf("%s: size=1", cs_names[i])
+      } else {
+        pur_i <- if (has_pur) pur[i, "min.abs.corr"] else NA_real_
+        pur_str <- if (is.finite(pur_i)) sprintf("%.2f", pur_i) else "NA"
+        sprintf("%s: size=%d/min(|r|)=%s", cs_names[i], size_i, pur_str)
+      }
+    }, character(1))
+  } else character(0L)
+
+  labs    <- cs_labels
+  cols    <- pal
+  pchs    <- rep(19L, length(cs_labels))
+  pt_lwds <- rep(1.0, length(cs_labels))
+  pt_cexs <- rep(1.0, length(cs_labels))
+  if (truth_present) {
+    labs    <- c(labs, "true effect")
+    cols    <- c(cols, "red")
+    pchs    <- c(pchs, 1L)
+    pt_lwds <- c(pt_lwds, 2.5)
+    pt_cexs <- c(pt_cexs, 1.4)
   }
+
+  # `inset = c(0.02, 0.05)` lifts the block slightly off the
+  # bottom-right corner so it sits above the x-axis ticks.
+  legend("bottomright", inset = c(0.02, 0.05),
+         legend = labs, col = cols, pch = pchs,
+         pt.lwd = pt_lwds, pt.cex = pt_cexs,
+         bty = "n", cex = 0.75)
 }
 
 # Coerce an `effect_variables` user input to integer indices in 1..p.
@@ -280,10 +347,13 @@ credibly_nonzero_mask <- function(band) {
   }
 }
 
-# CS legend with optional "truth" header row.
+# CS legend with optional "truth" header row. `cs_subset` is a
+# vector of effect indices (one per panel line); we label each
+# line `L<effect_index>` to match the per-CS convention used by
+# the PIP legend and `susieR::susie_plot()`.
 .effect_cs_legend <- function(cs_subset, pal, has_truth, lwd, style) {
   K <- length(cs_subset)
-  lab <- paste0("CS", seq_len(K))
+  lab <- paste0("L", cs_subset)
   cols <- pal
   if (style == "band") {
     lwds <- rep(lwd, K); ltys <- rep(1L, K); pchs <- rep(NA_integer_, K)
@@ -411,16 +481,17 @@ credibly_nonzero_mask <- function(band) {
 
 # Internal: scalar (T = 1) outcome dot plot.
 .draw_scalar_effect <- function(fit, m, smoothed, main) {
-  cs   <- fit$sets$cs %||% list()
-  cs_l <- fit$sets$cs_index %||% seq_along(cs)
+  cs   <- fit$sets$cs
+  cs_l <- fit$sets$cs_index
   pal  <- mf_cs_colors(length(cs))
+  labs <- .cs_labels(fit)
   eff  <- vapply(cs_l, function(l) .effect_curve(fit, l, m, smoothed),
                  numeric(1))
   plot(seq_along(cs_l), eff, type = "p", pch = 19L,
        col = pal, cex = 1.4,
        xlab = "credible set", ylab = "effect",
        xaxt = "n", main = main, las = 1)
-  axis(1, at = seq_along(cs_l), labels = paste0("CS", seq_along(cs_l)))
+  axis(1, at = seq_along(cs_l), labels = labs)
   abline(h = 0, lty = 2, col = "grey60")
 }
 
@@ -474,14 +545,15 @@ credibly_nonzero_mask <- function(band) {
   cs   <- fit$sets$cs %||% list()
   cs_l <- fit$sets$cs_index %||% seq_along(cs)
   pal  <- mf_cs_colors(length(cs))
+  labs <- if (length(cs) > 0L) .cs_labels(fit) else character(0L)
   if (is.null(pos)) pos <- fit$dwt_meta$pos[[m]]
   if (!is.null(mar_cs)) {
     op <- par(mar = mar_cs); on.exit(par(op), add = TRUE)
   }
   for (i in seq_len(K)) {
     is_last <- last_cell && (i == K)
-    title_i <- if (is.null(main_prefix)) sprintf("CS%d", i)
-               else sprintf("%s — CS%d", main_prefix, i)
+    title_i <- if (is.null(main_prefix)) labs[i]
+               else sprintf("%s — %s", main_prefix, labs[i])
     .draw_effect_panel(fit, m, cs_subset = cs_l[i],
                        effect_style = effect_style,
                        pos = pos, pal = pal[i], lwd = lwd,
@@ -1041,8 +1113,7 @@ mfsusie_plot_lfsr_dimensions <- function(fit, add_legend = TRUE) {
   # has been moved to the right margin (see below) so the top
   # margin is reserved only for the title.
   mtext(main, side = 3L, line = 0.6, cex = 1.05, font = 2L)
-  axis(2, at = seq_len(K), labels = paste0("CS", seq_len(K)),
-       las = 1)
+  axis(2, at = seq_len(K), labels = .cs_labels(fit), las = 1)
   abline(h = seq_len(K), lty = 3, col = "grey85")
 
   for (i in seq_len(K)) {

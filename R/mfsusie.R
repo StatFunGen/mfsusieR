@@ -32,6 +32,11 @@
 #'   of length `T_m` recording the sampling positions for that
 #'   outcome. Defaults to `seq_len(T_m)` per outcome.
 #' @param L integer, maximum number of single effects to fit.
+#'   Default `20`. With the default `L_greedy = 5`, the IBSS
+#'   workhorse grows the effect count from 5 toward this cap in
+#'   steps of 5 until the fit saturates (`min(lbf) <
+#'   greedy_lbf_cutoff`); set `L_greedy = NULL` to fit the full
+#'   `L` effects in one round.
 #' @param prior_variance_grid optional length-K vector of mixture
 #'   variances for the scale-mixture-of-normals prior. When `NULL`,
 #'   the data-driven path
@@ -65,10 +70,11 @@
 #' @param coverage numeric in (0, 1), credible-set coverage.
 #' @param min_abs_corr numeric, minimum variable-to-variable correlation
 #'   inside a credible set (CS purity threshold).
-#' @param L_greedy integer or `NULL`. When non-`NULL`, run susieR's
-#'   greedy outer loop, growing the effect count from `L_greedy` up
-#'   to `L` in linear steps until the fit saturates
-#'   (`min(lbf) < greedy_lbf_cutoff`).
+#' @param L_greedy integer or `NULL`. When non-`NULL` (default `5`),
+#'   run susieR's greedy outer loop, growing the effect count from
+#'   `L_greedy` up to `L` in linear steps until the fit saturates
+#'   (`min(lbf) < greedy_lbf_cutoff`). Set `NULL` to fit the full
+#'   `L` effects in one round.
 #' @param greedy_lbf_cutoff numeric saturation threshold for the
 #'   greedy outer loop. Default 0.1.
 #' @param estimate_prior_variance logical. When `TRUE` (default),
@@ -225,7 +231,7 @@
 #' @export
 mfsusie <- function(X, Y,
                     pos                       = NULL,
-                    L                         = 10,
+                    L                         = 20,
                     prior_variance_grid       = NULL,
                     prior_variance_scope      = c("per_outcome",
                                                   "per_scale"),
@@ -241,7 +247,7 @@ mfsusie <- function(X, Y,
                     tol                       = 1e-4,
                     coverage                  = 0.95,
                     min_abs_corr              = 0.5,
-                    L_greedy                  = NULL,
+                    L_greedy                  = 5,
                     greedy_lbf_cutoff          = 0.1,
                     estimate_prior_variance   = TRUE,
                     convergence_method        = c("pip", "elbo"),
