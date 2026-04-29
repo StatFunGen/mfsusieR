@@ -263,7 +263,14 @@ mf_em_point_normal <- function(x, s, w = NULL,
     -sum(w * (M + log(pi_0 * exp(la - M) + (1 - pi_0) * exp(lb - M))))
   }
 
-  par_init <- c(qlogis(pi_0_init), log(sigma_init))
+  # `qlogis(0)` and `qlogis(1)` are infinite; L-BFGS-B starts on
+  # the (clamped) boundary and the gradient direction back into
+  # the interior is poorly conditioned -- it stalls at pi_0 ~ 0
+  # or 1 even when the data prefers something else. Clamp the
+  # *starting point* to `[eps, 1-eps]`; the optimum itself is
+  # free to move anywhere in `[0, 1]` via the SQP convergence.
+  par_init <- c(qlogis(min(max(pi_0_init, 1e-3), 1 - 1e-3)),
+                log(max(sigma_init, 1e-6)))
   fit <- tryCatch(
     optim(par_init, nll, method = "L-BFGS-B",
           lower = c(-30, -20), upper = c(30, 20),
