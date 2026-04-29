@@ -18,7 +18,6 @@
 mf_invert_per_outcome <- function(coef_wavelet, m, dwt_meta,
                                   intercept = TRUE) {
   T_pad <- dwt_meta$T_basis[m]
-  pos_m <- dwt_meta$pos[[m]]
   # Match susieR's `coef.susie` convention where the intercept is a
   # separable component: response reconstructions (`predict`,
   # `fitted`) keep it; per-effect (slope) reconstructions (`coef`)
@@ -28,24 +27,17 @@ mf_invert_per_outcome <- function(coef_wavelet, m, dwt_meta,
   cm    <- if (intercept) dwt_meta$column_center[[m]] else rep(0, T_pad)
   csd   <- dwt_meta$column_scale[[m]]
 
-  # Each row of `coef_wavelet` is a length-T_basis wavelet vector.
-  # mf_invert_dwt applies wr() per row internally; pass row-by-row
-  # via a small loop since mf_invert_dwt expects (n x T) input where
-  # n is the row count.
-  inverted <- mf_invert_dwt(
+  # `mf_invert_dwt` returns one curve per row of `coef_wavelet`,
+  # on the post-remap padded grid stored at `dwt_meta$pos[[m]]`
+  # (length `T_pad`). Callers (predict / coef / fitted) work on
+  # that grid throughout, so no per-call trimming is needed.
+  mf_invert_dwt(
     D_packed       = coef_wavelet,
     column_center  = cm,
     column_scale   = csd,
     filter_number  = dwt_meta$wavelet_filter,
     family         = dwt_meta$wavelet_family
   )
-  # `inverted` is row-by-row reconstructed; if T_pad > length(pos_m)
-  # the columns beyond the original positions are padding -- keep
-  # only the original positions.
-  if (ncol(inverted) > length(pos_m)) {
-    inverted <- inverted[, seq_along(pos_m), drop = FALSE]
-  }
-  inverted
 }
 
 # Per-effect coefficient matrix (p x T_basis) for effect l, outcome m,
@@ -636,12 +628,11 @@ mf_post_smooth <- function(fit,
     return(requested)
   }
   if (is.null(fit$smoothed) || length(fit$smoothed) == 0L) return(NULL)
+  # `mf_post_smooth(method = ...)` constrains method names via
+  # `match.arg` to the known set, so every name in `fit$smoothed`
+  # is in `.smoother_priority` and the intersection is non-empty.
   applied <- intersect(.smoother_priority, names(fit$smoothed))
-  if (length(applied) == 0L) {
-    # Method names off-spec; fall back to first.
-    return(names(fit$smoothed)[1L])
-  }
-  picked <- applied[1L]
+  picked  <- applied[1L]
   if (length(applied) > 1L) {
     others <- setdiff(applied, picked)
     msg <- sprintf(
@@ -725,7 +716,9 @@ mf_post_smooth <- function(fit,
     credible_bands[[m]] <- vector("list", L)
     lfsr_curves[[m]]    <- vector("list", L)
     if (T_m == 1L) {
-      # Scalar outcome: TI is a no-op; fall back to scalewise.
+      warning_message(sprintf(
+        "method = 'TI' is a wavelet smoother and adds no power for outcome %d (T_m = 1, scalar). Falling back to method = 'scalewise' for that outcome.",
+        m), style = "hint")
       tmp <- .post_smooth_scalewise(fit, level, threshold_factor = 1)
       effect_curves[[m]]  <- tmp$effect_curves[[m]]
       credible_bands[[m]] <- tmp$credible_bands[[m]]
@@ -901,6 +894,9 @@ univariate_ti_regression <- function(Y_pos, x_eff,
     lfsr_curves[[m]]    <- vector("list", L)
 
     if (T_m == 1L) {
+      warning_message(sprintf(
+        "method = 'HMM' is a position-space smoother and adds no power for outcome %d (T_m = 1, scalar). Falling back to method = 'scalewise' for that outcome.",
+        m), style = "hint")
       tmp <- .post_smooth_scalewise(fit, level, threshold_factor = 1)
       effect_curves[[m]]  <- tmp$effect_curves[[m]]
       credible_bands[[m]] <- tmp$credible_bands[[m]]

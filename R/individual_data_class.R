@@ -122,35 +122,25 @@ create_mf_individual <- function(X,
     column_center[[m]] <- out$column_center
     column_scale[[m]]  <- out$column_scale
 
-    # Optional preprocessing: column-wise rank-based normal quantile
-    # transform on the wavelet-domain response. Applied BEFORE the
-    # low-count index computation so the median check sees the
-    # transformed scale.
-    if (quantile_norm && T_basis[m] > 1L) {
-      D[[m]] <- mf_quantile_normalize(D[[m]])
-    }
-
-    # Optional preprocessing: low-count column indices. With the
-    # default threshold 0 the set is empty when every column has
-    # at least one nonzero absolute value across samples.
+    # Functional-only preprocessing. Quantile-norm, low-count
+    # masking, and position remap each operate on a multi-column
+    # wavelet matrix and short-circuit to no-op for scalar
+    # outcomes (`T_basis[m] == 1L`): the scalar `D[[m]]` is
+    # already its own representation, has no inter-column
+    # ordering to threshold, and lives on the original (single-
+    # position) grid.
+    lowc_idx[[m]]   <- integer(0)
+    Y_remapped[[m]] <- Y[[m]]
     if (T_basis[m] > 1L) {
+      if (quantile_norm) D[[m]] <- mf_quantile_normalize(D[[m]])
       lowc_idx[[m]] <- mf_low_count_indices(D[[m]],
                                             threshold = low_count_filter)
       if (length(lowc_idx[[m]]) > 0L) {
         D[[m]][, lowc_idx[[m]]] <- 0
       }
-    } else {
-      lowc_idx[[m]] <- integer(0)
-    }
-
-    # Cache the post-remap Y on the padded grid for downstream
-    # residual computation; the wavelet representation lives in `D`.
-    Y_remapped[[m]] <- if (T_basis[m] == 1L) {
-      Y[[m]]
-    } else {
-      remap_data(Y[[m]], pos[[m]],
-                 verbose   = FALSE,
-                 max_scale = max_padded_log2)$Y
+      Y_remapped[[m]] <- remap_data(Y[[m]], pos[[m]],
+                                    verbose   = FALSE,
+                                    max_scale = max_padded_log2)$Y
     }
   }
 

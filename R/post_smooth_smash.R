@@ -33,7 +33,9 @@
     credible_bands[[m]] <- vector("list", L)
     lfsr_curves[[m]]    <- vector("list", L)
     if (T_m == 1L) {
-      # Scalar outcome: smash is a no-op; fall back to scalewise.
+      warning_message(sprintf(
+        "method = 'smash' is a wavelet smoother and adds no power for outcome %d (T_m = 1, scalar). Falling back to method = 'scalewise' for that outcome.",
+        m), style = "hint")
       tmp <- .post_smooth_scalewise(fit, level, threshold_factor = 1)
       effect_curves[[m]]  <- tmp$effect_curves[[m]]
       credible_bands[[m]] <- tmp$credible_bands[[m]]

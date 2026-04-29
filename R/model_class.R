@@ -128,6 +128,11 @@ initialize_susie_model.mf_individual <- function(data, params, var_y, ...) {
     sigma2            = sigma2,
     pi                = prior_weights,
     fitted            = fitted_values,
+    # Per-outcome SER scratch slots, populated in-place by
+    # `compute_residuals.mf_individual` per effect.
+    residuals         = vector("list", M),
+    fitted_without_l  = vector("list", M),
+    raw_residuals     = vector("list", M),
     intercept         = rep(0, M),
     L                 = L,
     p                 = p,

@@ -549,9 +549,11 @@ mf_invert_variance_curve <- function(var_w,
     stop(sprintf("var_w has length %d but T_basis = %d.",
                  length(var_w), T_basis))
   }
-  if (T_basis == 1L) return(var_w)
 
-  # Build squared inverse-DWT matrix column-by-column.
+  # Build squared inverse-DWT matrix column-by-column. The
+  # `T_basis = 1` case reduces to identity here: the single basis
+  # function is `e_1`, `mf_invert_dwt(e_1) = 1`, so `W_sq = 1`
+  # and the function returns `var_w` unchanged.
   W_sq <- matrix(0, nrow = T_basis, ncol = T_basis)
   for (k in seq_len(T_basis)) {
     e_k <- numeric(T_basis); e_k[k] <- 1

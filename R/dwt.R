@@ -59,54 +59,53 @@ mf_dwt <- function(Y_m,
   }
   T_m <- ncol(Y_m)
 
-  # Univariate short-circuit. The "wavelet representation" of a
-  # length-1 signal is the signal itself; we only need the
-  # per-column center + sd scale (matching the functional path's
-  # convention so the two paths are interchangeable at T_m = 1).
-  # The branch exists because `wd` does not accept
-  # length-1 inputs.
-  if (T_m == 1) {
-    cm  <- mean(Y_m, na.rm = TRUE)
-    csd <- sd(as.numeric(Y_m), na.rm = TRUE)
-    if (!is.finite(csd) || csd == 0) csd <- 1
-    Y_scaled <- (Y_m - cm) / csd
-    return(list(
-      D             = Y_scaled,
-      scale_index   = list(1L),
-      T_basis      = 1L,
-      pos           = pos_m,
-      column_center = cm,
-      column_scale  = csd,
-      family        = family,
-      filter_number = filter_number
-    ))
+  # Position remap is only meaningful for `T_m > 1`. For a scalar
+  # outcome the wavelet representation IS the signal, sampled at
+  # the original (single) position.
+  if (T_m == 1L) {
+    Y_remapped  <- Y_m
+    outing_grid <- pos_m
+  } else {
+    remap <- remap_data(Y_m, pos_m,
+                        verbose   = verbose,
+                        max_scale = max_padded_log2)
+    Y_remapped  <- remap$Y
+    outing_grid <- remap$outing_grid
   }
 
-  # Functional path.
-  remap <- remap_data(Y_m, pos_m,
-                      verbose   = verbose,
-                      max_scale = max_padded_log2)
-  Y_remapped  <- remap$Y
-  outing_grid <- remap$outing_grid
-
-  # Per-column center + sd scale.
+  # Per-column center + sd scale. col_scale floors zero-variance
+  # columns at csd = 1, so the scalar / constant-column case is
+  # handled the same way as any zero-variance functional column.
   Y_scaled      <- col_scale(Y_remapped, center = TRUE, scale = TRUE)
   column_center <- attr(Y_scaled, "scaled:center")
   column_scale  <- attr(Y_scaled, "scaled:scale")
 
-  T_basis   <- ncol(Y_remapped)
-  log2_T_pad <- log2(T_basis)
-  W <- dwt_matrix(Y_scaled,
-                  filter_number = filter_number,
-                  family        = family,
-                  max_scale     = max_padded_log2)
-  D_packed    <- cbind(W$D, W$C)
-  scale_index <- gen_wavelet_indx(log2_T_pad)
+  T_basis <- ncol(Y_remapped)
+
+  # Forward DWT runs only for `T_basis > 1`; `wavethresh::wd`
+  # rejects length-1 inputs. The scalar case takes the identity
+  # path: `D` is the centered/scaled signal and `scale_index` is
+  # the trivial one-group list, matching the multi-column shape.
+  # Strip `col_scale`'s bookkeeping attributes from the scalar
+  # `D_packed` so the field shape matches `cbind(W$D, W$C)` from
+  # the functional branch (no attributes beyond `dim`).
+  if (T_basis == 1L) {
+    D_packed    <- matrix(as.numeric(Y_scaled),
+                          nrow = nrow(Y_scaled), ncol = 1L)
+    scale_index <- list(1L)
+  } else {
+    W <- dwt_matrix(Y_scaled,
+                    filter_number = filter_number,
+                    family        = family,
+                    max_scale     = max_padded_log2)
+    D_packed    <- cbind(W$D, W$C)
+    scale_index <- gen_wavelet_indx(log2(T_basis))
+  }
 
   list(
     D             = D_packed,
     scale_index   = scale_index,
-    T_basis      = T_basis,
+    T_basis       = T_basis,
     pos           = outing_grid,
     column_center = column_center,
     column_scale  = column_scale,
@@ -152,26 +151,29 @@ mf_invert_dwt <- function(D_packed,
   T_basis <- ncol(D_packed)
   n <- nrow(D_packed)
 
-  # Univariate short-circuit.
-  if (T_basis == 1) {
-    return(D_packed * column_scale + column_center)
-  }
+  # `wavethresh::wr` rejects length-1 inputs, so the scalar
+  # case takes the identity path. The reverse-center+scale step
+  # below would also handle this branch — we keep it explicit
+  # because building a `wd` template at `T_basis = 1` errors.
+  if (T_basis == 1L) {
+    Y_curves <- D_packed
+  } else {
+    # Build a `wd` skeleton at the right length (filled with zeros);
+    # we inject the D and C coefficients per row and call wr().
+    template <- wd(rep(0, T_basis),
+                               filter.number = filter_number,
+                               family        = family,
+                               min.scale     = log2(T_basis))
 
-  # Build a `wd` skeleton at the right length (filled with zeros);
-  # we inject the D and C coefficients per row and call wr().
-  template <- wd(rep(0, T_basis),
-                             filter.number = filter_number,
-                             family        = family,
-                             min.scale     = log2(T_basis))
-
-  Y_curves <- matrix(0, nrow = n, ncol = T_basis)
-  for (i in seq_len(n)) {
-    w <- template
-    w$D <- D_packed[i, -T_basis]
-    # wavethresh stores the C coefficients as a vector spanning all
-    # scales; the coarsest (level 0) C lives at the last position.
-    w$C[length(w$C)] <- D_packed[i, T_basis]
-    Y_curves[i, ] <- wr(w)
+    Y_curves <- matrix(0, nrow = n, ncol = T_basis)
+    for (i in seq_len(n)) {
+      w <- template
+      w$D <- D_packed[i, -T_basis]
+      # wavethresh stores the C coefficients as a vector spanning all
+      # scales; the coarsest (level 0) C lives at the last position.
+      w$C[length(w$C)] <- D_packed[i, T_basis]
+      Y_curves[i, ] <- wr(w)
+    }
   }
 
   # Reverse the per-position centering and scaling.
