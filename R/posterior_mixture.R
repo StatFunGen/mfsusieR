@@ -1,12 +1,9 @@
-# Per-(variable, scale) mixture-of-normals helpers, R-wrapper layer.
+# Per-(variable, scale) mixture-of-normals helpers (vectorized R).
 #
-# The kernels themselves live in `src/posterior_mixture.cpp` (cpp11);
-# this file is the thin wrapper that input-validates and forwards.
-# Pure-R oracles for the same kernels live in
-# `R/reference_implementations.R` and are tested at <= 1e-12 against
-# the cpp11 output.
-#
-# Compiled cpp11 kernels for the per-effect SER hot path.
+# Closed-form mixture log-BF and posterior moments for the per-effect
+# SER step. Pure vectorized R + BLAS; no cpp dependency. Numerical
+# parity with the prior cpp implementation guaranteed at <= 1e-12 by
+# `tests/testthat/test_posterior_mixture.R`.
 #
 # Manuscript references:
 #   methods/derivation.tex eq:post_f_mix
@@ -14,10 +11,15 @@
 
 #' Per-(variable, scale) log-Bayes factor under a mixture-of-normals prior
 #'
-#' Forwards to the cpp11 kernel
-#' `mixture_log_bf_per_scale_cpp` in `src/posterior_mixture.cpp`. The
-#' R reference oracle `mixture_log_bf_per_scale_R` in
-#' `R/reference_implementations.R` matches this at `<= 1e-12`.
+#' Closed-form log Bayes factor for the per-scale
+#' mixture-of-normals prior. For variable j and the scale's
+#' `|idx_s|` positions, computes
+#' `sum_i logSumExp_k( log(pi_k) +
+#'                     log dnorm(Bhat[j,i]; 0, V*sd_k^2 + Shat[j,i]^2)
+#'                     - log dnorm(Bhat[j,i]; 0, Shat[j,i]^2) )`.
+#' The null component (`sd_k = 0`) contributes `log(pi_k)` per
+#' position. Vectorized via per-component matrices and `pmax` /
+#' `exp` / `rowSums` aggregation.
 #'
 #' @param bhat_slice p x |idx_s| matrix of marginal effect estimates
 #'   for one outcome, one scale.
@@ -26,7 +28,7 @@
 #'   deviations (`sd_k = 0` for the null component).
 #' @param pi_grid length-K vector of mixture-component weights.
 #' @param V_scale numeric scalar, per-effect prior-variance multiplier
-#'   (so component variance is `V_scale * sd_k^2`).
+#'   (component variance is `V_scale * sd_k^2`).
 #' @return numeric vector of length p.
 #' @keywords internal
 #' @noRd
@@ -38,29 +40,46 @@ mixture_log_bf_per_scale <- function(bhat_slice,
   if (!is.matrix(bhat_slice) || !is.matrix(shat_slice)) {
     stop("`bhat_slice` and `shat_slice` must be matrices.")
   }
-  mixture_log_bf_per_scale_cpp(bhat_slice, shat_slice,
-                               as.numeric(sd_grid),
-                               as.numeric(pi_grid),
-                               as.numeric(V_scale))
+  K <- length(sd_grid)
+  log_pi <- log(pi_grid)
+  Shat2  <- shat_slice^2
+  log_dens_null <- -0.5 * log(2 * pi * Shat2) - 0.5 * bhat_slice^2 / Shat2
+
+  per_k <- vector("list", K)
+  for (k in seq_len(K)) {
+    sd_k_var <- sd_grid[k]^2 * V_scale
+    per_k[[k]] <- if (sd_k_var == 0) {
+      matrix(log_pi[k], nrow = nrow(bhat_slice), ncol = ncol(bhat_slice))
+    } else {
+      var_alt <- sd_k_var + Shat2
+      log_dens_alt <- -0.5 * log(2 * pi * var_alt) - 0.5 * bhat_slice^2 / var_alt
+      log_pi[k] + log_dens_alt - log_dens_null
+    }
+  }
+
+  m <- per_k[[1]]
+  if (K > 1) for (k in 2:K) m <- pmax(m, per_k[[k]])
+  s <- exp(per_k[[1]] - m)
+  if (K > 1) for (k in 2:K) s <- s + exp(per_k[[k]] - m)
+  rowSums(m + log(s))
 }
 
 #' Per-(variable, scale) log-Bayes factor under a mixture-of-Student-t prior
 #'
-#' R-only kernel that mirrors `mixture_log_bf_per_scale` but
-#' replaces each Normal density with a scaled Student-t (location
-#' 0, scale `sqrt(V_scale * sd_k^2 + Shat^2)`, degrees of freedom
-#' `df`). Selected by `small_sample_correction = TRUE` on
-#' `mfsusie()` / `fsusie()` when the per-outcome sample size is
+#' Replaces each Normal density in `mixture_log_bf_per_scale` with a
+#' scaled Student-t (location 0, scale `sqrt(V_scale * sd_k^2 + Shat^2)`,
+#' degrees of freedom `df`). Selected by `small_sample_correction = TRUE`
+#' on `mfsusie()` / `fsusie()` when the per-outcome sample size is
 #' small enough that the Wakefield Normal approximation
 #' under-propagates residual-variance uncertainty into the
 #' per-variable Bayes factor. Posterior moments
 #' (`mixture_posterior_per_scale`) are unchanged: the correction
-#' acts on variable selection probabilities, not on the
-#' conditional posterior given inclusion.
+#' acts on variable selection probabilities, not on the conditional
+#' posterior given inclusion.
 #'
 #' @inheritParams mixture_log_bf_per_scale
-#' @param df positive integer, degrees of freedom for the
-#'   Student-t marginal. Conventionally `n - 1` per outcome.
+#' @param df positive integer, degrees of freedom for the Student-t
+#'   marginal. Conventionally `n - 1` per outcome.
 #' @return numeric vector of length p.
 #' @keywords internal
 #' @noRd
@@ -105,20 +124,26 @@ mixture_log_bf_per_scale_johnson <- function(bhat_slice,
                                        nu  = df, log = TRUE)
   per_cell <- matrix(log(tt) - log_dens_null,
                      nrow = dims[1L], ncol = dims[2L])
-
-  # Per-variable summed across the |idx_s| columns: length-p vector.
   rowSums(per_cell)
 }
 
 #' Per-(variable, position) posterior moments under a mixture-of-normals prior
 #'
-#' Forwards to the cpp11 kernel
-#' `mixture_posterior_per_scale_cpp`. Returns the p x |idx_s|
-#' posterior mean and second moment per (variable, position).
+#' Closed-form posterior mean and second moment under the per-scale
+#' mixture-of-normals prior, treating each position as conditionally
+#' independent given the per-component variance. Per-component closed
+#' form (per `(j, i)`):
+#' `var_alt = V*sd_k^2 + Shat^2`,
+#' `shrink  = V*sd_k^2 / var_alt`,
+#' `post_mean_k = shrink * Bhat`,
+#' `post_var_k  = shrink * Shat^2`,
+#' `weight_k = softmax_k( log(pi_k) + log dnorm_alt - log dnorm_null )`.
+#' Mixture-collapsed: `E[beta] = sum_k weight_k * post_mean_k`,
+#' `E[beta^2] = sum_k weight_k * (post_var_k + post_mean_k^2)`.
 #'
 #' @inheritParams mixture_log_bf_per_scale
-#' @return list with elements `pmean` and `pmean2`, each a p x |idx_s|
-#'   matrix.
+#' @return list with elements `pmean` and `pmean2`, each a
+#'   p x |idx_s| matrix.
 #' @keywords internal
 #' @noRd
 mixture_posterior_per_scale <- function(bhat_slice,
@@ -129,8 +154,43 @@ mixture_posterior_per_scale <- function(bhat_slice,
   if (!is.matrix(bhat_slice) || !is.matrix(shat_slice)) {
     stop("`bhat_slice` and `shat_slice` must be matrices.")
   }
-  mixture_posterior_per_scale_cpp(bhat_slice, shat_slice,
-                                  as.numeric(sd_grid),
-                                  as.numeric(pi_grid),
-                                  as.numeric(V_scale))
+  K <- length(sd_grid)
+  p <- nrow(bhat_slice)
+  T_idx <- ncol(bhat_slice)
+  log_pi <- log(pi_grid)
+  Shat2  <- shat_slice^2
+  log_dens_null <- -0.5 * log(2 * pi * Shat2) - 0.5 * bhat_slice^2 / Shat2
+
+  per_k_log_w <- vector("list", K)
+  per_k_pmean <- vector("list", K)
+  per_k_pvar  <- vector("list", K)
+  for (k in seq_len(K)) {
+    sd_k_var <- sd_grid[k]^2 * V_scale
+    if (sd_k_var == 0) {
+      per_k_log_w[[k]] <- matrix(log_pi[k], nrow = p, ncol = T_idx)
+      per_k_pmean[[k]] <- matrix(0, nrow = p, ncol = T_idx)
+      per_k_pvar[[k]]  <- matrix(0, nrow = p, ncol = T_idx)
+    } else {
+      var_alt <- sd_k_var + Shat2
+      log_dens_alt <- -0.5 * log(2 * pi * var_alt) - 0.5 * bhat_slice^2 / var_alt
+      per_k_log_w[[k]] <- log_pi[k] + log_dens_alt - log_dens_null
+      shrink <- sd_k_var / var_alt
+      per_k_pmean[[k]] <- shrink * bhat_slice
+      per_k_pvar[[k]]  <- shrink * Shat2
+    }
+  }
+
+  m_max <- per_k_log_w[[1]]
+  if (K > 1) for (k in 2:K) m_max <- pmax(m_max, per_k_log_w[[k]])
+  e_sum <- exp(per_k_log_w[[1]] - m_max)
+  if (K > 1) for (k in 2:K) e_sum <- e_sum + exp(per_k_log_w[[k]] - m_max)
+
+  pmean  <- matrix(0, nrow = p, ncol = T_idx)
+  pmean2 <- matrix(0, nrow = p, ncol = T_idx)
+  for (k in seq_len(K)) {
+    w_k <- exp(per_k_log_w[[k]] - m_max) / e_sum
+    pmean  <- pmean  + w_k * per_k_pmean[[k]]
+    pmean2 <- pmean2 + w_k * (per_k_pvar[[k]] + per_k_pmean[[k]]^2)
+  }
+  list(pmean = pmean, pmean2 = pmean2)
 }
