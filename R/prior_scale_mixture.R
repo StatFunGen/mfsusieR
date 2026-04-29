@@ -67,13 +67,18 @@ init_scale_mixture_prior_default <- function(Y_m,
                                              groups            = NULL,
                                              grid_multiplier   = sqrt(2),
                                              lowc_idx          = integer(0),
-                                             null_prior_weight = 2) {
+                                             null_prior_weight = 2,
+                                             na_idx            = NULL) {
   prior_class <- match.arg(prior_class,
                            c("mixture_normal", "mixture_normal_per_scale"))
   if (is.null(groups)) {
     stop("`groups` is required: a list of column-index vectors covered by each prior entry.")
   }
 
+  if (!is.null(na_idx)) {
+    Y_m <- Y_m[na_idx, , drop = FALSE]
+    X   <- X[na_idx,   , drop = FALSE]
+  }
   bs <- compute_marginal_bhat_shat(X, Y_m)
 
   if (length(lowc_idx) > 0L) {
@@ -214,7 +219,8 @@ mf_prior_scale_mixture <- function(data,
         grid_multiplier   = grid_multiplier,
         lowc_idx          = if (!is.null(data$lowc_idx)) data$lowc_idx[[m]]
                             else integer(0),
-        null_prior_weight = null_prior_weight
+        null_prior_weight = null_prior_weight,
+        na_idx            = data$na_idx[[m]]   # complete-case rows for trait m
       )
       G_prior_per_outcome[[m]] <- out$G_prior
 
