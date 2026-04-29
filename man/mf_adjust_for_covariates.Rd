@@ -17,8 +17,7 @@ mf_adjust_for_covariates(
   init_pi0_w = 1,
   control_mixsqp = list(verbose = FALSE, eps = 1e-06, numiter.em = 4L),
   grid_mult = sqrt(2),
-  wavelet_magnitude_cutoff = 0,
-  wavelet_qnorm = TRUE
+  wavelet_magnitude_cutoff = 0
 )
 }
 \arguments{
@@ -63,13 +62,6 @@ Default \code{sqrt(2)}.}
 columns whose \verb{median(|column|)} is at or below this cutoff
 are zeroed and treated as uninformative (\code{Bhat = 0},
 \code{Shat = 1}) at every outer iteration. Default \code{0}.}
-
-\item{wavelet_qnorm}{logical. When \code{TRUE} (default), applies a
-column-wise rank-based normal quantile transform to the
-wavelet-domain response before the EB regression loop. The
-returned \code{Y_adjusted} is on the original position scale so
-downstream \code{fsusie(Y_adjusted, X)} calls operate on the same
-units as the input \code{Y}.}
 }
 \value{
 A named list with:

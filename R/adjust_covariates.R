@@ -69,12 +69,6 @@
 #'   columns whose `median(|column|)` is at or below this cutoff
 #'   are zeroed and treated as uninformative (`Bhat = 0`,
 #'   `Shat = 1`) at every outer iteration. Default `0`.
-#' @param wavelet_qnorm logical. When `TRUE` (default), applies a
-#'   column-wise rank-based normal quantile transform to the
-#'   wavelet-domain response before the EB regression loop. The
-#'   returned `Y_adjusted` is on the original position scale so
-#'   downstream `fsusie(Y_adjusted, X)` calls operate on the same
-#'   units as the input `Y`.
 #' @return A named list with:
 #'   \describe{
 #'     \item{`Y_adjusted`}{`n x T` matrix, the residualized response.}
@@ -106,8 +100,7 @@ mf_adjust_for_covariates <- function(Y, Z, X = NULL,
                                                                   eps = 1e-6,
                                                                   numiter.em = 4L),
                                      grid_mult                = sqrt(2),
-                                     wavelet_magnitude_cutoff = 0,
-                                     wavelet_qnorm            = TRUE) {
+                                     wavelet_magnitude_cutoff = 0) {
   method <- match.arg(method)
 
   if (!is.matrix(Y) || !is.numeric(Y))
@@ -125,15 +118,13 @@ mf_adjust_for_covariates <- function(Y, Z, X = NULL,
   if (!is.numeric(wavelet_magnitude_cutoff) || length(wavelet_magnitude_cutoff) != 1L ||
       wavelet_magnitude_cutoff < 0)
     stop("`wavelet_magnitude_cutoff` must be a non-negative scalar.")
-  if (!is.logical(wavelet_qnorm) || length(wavelet_qnorm) != 1L)
-    stop("`wavelet_qnorm` must be `TRUE` or `FALSE`.")
 
   if (method == "ols") {
     return(mf_residualize_ols(Y, Z, X))
   }
 
   mf_residualize_wavelet_eb(Y, Z, X = X,
-                            wavelet_basis_order = wavelet_basis_order,
+                            wavelet_basis_order   = wavelet_basis_order,
                             wavelet_family        = wavelet_family,
                             max_iter              = max_iter,
                             tol                   = tol,
@@ -141,8 +132,7 @@ mf_adjust_for_covariates <- function(Y, Z, X = NULL,
                             init_pi0_w            = init_pi0_w,
                             control_mixsqp        = control_mixsqp,
                             grid_mult             = grid_mult,
-                            wavelet_magnitude_cutoff      = wavelet_magnitude_cutoff,
-                            wavelet_qnorm         = wavelet_qnorm)
+                            wavelet_magnitude_cutoff = wavelet_magnitude_cutoff)
 }
 
 #' OLS Frisch-Waugh-Lovell residualization
@@ -195,8 +185,7 @@ mf_residualize_wavelet_eb <- function(Y, Z, X = NULL,
                                                                    eps = 1e-6,
                                                                    numiter.em = 4L),
                                       grid_mult                = sqrt(2),
-                                      wavelet_magnitude_cutoff = 0,
-                                      wavelet_qnorm            = TRUE) {
+                                      wavelet_magnitude_cutoff = 0) {
   n     <- nrow(Y)
   T_pos <- ncol(Y)
 
@@ -222,14 +211,12 @@ mf_residualize_wavelet_eb <- function(Y, Z, X = NULL,
   lev_res <- log2(T_pad)
   indx_lst <- gen_wavelet_indx(lev_res)
 
-  # Optional preprocessing on the wavelet-domain matrix.
-  # `wavelet_qnorm` is applied first; the median-based low-count
-  # mask is computed on the (possibly transformed) coefficients
-  # so flagged columns are treated as uninformative for the rest
-  # of the run.
-  if (wavelet_qnorm) {
-    Y_wd <- mf_quantile_normalize(Y_wd)
-  }
+  # Mask wavelet columns whose absolute-value median falls at or
+  # below `wavelet_magnitude_cutoff`. Quantile normalization is not
+  # offered here: the function returns `Y_adjusted` on the original
+  # position scale, and a qnorm step inside would put `fitted_func`
+  # in a different unit system, making `Y_adjusted = Y - fitted` a
+  # unit mismatch.
   lowc_idx <- mf_low_count_indices(Y_wd, threshold = wavelet_magnitude_cutoff)
   if (length(lowc_idx) > 0L) {
     Y_wd[, lowc_idx] <- 0
