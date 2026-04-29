@@ -152,10 +152,12 @@
 #'   unregularized MLE. Internally scaled by `M` so the
 #'   null:data balance is invariant to outcome count; single-
 #'   outcome fits are unchanged. Default `0.05`.
-#' @param mixsqp_alpha_eps numeric, threshold below which a
+#' @param alpha_thin_eps numeric, threshold below which a
 #'   variable's per-effect posterior `alpha[l, j]` is dropped
-#'   from the mixsqp M-step input. Set to `0` to use every
-#'   variable. Default `5e-5`.
+#'   from the M-step input. Applies to every M-step solver
+#'   (`mixsqp` for `per_outcome` / `per_scale`, `ebnm` for
+#'   `per_scale_normal` / `per_scale_laplace`). Set to `0` to
+#'   use every variable. Default `5e-5`.
 #' @param small_sample_correction logical. When `TRUE`, replaces
 #'   the per-variable Wakefield Normal marginal Bayes factor in
 #'   the SER step with a Johnson 2005 scaled Student-t marginal
@@ -255,7 +257,7 @@ mfsusie <- function(X, Y,
                     wavelet_qnorm             = TRUE,
                     control_mixsqp            = NULL,
                     mixture_null_weight               = 0.05,
-                    mixsqp_alpha_eps          = 5e-5,
+                    alpha_thin_eps            = 5e-5,
                     model_init                = NULL,
                     small_sample_correction   = FALSE,
                     attach_smoothing_inputs   = TRUE) {
@@ -343,7 +345,7 @@ mfsusie <- function(X, Y,
     track_fit                  = track_fit,
     verbose                    = verbose,
     mixture_null_weight        = mixture_null_weight,
-    mixsqp_alpha_eps           = mixsqp_alpha_eps,
+    alpha_thin_eps             = alpha_thin_eps,
     control_mixsqp             = control_mixsqp,
     L_greedy                   = L_greedy,
     greedy_lbf_cutoff                    = greedy_lbf_cutoff,

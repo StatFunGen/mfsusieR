@@ -115,21 +115,21 @@ mf_sigma2_per_position <- function(data, model, m) {
 
 # Per-outcome (Bhat, Shat) from cached residuals. shat2_m only depends
 # on xtx_diag (fixed) and sigma2[[m]] (changes at the per-iter sigma2
-# update), so we read `model$em_cache$shat2[[m]]` populated by
-# `refresh_em_cache` instead of redoing the outer product per (l, m).
+# update), so we read `model$iter_cache$shat2[[m]]` populated by
+# `refresh_iter_cache` instead of redoing the outer product per (l, m).
 mf_per_outcome_bhat_shat <- function(data, model, m) {
   pw    <- data$xtx_diag_list[[m]]
   XtR_m <- model$residuals[[m]]
   bhat_m <- XtR_m / pw
 
-  cached_shat2 <- model$em_cache$shat2[[m]]
+  cached_shat2 <- model$iter_cache$shat2[[m]]
   shat2_m <- if (!is.null(cached_shat2) &&
                  identical(dim(cached_shat2),
                            c(data$p, data$T_basis[m]))) {
     cached_shat2
   } else {
-    # Fallback before em_cache is populated (e.g., first SER call) or
-    # in tests that bypass the IBSS orchestrator.
+    # Fallback before iter_cache is populated (e.g., first SER call)
+    # or in tests that bypass the IBSS orchestrator.
     sigma2_per_pos <- mf_sigma2_per_position(data, model, m)
     outer(1 / pw, sigma2_per_pos)
   }
@@ -478,57 +478,46 @@ update_variance_components.mf_individual <- function(data, params, model, ...) {
       model$sigma2[[m]] <- sigma2_per_scale
     }
   }
-  refresh_em_cache.mf_individual(data, model)
+  refresh_iter_cache.mf_individual(data, model)
 }
 
-# Recompute the per-iter M-step cache after sigma2 changes.
-# Cached quantities are invariant across the L-effect loop within
-# one IBSS iteration; rebuilding them per effect is L-fold
-# redundant.
+# Recompute per-iter precomputes that depend on `sigma2` (and, for
+# the mixsqp-backed prior classes, on the slab sd grid). Slots are
+# invariant across the L-effect loop within one IBSS iteration;
+# rebuilding them per effect would be L-fold redundant.
 #
 # Cache contents per outcome m:
-#   $sigma2_per_pos[[m]]   -- broadcast of model$sigma2[[m]] to a
-#                             length-T_basis[m] vector
 #   $shat2[[m]]            -- p x T_basis[m] = outer(1/xtx_diag,
-#                             sigma2_per_pos). Consumed by
+#                             sigma2_per_pos). Read by
 #                             mf_per_outcome_bhat_shat() on every
 #                             SER call (loglik + posterior moments)
-#                             for every prior class, so it is
-#                             always built.
+#                             for every prior class. Always built.
 #   $sdmat[[m]][[s]]       -- (p*|idx_s|) x K matrix used by
 #                             mf_em_likelihood_per_scale, the
 #                             mixsqp M-step kernel only. Skipped
 #                             for the ebnm-backed prior classes
-#                             (point_normal, point_laplace) which
-#                             read neither sdmat nor log_sdmat.
+#                             (point_normal, point_laplace), which
+#                             fit 2 scalars per (m, s) by direct
+#                             optim and have no per-(j, t, k)
+#                             aggregate to amortize.
 #   $log_sdmat[[m]][[s]]   -- log of $sdmat[[m]][[s]] (mixsqp-only).
-#
-# The (m, s) entries depend on the G_prior layout (groups) and on
-# the slab sd grid, so they are rebuilt only when the group
-# structure or the sd-grid changes (i.e., after init or any
-# prior-grid change). For the ebnm-backed paths the slab is
-# parametric (single sd or scale), so even if sdmat were rebuilt
-# every iter it would not produce wrong numbers -- the mixsqp
-# kernel just is not called on those paths, so the work is wasted.
-refresh_em_cache.mf_individual <- function(data, model) {
+refresh_iter_cache.mf_individual <- function(data, model) {
   M  <- data$M
-  build_mixsqp_cache <- inherits(
+  is_mixsqp_prior <- inherits(
     model$G_prior[[1L]],
     c("mixture_normal", "mixture_normal_per_scale"))
 
-  sigma2_per_pos_list <- vector("list", M)
-  shat2_list          <- vector("list", M)
-  sdmat_list          <- if (build_mixsqp_cache) vector("list", M) else NULL
-  log_sdmat_list      <- if (build_mixsqp_cache) vector("list", M) else NULL
+  shat2_list     <- vector("list", M)
+  sdmat_list     <- if (is_mixsqp_prior) vector("list", M) else NULL
+  log_sdmat_list <- if (is_mixsqp_prior) vector("list", M) else NULL
 
   for (m in seq_len(M)) {
     pw <- data$xtx_diag_list[[m]]
     sigma2_per_pos <- mf_sigma2_per_position(data, model, m)
-    sigma2_per_pos_list[[m]] <- sigma2_per_pos
     shat2_m <- outer(1 / pw, sigma2_per_pos)
     shat2_list[[m]] <- shat2_m
 
-    if (!build_mixsqp_cache) next
+    if (!is_mixsqp_prior) next
 
     G_m       <- model$G_prior[[m]]
     sdmat_m     <- vector("list", length(G_m))
@@ -545,11 +534,10 @@ refresh_em_cache.mf_individual <- function(data, model) {
     log_sdmat_list[[m]] <- log_sdmat_m
   }
 
-  model$em_cache <- list(
-    sigma2_per_pos = sigma2_per_pos_list,
-    shat2          = shat2_list,
-    sdmat          = sdmat_list,
-    log_sdmat      = log_sdmat_list
+  model$iter_cache <- list(
+    shat2     = shat2_list,
+    sdmat     = sdmat_list,
+    log_sdmat = log_sdmat_list
   )
   model
 }
@@ -593,11 +581,12 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
   zeta_l <- model$alpha[l, ]
 
   # Adaptive variable subsetting: drop variables where the SuSiE
-  # per-effect posterior alpha is below `mixsqp_alpha_eps`. For
-  # mixsqp this caps the L-matrix size; for the ebnm-backed paths
-  # the (keep_idx, zeta_keep) pair is reused to pick the lead
-  # variable via `lead = keep_idx[which.max(zeta_keep)]`.
-  alpha_eps <- params$mixsqp_alpha_eps %||% 1e-6
+  # per-effect posterior alpha is below `alpha_thin_eps`. For the
+  # mixsqp-backed paths this caps the L-matrix size; for the
+  # ebnm-backed paths the kept variables form the multi-variable
+  # observation set ebnm fits over (mirroring mixsqp's data
+  # shape minus the per-row alpha weighting).
+  alpha_eps <- params$alpha_thin_eps %||% 1e-6
   keep_idx  <- if (alpha_eps > 0) which(zeta_l > alpha_eps)
                else seq_along(zeta_l)
   if (length(keep_idx) < 1L) keep_idx <- which.max(zeta_l)
@@ -645,7 +634,7 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
   mixture_null_weight <- (params$mixture_null_weight %||% 0.05) *
                         max(1L, data$M)
   control <- params$control_mixsqp %||% list()
-  cache   <- model$em_cache
+  cache   <- model$iter_cache
   p_full  <- ncol(model$alpha)   # `model$alpha` is `L x p`
 
   # The cached sdmat / log_sdmat are laid out in column-major order
@@ -721,17 +710,38 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
 #' @noRd
 .opv_ebnm_point <- function(data, params, model, ser_stats,
                             keep_idx, zeta_keep, ebnm_fn) {
-  lead <- keep_idx[which.max(zeta_keep)]
+  # Mirror mixsqp's data shape: feed ebnm the alpha-thinned
+  # `(|keep_idx| x |idx_s|)` rectangle of (Bhat, Shat) per
+  # (m, s) instead of a single lead-variable's slice. ebnm
+  # cannot accept observation weights so the alpha-weighting
+  # mixsqp uses is dropped; the unweighted-many-variables design
+  # still mirrors mixsqp's key property: ebnm sees the
+  # bulk-noise distribution within `keep_idx` and the parametric
+  # MLE settles on a sensible conservative `pi_0` (most kept
+  # variables look null) plus a `sigma` driven by the few
+  # non-null cells. The lead-only alternative would fit "this
+  # single variable is non-null" and collapse `pi_0` toward 0,
+  # producing spurious CSes from the too-liberal slab.
+  #
+  # `keep_idx` filtering is the same `alpha_thin_eps`-bounded
+  # set that the mixsqp arm uses (computed by the parent
+  # `optimize_prior_variance.mf_individual()`). Truncation error
+  # is bounded by the dropped alpha mass; on iter 1 alpha is
+  # uniform and all variables are kept (giving ebnm the full
+  # bulk-noise distribution), on later iters keep_idx shrinks
+  # to the LD-friends of the lead (still a multi-variable set
+  # so the per_scale prior cannot collapse to single-variable
+  # over-fitting).
   fix_g <- !isTRUE(params$estimate_prior_variance)
   for (m in seq_len(data$M)) {
-    bhat_m <- ser_stats$betahat[[m]]
-    shat_m <- sqrt(ser_stats$shat2[[m]])
+    bhat_m <- ser_stats$betahat[[m]][keep_idx, , drop = FALSE]
+    shat_m <- sqrt(ser_stats$shat2[[m]][keep_idx, , drop = FALSE])
     G_m    <- model$G_prior[[m]]
     for (s in seq_along(G_m)) {
       idx <- G_m[[s]]$idx
       fit <- ebnm_fn(
-        x      = bhat_m[lead, idx],
-        s      = shat_m[lead, idx],
+        x      = as.vector(bhat_m[, idx, drop = FALSE]),
+        s      = as.vector(shat_m[, idx, drop = FALSE]),
         g_init = G_m[[s]]$fitted_g,
         fix_g  = fix_g
       )

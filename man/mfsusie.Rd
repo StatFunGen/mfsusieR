@@ -38,7 +38,7 @@ mfsusie(
   wavelet_qnorm = TRUE,
   control_mixsqp = NULL,
   mixture_null_weight = 0.05,
-  mixsqp_alpha_eps = 5e-05,
+  alpha_thin_eps = 5e-05,
   model_init = NULL,
   small_sample_correction = FALSE,
   attach_smoothing_inputs = TRUE
@@ -206,10 +206,12 @@ unregularized MLE. Internally scaled by \code{M} so the
 null:data balance is invariant to outcome count; single-
 outcome fits are unchanged. Default \code{0.05}.}
 
-\item{mixsqp_alpha_eps}{numeric, threshold below which a
+\item{alpha_thin_eps}{numeric, threshold below which a
 variable's per-effect posterior \code{alpha[l, j]} is dropped
-from the mixsqp M-step input. Set to \code{0} to use every
-variable. Default \code{5e-5}.}
+from the M-step input. Applies to every M-step solver
+(\code{mixsqp} for \code{per_outcome} / \code{per_scale}, \code{ebnm} for
+\code{per_scale_normal} / \code{per_scale_laplace}). Set to \code{0} to
+use every variable. Default \code{5e-5}.}
 
 \item{model_init}{optional \code{mfsusie} fit object from a prior
 call. When supplied, the IBSS loop is seeded from the
