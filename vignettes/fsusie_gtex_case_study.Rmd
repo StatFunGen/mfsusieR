@@ -51,9 +51,7 @@ str(gtex_example, max.level = 1)
 
 ```{r fit}
 fit <- fsusie(gtex_example$Y, gtex_example$X,
-              pos = gtex_example$pos,
-              L = 15, L_greedy = 5,
-              verbose = TRUE)
+              pos = gtex_example$pos)
 fit$niter; fit$converged
 length(fit$sets$cs)
 fit$pip[gtex_example$causal_snps]
@@ -69,7 +67,7 @@ TI-smoothed per-CS effect curves with 95% credible bands plus
 affected-region bars at the bottom of the effect panel.
 
 ```{r plot-smoothed-dims}
-fit_s <- mf_post_smooth(fit, method = "TI")
+fit_s <- mf_post_smooth(fit)
 plot_dims <- mfsusie_plot_dimensions(fit_s, facet_cs = "stack")
 plot_dims
 ```

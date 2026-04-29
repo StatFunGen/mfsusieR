@@ -28,7 +28,7 @@ mfsusie(
   convergence_method = c("pip", "elbo"),
   pip_stall_window = 5L,
   estimate_residual_variance = TRUE,
-  verbose = FALSE,
+  verbose = TRUE,
   track_fit = FALSE,
   max_padded_log2 = 10,
   wavelet_basis_order = 10,
@@ -165,7 +165,8 @@ non-finite values and the PIP fallback fires).}
 at the initial value across iterations; useful for
 sensitivity analysis.}
 
-\item{verbose}{logical.}
+\item{verbose}{logical. Default \code{TRUE}; set to \code{FALSE} for
+silent runs.}
 
 \item{track_fit}{logical, retain a per-iteration tracking list on
 the fit. Default \code{FALSE}.}

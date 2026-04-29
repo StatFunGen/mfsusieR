@@ -111,7 +111,7 @@ covariates `Cov` and returns the residualised response
 covariate effect curves.
 
 ```{r adjust, message = FALSE}
-adj <- mf_adjust_for_covariates(Y, Cov, method = "wavelet_eb")
+adj <- mf_adjust_for_covariates(Y, Cov)
 str(adj, max.level = 1L)
 ```
 
@@ -153,7 +153,7 @@ par(mfrow = c(1L, 1L))
 ## Fine-mapping the adjusted response
 
 ```{r fit-adj, message = FALSE}
-fit_adj <- fsusie(adj$Y_adjusted, Geno, L = 10L, verbose = TRUE)
+fit_adj <- fsusie(adj$Y_adjusted, Geno)
 fit_adj$sets$cs
 fit_adj$pip[c(pos1, pos2)]
 ```
@@ -172,7 +172,7 @@ For contrast, fit `fsusie()` directly on `Y` without
 adjustment:
 
 ```{r fit-unadj, message = FALSE}
-fit_unadj <- fsusie(Y, Geno, L = 10L, verbose = FALSE)
+fit_unadj <- fsusie(Y, Geno)
 fit_unadj$sets$cs
 fit_unadj$pip[c(pos1, pos2)]
 ```

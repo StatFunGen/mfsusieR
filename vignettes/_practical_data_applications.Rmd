@@ -108,8 +108,7 @@ longer inflated by the masked columns.
 
 ```{r usage-low-count, eval = FALSE}
 fit <- mfsusie(X, Y_list,
-               wavelet_magnitude_cutoff = 0.02,
-               L = 8)
+               wavelet_magnitude_cutoff = 0.02)
 ```
 
 ```{r plot-low-count, fig.cap = "PIP comparison: default vs wavelet_magnitude_cutoff."}
@@ -149,9 +148,7 @@ uncertainty estimate once heavy-tail outliers are no longer
 inflating per-variable Bayes factors.
 
 ```{r usage-qn, eval = FALSE}
-fit <- mfsusie(X, Y_list,
-               wavelet_qnorm = TRUE,
-               L = 8)
+fit <- mfsusie(X, Y_list)            # wavelet_qnorm = TRUE (default)
 ```
 
 ```{r plot-qn, fig.cap = "PIP comparison: default vs wavelet_qnorm."}
@@ -198,8 +195,7 @@ variable-selection probabilities are corrected.
 
 ```{r usage-johnson, eval = FALSE}
 fit <- mfsusie(X, Y_list,
-               small_sample_correction = TRUE,
-               L = 8)
+               small_sample_correction = TRUE)
 ```
 
 ```{r plot-johnson, fig.cap = "PIP comparison: default vs small_sample_correction."}
@@ -236,10 +232,8 @@ three:
 
 ```{r combined, eval = FALSE}
 fit <- mfsusie(X, Y_list,
-               wavelet_magnitude_cutoff        = 0.02,
-               wavelet_qnorm           = TRUE,
-               small_sample_correction = TRUE,
-               L = 8)
+               wavelet_magnitude_cutoff = 0.02,
+               small_sample_correction  = TRUE)
 ```
 
 ```{r plot-combined, fig.cap = "PIP comparison: default vs all three combined."}

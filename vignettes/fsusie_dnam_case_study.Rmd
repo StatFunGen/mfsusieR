@@ -208,9 +208,7 @@ local false sign rate (lfsr), which the bubble plot below
 uses.
 
 ```{r run-fsusie, message = FALSE}
-fit <- fsusie(Y, X, L = 3L,
-              prior_variance_scope = "per_outcome",
-              L_greedy = 5L, verbose = TRUE)
+fit <- fsusie(Y, X)
 fit$sets$cs
 fit$pip[dnam_example$causal_snps]
 fit_h <- mf_post_smooth(fit, method = "HMM")
@@ -271,7 +269,7 @@ smoother gives pointwise credible bands for each per-CpG
 effect:
 
 ```{r ti-smooth, message = FALSE}
-fit_TI <- mf_post_smooth(fit, method = "TI")
+fit_TI <- mf_post_smooth(fit)
 range(fit_h$pip - fit_TI$pip)
 ```
 

@@ -69,9 +69,7 @@ multiomic_example$causal_snps
 ## Fit
 
 ```{r fit}
-fit <- mfsusie(multiomic_example$X, Y_list, pos = pos_list,
-               L = 15, L_greedy = 5,
-               verbose = TRUE)
+fit <- mfsusie(multiomic_example$X, Y_list, pos = pos_list)
 fit$niter; fit$converged
 length(fit$sets$cs)
 fit$pip[multiomic_example$causal_snps]
@@ -133,7 +131,7 @@ outcome with TI-smoothed curves, 95% credible bands, and
 affected-region bars at the bottom of each panel.
 
 ```{r mfsusie-smooth}
-fit_s <- mf_post_smooth(fit, method = "TI")
+fit_s <- mf_post_smooth(fit)
 ```
 
 When the fit has both `M > 1` outcomes and several credible
@@ -249,8 +247,8 @@ sapply(Y_miss, function(y) sum(complete.cases(y)))
 
 ```{r missing-noqnorm}
 t_noq <- system.time(
-  fit_noq <- mfsusie(X_miss, Y_miss, L = 10,
-                     wavelet_qnorm = FALSE, verbose = FALSE)
+  fit_noq <- mfsusie(X_miss, Y_miss,
+                     wavelet_qnorm = FALSE)
 )
 cat(sprintf("Runtime: %.1f s   niter: %d   CS: %d\n",
             t_noq["elapsed"], fit_noq$niter, length(fit_noq$sets$cs)))
@@ -261,7 +259,7 @@ fit_noq$pip[causal_j]                    # causal PIP
 
 ```{r missing-qnorm}
 t_q <- system.time(
-  fit_q <- mfsusie(X_miss, Y_miss, L = 10, verbose = FALSE)
+  fit_q <- mfsusie(X_miss, Y_miss)
 )
 cat(sprintf("Runtime: %.1f s   niter: %d   CS: %d\n",
             t_q["elapsed"], fit_q$niter, length(fit_q$sets$cs)))

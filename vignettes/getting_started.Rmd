@@ -64,7 +64,7 @@ beta <- numeric(p); beta[c(5, 17)] <- c(1.2, -0.8)
 Y <- X %*% matrix(rep(beta, T_m), nrow = p) +
      matrix(rnorm(n * T_m, sd = 0.4), nrow = n)
 
-fit_f <- fsusie(Y, X, L = 15, L_greedy = 5, verbose = TRUE)
+fit_f <- fsusie(Y, X)
 fit_f$pip[c(5, 17)]
 length(fit_f$sets$cs)
 ```
@@ -95,9 +95,7 @@ Y_func <- lapply(T_per, function(T_m) {
 Y_scalar <- as.numeric(X %*% beta + rnorm(n, sd = 0.4))
 Y_list <- c(Y_func, list(matrix(Y_scalar, ncol = 1)))
 
-fit_m <- mfsusie(X, Y_list, L = 15, L_greedy = 5,
-                 prior_variance_scope = "per_outcome",
-                 verbose = TRUE)
+fit_m <- mfsusie(X, Y_list)
 fit_m$pip[c(5, 17)]
 length(fit_m$sets$cs)
 ```

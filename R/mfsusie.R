@@ -121,7 +121,8 @@
 #'   `update_variance_components`. When `FALSE`, hold `sigma2`
 #'   at the initial value across iterations; useful for
 #'   sensitivity analysis.
-#' @param verbose logical.
+#' @param verbose logical. Default `TRUE`; set to `FALSE` for
+#'   silent runs.
 #' @param track_fit logical, retain a per-iteration tracking list on
 #'   the fit. Default `FALSE`.
 #' @param max_padded_log2 integer, log2 cap on the post-remap grid
@@ -259,7 +260,7 @@ mfsusie <- function(X, Y,
                     convergence_method        = c("pip", "elbo"),
                     pip_stall_window          = 5L,
                     estimate_residual_variance = TRUE,
-                    verbose                   = FALSE,
+                    verbose                   = TRUE,
                     track_fit                 = FALSE,
                     max_padded_log2           = 10,
                     wavelet_basis_order       = 10,
