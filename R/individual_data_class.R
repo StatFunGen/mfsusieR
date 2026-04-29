@@ -154,21 +154,27 @@ create_mf_individual <- function(X,
     }
   }
 
+  # ---- Per-outcome complete-case indices ---------------------------------
+  na_idx <- lapply(seq_len(M), function(m) which(complete.cases(Y[[m]])))
+  xtx_diag_list <- lapply(seq_len(M), function(m)
+    colSums(X_processed[na_idx[[m]], , drop = FALSE]^2))
+
   # ---- Assemble ----------------------------------------------------------
   obj <- list(
-    X            = X_processed,
-    Y            = Y_remapped,
-    pos          = pos_grid,
-    D            = D,
-    scale_index  = scale_index,
-    lowc_idx     = lowc_idx,
-    T_basis     = T_basis,
-    csd        = X_scale,
-    xtx_diag = colSums(X_processed^2),  # X'X diagonal, cached
-                                                 # for SER stats per IBSS sweep
-    n            = n,
-    p            = p,
-    M            = M,
+    X             = X_processed,
+    Y             = Y_remapped,
+    pos           = pos_grid,
+    D             = D,
+    scale_index   = scale_index,
+    lowc_idx      = lowc_idx,
+    T_basis       = T_basis,
+    csd           = X_scale,
+    xtx_diag      = colSums(X_processed^2),    # global; zero-predictor check
+    xtx_diag_list = xtx_diag_list,
+    na_idx        = na_idx,
+    n             = n,
+    p             = p,
+    M             = M,
     intercept    = intercept,
     standardize  = standardize,
     wavelet_meta = list(
