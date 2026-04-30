@@ -178,7 +178,7 @@
 #'   correction acts on variable selection probabilities only;
 #'   posterior moments given inclusion are unchanged. Default
 #'   `FALSE`.
-#' @param inner_em_steps integer, number of M-step + alpha-update
+#' @param max_inner_em_steps integer, number of M-step + alpha-update
 #'   sweeps run inside the post-loglik prior hook per (effect,
 #'   outer iter), to keep mixture pi and alpha in sync per effect per outer
 #'   iter, an issue unique to the prior update methods in mixsqp based model. The
@@ -279,7 +279,7 @@ mfsusie <- function(X, Y,
                     alpha_thin_eps            = 5e-5,
                     model_init                = NULL,
                     small_sample_correction   = FALSE,
-                    inner_em_steps            = 2L,
+                    max_inner_em_steps            = 5L,
                     attach_smoothing_inputs   = TRUE) {
   if (!is.logical(small_sample_correction) ||
       length(small_sample_correction) != 1L ||
@@ -384,7 +384,7 @@ mfsusie <- function(X, Y,
     small_sample_correction    = small_sample_correction,
     small_sample_df            = if (small_sample_correction) data$n - 1L
                                  else NULL,
-    inner_em_steps             = as.integer(inner_em_steps)
+    max_inner_em_steps             = as.integer(max_inner_em_steps)
   )
 
   # 4. Run the susieR workhorse. All per-effect and per-iteration

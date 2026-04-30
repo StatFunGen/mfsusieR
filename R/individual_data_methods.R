@@ -695,26 +695,33 @@ post_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
   if (!isTRUE(params$estimate_prior_variance)) {
     return(list(V = 1, model = model))
   }
-  inner_steps <- max(1L, as.integer(params$inner_em_steps %||% 2L))
+  # max_inner_em_steps caps EXTRA inner refinement cycles beyond
+  # the always-on first M-step (0 = skip). Loop exits early when
+  # the per-effect lbf change drops below `params$tol`, mirroring
+  # the inner-loop convergence used by fsusieR's EM_pi.
+  inner_cap <- max(0L, as.integer(params$max_inner_em_steps %||% 5L)) + 1L
+  inner_tol <- params$tol %||% 1e-4
   loglik_fn  <- getFromNamespace("loglik",                       "susieR")
   cpm_fn     <- getFromNamespace("calculate_posterior_moments",  "susieR")
   ckl_fn     <- getFromNamespace("compute_kl",                   "susieR")
   get_alpha  <- getFromNamespace("get_alpha_l",                  "susieR")
   get_post   <- getFromNamespace("get_posterior_moments_l",      "susieR")
 
-  for (k in seq_len(inner_steps)) {
+  for (k in seq_len(inner_cap)) {
+    prev_lbf <- model$lbf[l]
     out <- optimize_prior_variance.mf_individual(
       data, params, model, ser_stats,
       l = l, alpha = get_alpha(model, l),
       moments = get_post(model, l), V_init = V_init)
     model <- out$model
-    if (k == inner_steps) break
+    if (k == inner_cap) break
     # Re-run loglik / moments / KL against the freshly-M-stepped
     # G_prior so alpha[l, ] reflects the new pi before the next
     # M-step cycle.
     model <- loglik_fn(data, params, model, V = 1, ser_stats, l)
     model <- cpm_fn(data, params, model, V = 1, l)
     model <- ckl_fn(data, params, model, l)
+    if (!is.na(prev_lbf) && abs(model$lbf[l] - prev_lbf) < inner_tol) break
   }
   list(V = 1, model = model)
 }
