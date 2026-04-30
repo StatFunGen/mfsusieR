@@ -48,7 +48,7 @@ TI-smoothed curves on the same `list[M]` of `L x T_basis` matrix
 shape.
 
 `mfsusie_plot()` reads from `fit$smoothed` and picks a smoother
-in the priority order `TI > smash > HMM > scalewise` when the
+in the priority order `HMM > TI > smash > ash > scalewise` when the
 user does not name one explicitly. When more than one smoother
 has been applied, the plot emits a hint listing the alternatives
 so the user can compare. After `method = "HMM"` smoothing the
@@ -162,11 +162,15 @@ when you want the post-processed curves.
 - `"smash"`: `smashr::smash.gaus` empirical-Bayes wavelet
   shrinkage on the per-position regression estimate. Requires
   the `smashr` package (Suggests).
+- `"ash"`: cycle-spinning + per-coefficient `ashr::ash` on the
+  wavelet decomposition of the per-position estimate, using the
+  per-position OLS Shat as the noise level. Same niche as
+  `"smash"` but does not require the `smashr` package.
 
-All four smoothers can coexist on the same fit. `mfsusie_plot()`
-picks one by priority (TI > smash > HMM > scalewise) and emits a
-hint listing the others; pass `smooth_method = "<name>"` to plot
-a specific one.
+All five smoothers can coexist on the same fit. `mfsusie_plot()`
+picks one by priority (HMM > TI > smash > ash > scalewise) and
+emits a hint listing the others; pass `smooth_method = "<name>"`
+to plot a specific one.
 
 ```{r tuning-scalewise-dims}
 fit_scalewise <- mf_post_smooth(fit, method = "scalewise",
@@ -215,9 +219,63 @@ plot_dims_ml <- mfsusie_plot_dimensions(fit_multi)
 ```
 
 ```{r tuning-stacked, fig.width = plot_dims_ml$width, fig.height = plot_dims_ml$height}
-mfsusie_plot(fit_multi)                              # picks TI; hint prints
-mfsusie_plot(fit_multi, smooth_method = "HMM")       # plot HMM directly
+mfsusie_plot(fit_multi)                              # picks HMM; hint prints
+mfsusie_plot(fit_multi, smooth_method = "TI")        # plot TI directly
 ```
+
+## Per-variant lfsr (`clfsr`) and the smashr-free smoother
+
+Three additions complement the four core smoothers above. Each
+is a one-line opt-in.
+
+### `clfsr_curves`: per-variant lfsr
+
+Every smoother also writes a `clfsr_curves[[m]][[l]]` slot of
+shape `p x T_basis[m]`: the per-variant local false sign rate
+derived from the SuSiE posterior moments
+`pnorm(-|mu[l, m, j, t]| / sd[l, m, j, t])`. This is the
+per-variant view that the alpha-aggregated `lfsr_curves` summary
+hides. It is useful when you want to ask "is variant `j`
+credibly nonzero at position `t`?" rather than "is the credible
+set credibly nonzero at position `t`?".
+
+The plot has a toggle that swaps the alpha-aggregated lfsr
+overlay for the alpha-aggregated `clfsr` curve:
+
+```{r clfsr-toggle-dims}
+plot_dims_cl <- mfsusie_plot_dimensions(fit_s)
+```
+
+```{r clfsr-toggle, fig.width = plot_dims_cl$width, fig.height = plot_dims_cl$height}
+mfsusie_plot(fit_s, lfsr_source = "clfsr")
+```
+
+### `method = "ash"` for installs without `smashr`
+
+`mf_post_smooth(fit, method = "ash")` runs the same
+cycle-spinning + ash kernel that `smash_lw` uses upstream, with
+the per-position OLS standard error as the noise level. It
+needs only `ashr` and `wavethresh` (both already in `Imports`).
+
+```{r ash-method}
+fit_ash <- mf_post_smooth(fit, method = "ash")
+str(fit_ash$smoothed$ash$effect_curves[[1]][[1]])
+```
+
+### Tuning the underlying shrinkage tool via `...`
+
+`mf_post_smooth(method = "TI" | "HMM" | "ash", ...)` forwards
+extra arguments to `ashr::ash`; `method = "smash"` forwards to
+`smashr::smash.gaus`. The most useful knob is `nullweight`,
+which controls how aggressively the null component is preferred:
+
+```{r nullweight-passthrough}
+fit_strong <- mf_post_smooth(fit, method = "ash", nullweight = 300)
+```
+
+Higher `nullweight` shrinks effects toward zero more
+aggressively and is the right choice on noisy fixtures with
+weak signal.
 
 ## Multi-outcome usage
 

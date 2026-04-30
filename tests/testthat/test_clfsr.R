@@ -30,3 +30,21 @@ test_that("clfsr_curves is populated with the per-variant lfsr formula", {
     }
   }
 })
+
+test_that("mfsusie_plot(lfsr_source = 'clfsr') runs end-to-end without error", {
+  skip_if_not_installed("ashr")
+  skip_if_not_installed("wavethresh")
+  set.seed(1L)
+  N <- 50L; J <- 30L; T_basis <- 16L
+  X    <- matrix(rnorm(N * J), N, J)
+  beta <- matrix(0, J, T_basis); beta[5L, ] <- 1.0; beta[15L, ] <- 0.7
+  Y1   <- X %*% beta + matrix(rnorm(N * T_basis, sd = 0.3), N, T_basis)
+  fit  <- mfsusieR::mfsusie(X = X, Y = list(Y1),
+                            L = 4L, max_iter = 10L, verbose = FALSE)
+  fit  <- mfsusieR::mf_post_smooth(fit, method = "TI")
+
+  tmp <- tempfile(fileext = ".pdf")
+  grDevices::pdf(tmp)
+  on.exit({ grDevices::dev.off(); unlink(tmp) }, add = TRUE)
+  expect_silent(mfsusieR::mfsusie_plot(fit, lfsr_source = "clfsr"))
+})
