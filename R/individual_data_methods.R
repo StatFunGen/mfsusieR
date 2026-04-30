@@ -697,8 +697,7 @@ post_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
   }
   # max_inner_em_steps caps EXTRA inner refinement cycles beyond
   # the always-on first M-step (0 = skip). Loop exits early when
-  # the per-effect lbf change drops below `params$tol`, mirroring
-  # the inner-loop convergence used by fsusieR's EM_pi.
+  # the per-effect lbf change drops below `params$tol`.
   inner_cap <- max(0L, as.integer(params$max_inner_em_steps %||% 5L)) + 1L
   inner_tol <- params$tol %||% 1e-4
   loglik_fn  <- getFromNamespace("loglik",                       "susieR")
