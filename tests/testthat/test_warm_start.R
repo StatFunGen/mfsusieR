@@ -11,7 +11,9 @@ build_warm_sim <- function(seed = 17L, n = 100L, T_m = 64L,
                            p = 30L) {
   set.seed(seed)
   X    <- matrix(rnorm(n * p), n, p)
-  beta <- rep(0, p); beta[5L] <- 1
+  # Two effects so cold-start takes >= 3 IBSS iters and the
+  # warm-start contrast (warm < cold) is observable.
+  beta <- rep(0, p); beta[5L] <- 1; beta[15L] <- 0.7
   Y    <- X %*% matrix(beta, ncol = 1L) %*% matrix(1, 1, T_m) +
           matrix(rnorm(n * T_m, sd = 0.5), n, T_m)
   list(X = X, Y = Y, p = p, T_m = T_m, n = n)

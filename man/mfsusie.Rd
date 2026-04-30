@@ -42,6 +42,7 @@ mfsusie(
   alpha_thin_eps = 5e-05,
   model_init = NULL,
   small_sample_correction = FALSE,
+  max_inner_em_steps = 5L,
   attach_smoothing_inputs = TRUE
 )
 }
@@ -243,6 +244,15 @@ per-variable BF, inflating PIPs at null variants. The
 correction acts on variable selection probabilities only;
 posterior moments given inclusion are unchanged. Default
 \code{FALSE}.}
+
+\item{max_inner_em_steps}{integer, number of M-step + alpha-update
+sweeps run inside the post-loglik prior hook per (effect,
+outer iter), to keep mixture pi and alpha in sync per effect per outer
+iter, an issue unique to the prior update methods in mixsqp based model. The
+\code{per_scale_normal} path already converges in few outer iters
+(each scale's ebnm prior is fit independently and decouples
+the pi-alpha drift), so the inner sweep adds little there
+but does no harm.}
 
 \item{attach_smoothing_inputs}{logical. When \code{TRUE} (default),
 the fit carries \code{Y_grid} (post-remap position-space Y) and

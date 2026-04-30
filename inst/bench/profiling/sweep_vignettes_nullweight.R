@@ -39,7 +39,7 @@ run_three <- function(label, X, Y, causals, pos_list = NULL,
     t0 <- Sys.time()
     fit <- tryCatch(
       do.call(fit_fn, c(base, cfg$args,
-                        list(verbose = F))),
+                        list(verbose = T))),
       error = function(e) { cat(sprintf("  %-30s | %-18s | <ERROR: %s>\n",
                                           label, cfg$tag, conditionMessage(e))); NULL })
     t_el <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
