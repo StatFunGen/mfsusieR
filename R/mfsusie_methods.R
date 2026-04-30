@@ -646,110 +646,122 @@ mf_post_smooth <- function(fit,
   picked
 }
 
-# ---- scalewise -----------------------------------------------------
-
-.post_smooth_scalewise <- function(fit, level, threshold_factor) {
-  z_crit <- stats::qnorm((1 + level) / 2)
-  meta   <- fit$dwt_meta
-  M      <- length(meta$T_basis)
-  L      <- nrow(fit$alpha)
+# Higher-order loop shared by every smoother. Initializes the four
+# payload lists, dispatches the per-(l, m) `kernel`, falls back to
+# scalewise on scalar outcomes (T_m == 1) when `method_name` is
+# given, and computes `clfsr_curves` (the per-variant lfsr derived
+# from `fit$mu` / `fit$mu2`) in one place.
+#
+# `kernel(fit, l, m, T_m, level)` returns a list with
+# `effect_estimate`, `credible_band`, `lfsr`. `method_name` and
+# `kind` are used only to format the scalar-fallback warning.
+.smoother_loop <- function(fit, level, kernel,
+                           method_name = NULL, kind = NULL) {
+  meta <- fit$dwt_meta
+  M    <- length(meta$T_basis)
+  L    <- nrow(fit$alpha)
 
   effect_curves  <- vector("list", M)
   credible_bands <- vector("list", M)
   lfsr_curves    <- vector("list", M)
+  clfsr_curves   <- vector("list", M)
+  scalar_fallback <- NULL
 
   for (m in seq_len(M)) {
     T_m <- meta$T_basis[m]
     effect_curves[[m]]  <- vector("list", L)
     credible_bands[[m]] <- vector("list", L)
     lfsr_curves[[m]]    <- vector("list", L)
+    clfsr_curves[[m]]   <- vector("list", L)
+
+    if (T_m == 1L && !is.null(method_name)) {
+      warning_message(sprintf(
+        "method = '%s' is a %s smoother and adds no power for outcome %d (T_m = 1, scalar). Falling back to method = 'scalewise' for that outcome.",
+        method_name, kind, m), style = "hint")
+      if (is.null(scalar_fallback))
+        scalar_fallback <- .post_smooth_scalewise(fit, level,
+                                                  threshold_factor = 1)
+      effect_curves[[m]]  <- scalar_fallback$effect_curves[[m]]
+      credible_bands[[m]] <- scalar_fallback$credible_bands[[m]]
+      lfsr_curves[[m]]    <- scalar_fallback$lfsr_curves[[m]]
+      clfsr_curves[[m]]   <- scalar_fallback$clfsr_curves[[m]]
+      next
+    }
 
     for (l in seq_len(L)) {
-      # Alpha-weighted aggregate across variables (no lead-variant
-      # tie-break). Mean: E_q[b_l_t] = sum_j alpha[l, j] * mu[l, j, t].
-      # Second moment: E_q[b_l_t^2] = sum_j alpha[l, j] * mu2[l, j, t].
-      # Variance under the law of total variance.
-      mean_w <- as.numeric(fit$alpha[l, ] %*% fit$mu[[l]][[m]])
-      mu2_w  <- as.numeric(fit$alpha[l, ] %*% fit$mu2[[l]][[m]])
-      var_w  <- pmax(mu2_w - mean_w^2, 0)
-
-      shrunk_w <- if (T_m == 1L) mean_w else
-        scalewise_soft_threshold(mean_w, sd = sqrt(var_w),
-          scale_index = meta$scale_index[[m]],
-          T_basis    = T_m,
-          factor      = threshold_factor)
-
-      effect_curves[[m]][[l]] <-
-        dwt_invert_packed(matrix(shrunk_w, nrow = 1L), meta, m)
-      # Position-space variance: Var(pos[t]) = sum_k W^T_{t,k}^2
-      # * var_w[k]. The previous formula
-      # `abs(invert_dwt(sqrt(var_w)))` mistakes the linear
-      # combination of standard deviations for the position SD.
-      sd_pos <- sqrt(mf_invert_variance_curve(
-        var_w,
-        T_basis       = T_m,
-        filter_number = meta$wavelet_filter %||% 10L,
-        family        = meta$wavelet_family %||% "DaubLeAsymm",
-        wavelet_scale = meta$wavelet_scale[[m]]))
-      mean_pos <- effect_curves[[m]][[l]]
-      credible_bands[[m]][[l]] <- cbind(mean_pos - z_crit * sd_pos,
-                                        mean_pos + z_crit * sd_pos)
-      lfsr_curves[[m]][[l]] <- lfsr_from_gaussian(mean_pos, sd_pos)
+      out <- kernel(fit, l, m, T_m, level)
+      effect_curves[[m]][[l]]  <- out$effect_estimate
+      credible_bands[[m]][[l]] <- out$credible_band
+      lfsr_curves[[m]][[l]]    <- out$lfsr
+      clfsr_curves[[m]][[l]]   <- lfsr_from_gaussian(
+        fit$mu[[l]][[m]],
+        sqrt(pmax(fit$mu2[[l]][[m]] - fit$mu[[l]][[m]]^2, 0)))
     }
   }
+
   list(effect_curves  = effect_curves,
        credible_bands = credible_bands,
-       lfsr_curves    = lfsr_curves)
+       lfsr_curves    = lfsr_curves,
+       clfsr_curves   = clfsr_curves)
+}
+
+# ---- scalewise -----------------------------------------------------
+
+.post_smooth_scalewise <- function(fit, level, threshold_factor) {
+  z_crit <- stats::qnorm((1 + level) / 2)
+  meta   <- fit$dwt_meta
+  kernel <- function(fit, l, m, T_m, level) {
+    # Alpha-weighted aggregate across variables (no lead-variant
+    # tie-break). Mean: sum_j alpha[l, j] * mu[l, j, t]; second
+    # moment: sum_j alpha[l, j] * mu2[l, j, t]. Variance via the
+    # law of total variance.
+    mean_w <- as.numeric(fit$alpha[l, ] %*% fit$mu[[l]][[m]])
+    mu2_w  <- as.numeric(fit$alpha[l, ] %*% fit$mu2[[l]][[m]])
+    var_w  <- pmax(mu2_w - mean_w^2, 0)
+
+    shrunk_w <- if (T_m == 1L) mean_w else
+      scalewise_soft_threshold(mean_w, sd = sqrt(var_w),
+        scale_index = meta$scale_index[[m]],
+        T_basis     = T_m,
+        factor      = threshold_factor)
+
+    effect <- dwt_invert_packed(matrix(shrunk_w, nrow = 1L), meta, m)
+    # Position-space variance: Var(pos[t]) = sum_k W^T_{t,k}^2 *
+    # var_w[k]. `abs(invert_dwt(sqrt(var_w)))` would mistake a
+    # linear combination of sds for the position sd.
+    sd_pos <- sqrt(mf_invert_variance_curve(
+      var_w,
+      T_basis       = T_m,
+      filter_number = meta$wavelet_filter %||% 10L,
+      family        = meta$wavelet_family %||% "DaubLeAsymm",
+      wavelet_scale = meta$wavelet_scale[[m]]))
+    list(effect_estimate = effect,
+         credible_band   = cbind(effect - z_crit * sd_pos,
+                                 effect + z_crit * sd_pos),
+         lfsr            = lfsr_from_gaussian(effect, sd_pos))
+  }
+  .smoother_loop(fit, level, kernel)
 }
 
 # ---- TI: cycle-spinning translation-invariant wavelet denoising ----
 
 .post_smooth_ti <- function(fit, level, wavelet_filter, wavelet_family) {
   z_crit <- stats::qnorm((1 + level) / 2)
-  meta   <- fit$dwt_meta
-  M      <- length(meta$T_basis)
-  L      <- nrow(fit$alpha)
-
-  effect_curves  <- vector("list", M)
-  credible_bands <- vector("list", M)
-  lfsr_curves    <- vector("list", M)
-
-  for (m in seq_len(M)) {
-    T_m <- meta$T_basis[m]
-    effect_curves[[m]]  <- vector("list", L)
-    credible_bands[[m]] <- vector("list", L)
-    lfsr_curves[[m]]    <- vector("list", L)
-    if (T_m == 1L) {
-      warning_message(sprintf(
-        "method = 'TI' is a wavelet smoother and adds no power for outcome %d (T_m = 1, scalar). Falling back to method = 'scalewise' for that outcome.",
-        m), style = "hint")
-      tmp <- .post_smooth_scalewise(fit, level, threshold_factor = 1)
-      effect_curves[[m]]  <- tmp$effect_curves[[m]]
-      credible_bands[[m]] <- tmp$credible_bands[[m]]
-      lfsr_curves[[m]]    <- tmp$lfsr_curves[[m]]
-      next
-    }
-
-    Y_pos <- .iso_response_pos(fit, m)   # n x T_basis[m] (raw Y)
-    for (l in seq_len(L)) {
-      # The "per-effect" position-space response: subtract every
-      # other effect's alpha-weighted contribution from Y_pos.
-      iso_pos <- Y_pos - .other_effects_pos(fit, m, exclude = l)
-      x_eff   <- fit$X_eff[[l]]
-
-      out <- univariate_ti_regression(iso_pos, x_eff,
-                                       wavelet_filter, wavelet_family,
-                                       z_crit)
-      effect_curves[[m]][[l]]  <- out$effect_estimate
-      credible_bands[[m]][[l]] <- cbind(out$cred_band[2L, ],   # low
-                                        out$cred_band[1L, ])   # up
-      lfsr_curves[[m]][[l]] <- lfsr_from_gaussian(out$effect_estimate,
-                                              out$fitted_sd)
-    }
+  Y_pos_cache <- vector("list", length(fit$dwt_meta$T_basis))
+  kernel <- function(fit, l, m, T_m, level) {
+    if (is.null(Y_pos_cache[[m]]))
+      Y_pos_cache[[m]] <<- .iso_response_pos(fit, m)
+    iso <- Y_pos_cache[[m]] - .other_effects_pos(fit, m, exclude = l)
+    out <- univariate_ti_regression(iso, fit$X_eff[[l]],
+                                    wavelet_filter, wavelet_family,
+                                    z_crit)
+    list(effect_estimate = out$effect_estimate,
+         credible_band   = cbind(out$cred_band[2L, ], out$cred_band[1L, ]),
+         lfsr            = lfsr_from_gaussian(out$effect_estimate,
+                                              out$fitted_sd))
   }
-  list(effect_curves  = effect_curves,
-       credible_bands = credible_bands,
-       lfsr_curves    = lfsr_curves)
+  .smoother_loop(fit, level, kernel,
+                 method_name = "TI", kind = "wavelet")
 }
 
 # Position-space response. Reads the post-remap `Y_grid[[m]]`
@@ -883,49 +895,23 @@ univariate_ti_regression <- function(Y_pos, x_eff,
 
 .post_smooth_hmm <- function(fit, level, halfK) {
   z_crit <- stats::qnorm((1 + level) / 2)
-  meta   <- fit$dwt_meta
-  M      <- length(meta$T_basis)
-  L      <- nrow(fit$alpha)
-
-  effect_curves  <- vector("list", M)
-  credible_bands <- vector("list", M)
-  lfsr_curves    <- vector("list", M)
-
-  for (m in seq_len(M)) {
-    T_m <- meta$T_basis[m]
-    effect_curves[[m]]  <- vector("list", L)
-    credible_bands[[m]] <- vector("list", L)
-    lfsr_curves[[m]]    <- vector("list", L)
-
-    if (T_m == 1L) {
-      warning_message(sprintf(
-        "method = 'HMM' is a position-space smoother and adds no power for outcome %d (T_m = 1, scalar). Falling back to method = 'scalewise' for that outcome.",
-        m), style = "hint")
-      tmp <- .post_smooth_scalewise(fit, level, threshold_factor = 1)
-      effect_curves[[m]]  <- tmp$effect_curves[[m]]
-      credible_bands[[m]] <- tmp$credible_bands[[m]]
-      lfsr_curves[[m]]    <- tmp$lfsr_curves[[m]]
-      next
-    }
-
-    Y_pos <- .iso_response_pos(fit, m)
-    for (l in seq_len(L)) {
-      iso_pos <- Y_pos - .other_effects_pos(fit, m, exclude = l)
-      x_eff   <- fit$X_eff[[l]]
-      out <- mf_univariate_hmm_regression(
-        Y     = iso_pos,
-        X     = matrix(x_eff, ncol = 1L),
-        halfK = halfK)
-      effect_curves[[m]][[l]]  <- out$effect_estimate
-      credible_bands[[m]][[l]] <-
-        cbind(out$effect_estimate - z_crit * out$effect_sd,
-              out$effect_estimate + z_crit * out$effect_sd)
-      lfsr_curves[[m]][[l]]    <- out$lfsr
-    }
+  Y_pos_cache <- vector("list", length(fit$dwt_meta$T_basis))
+  kernel <- function(fit, l, m, T_m, level) {
+    if (is.null(Y_pos_cache[[m]]))
+      Y_pos_cache[[m]] <<- .iso_response_pos(fit, m)
+    iso <- Y_pos_cache[[m]] - .other_effects_pos(fit, m, exclude = l)
+    out <- mf_univariate_hmm_regression(
+      Y     = iso,
+      X     = matrix(fit$X_eff[[l]], ncol = 1L),
+      halfK = halfK)
+    list(effect_estimate = out$effect_estimate,
+         credible_band   = cbind(
+           out$effect_estimate - z_crit * out$effect_sd,
+           out$effect_estimate + z_crit * out$effect_sd),
+         lfsr            = out$lfsr)
   }
-  list(effect_curves  = effect_curves,
-       credible_bands = credible_bands,
-       lfsr_curves    = lfsr_curves)
+  .smoother_loop(fit, level, kernel,
+                 method_name = "HMM", kind = "position-space")
 }
 
 # HMM helpers live in R/post_smooth_hmm.R: mf_fit_hmm() and

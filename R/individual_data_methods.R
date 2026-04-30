@@ -7,8 +7,6 @@
 # `Bhat / Shat^2`. update_fitted_values folds the new posterior
 # back into the running per-outcome fit `model$fitted[[m]]`.
 #
-# All three are per-outcome lapply over `seq_len(data$M)` plus
-# matrix-level BLAS ops; no C++ needed at this layer.
 #
 # Manuscript references: methods/algorithms.tex eq:partial_resid;
 # methods/derivation.tex eq:bhat_shat_per_outcome.
@@ -646,10 +644,6 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
 # most from the inner loop. The same code path applies to both;
 # no special-casing needed.
 #
-# Cost: ~2x M-step + 1 extra loglik/moments/KL per effect per
-# outer iter, recovered by ~2x fewer outer iters at the default
-# inner_em_steps = 2. Higher values trade more inner work for
-# fewer outer iters (diminishing returns past ~5).
 # =============================================================
 
 #' @keywords internal

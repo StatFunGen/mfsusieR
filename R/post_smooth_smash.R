@@ -18,52 +18,24 @@
 
 .post_smooth_smash <- function(fit, level) {
   z_crit <- stats::qnorm((1 + level) / 2)
-  meta   <- fit$dwt_meta
-  M      <- length(meta$T_basis)
-  L      <- nrow(fit$alpha)
   alpha  <- 1 - level
-
-  effect_curves  <- vector("list", M)
-  credible_bands <- vector("list", M)
-  lfsr_curves    <- vector("list", M)
-
-  for (m in seq_len(M)) {
-    T_m <- meta$T_basis[m]
-    effect_curves[[m]]  <- vector("list", L)
-    credible_bands[[m]] <- vector("list", L)
-    lfsr_curves[[m]]    <- vector("list", L)
-    if (T_m == 1L) {
-      warning_message(sprintf(
-        "method = 'smash' is a wavelet smoother and adds no power for outcome %d (T_m = 1, scalar). Falling back to method = 'scalewise' for that outcome.",
-        m), style = "hint")
-      tmp <- .post_smooth_scalewise(fit, level, threshold_factor = 1)
-      effect_curves[[m]]  <- tmp$effect_curves[[m]]
-      credible_bands[[m]] <- tmp$credible_bands[[m]]
-      lfsr_curves[[m]]    <- tmp$lfsr_curves[[m]]
-      next
-    }
-
-    Y_pos <- .iso_response_pos(fit, m)
-    for (l in seq_len(L)) {
-      iso_pos <- Y_pos - .other_effects_pos(fit, m, exclude = l)
-      x_eff   <- fit$X_eff[[l]]
-
-      out <- univariate_smash_regression(iso_pos, x_eff, alpha)
-      effect_curves[[m]][[l]]  <- out$effect_estimate
-      credible_bands[[m]][[l]] <- cbind(out$cred_band[2L, ],
-                                        out$cred_band[1L, ])
-      # Recover sd from the credible-band half-width: (upper -
-      # lower) / 2 = z_crit * sd, so sd = (upper - lower) /
-      # (2 * z_crit). Then lfsr = pnorm(-|mean| / sd).
-      sd_pos <- (out$cred_band[1L, ] - out$cred_band[2L, ]) /
-                (2 * z_crit)
-      lfsr_curves[[m]][[l]] <- lfsr_from_gaussian(out$effect_estimate,
-                                              sd_pos)
-    }
+  Y_pos_cache <- vector("list", length(fit$dwt_meta$T_basis))
+  kernel <- function(fit, l, m, T_m, level) {
+    if (is.null(Y_pos_cache[[m]]))
+      Y_pos_cache[[m]] <<- .iso_response_pos(fit, m)
+    iso <- Y_pos_cache[[m]] - .other_effects_pos(fit, m, exclude = l)
+    out <- univariate_smash_regression(iso, fit$X_eff[[l]], alpha)
+    # Recover sd from the credible-band half-width:
+    # (upper - lower) / 2 = z_crit * sd.
+    sd_pos <- (out$cred_band[1L, ] - out$cred_band[2L, ]) /
+              (2 * z_crit)
+    list(effect_estimate = out$effect_estimate,
+         credible_band   = cbind(out$cred_band[2L, ], out$cred_band[1L, ]),
+         lfsr            = lfsr_from_gaussian(out$effect_estimate,
+                                              sd_pos))
   }
-  list(effect_curves  = effect_curves,
-       credible_bands = credible_bands,
-       lfsr_curves    = lfsr_curves)
+  .smoother_loop(fit, level, kernel,
+                 method_name = "smash", kind = "wavelet")
 }
 
 #' Per-position smash regression of a multi-position response
