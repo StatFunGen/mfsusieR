@@ -277,6 +277,29 @@ Higher `nullweight` shrinks effects toward zero more
 aggressively and is the right choice on noisy fixtures with
 weak signal.
 
+### Per-CS lfsr bubble grid
+
+`mfsusie_plot_lfsr(fit)` draws a per-CS-by-position bubble
+grid: one row per credible set, one dot per position, dot
+size `-log10(lfsr)`, colored by the CS when the position
+clears `lfsr_threshold`. The same `lfsr_source` toggle as
+`mfsusie_plot()` selects which lfsr to show.
+
+```{r plot-lfsr-dims}
+fit_hmm <- mf_post_smooth(fit, method = "HMM")
+plot_dims_lfsr <- mfsusie_plot_lfsr_dimensions(fit_hmm)
+```
+
+```{r plot-lfsr, fig.width = plot_dims_lfsr$width, fig.height = plot_dims_lfsr$height}
+mfsusie_plot_lfsr(fit_hmm, lfsr_source = "lfsr")
+```
+
+`lfsr_source = "lfsr"` is computed from the SuSiE posterior
+moments, so it works on a fit that has not been
+post-smoothed (no need for `method = "HMM"` first); it just
+needs the bubble-grid layout, which the function still
+provides.
+
 ## Multi-outcome usage
 
 `mf_post_smooth()` works on `mfsusie()` fits the same way; the
