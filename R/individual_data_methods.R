@@ -606,22 +606,72 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
   list(V = 1, model = model)
 }
 
-# Pre-loglik slot: restore effect l's persistent fitted_g into the
-# shared G_prior scratchpad before the BF call. The post-loglik hook
-# writes to both the scratchpad (current) and the per-effect sidecar
-# (persistent), so this round-trip keeps each effect's prior state
-# from being poisoned by other effects' M-steps.
+# =============================================================
+# Per-effect EM step layout (mfsusieR vs standard susieR IBSS)
+# =============================================================
 #
-# The M-step CANNOT run in the pre slot at iter 1: alpha[l, ] is
-# uniform 1/p, mixsqp on uniform-weighted data collapses pi to
-# all-null per effect, and lbf=0 cascades through every effect
-# (verified by direct test: pre-only fast but returns nCS=0 on
-# the cascade-prone fixture). A hybrid (post for iter 1, pre for
-# iter 2+) was tried and gives only marginal speedup (50 -> 41
-# iter on the slow-convergence case) because the iter 2+ M-step
-# ordering is mathematically equivalent to always-post for fixed-
-# point convergence. Slow convergence on spurious-effect drift is
-# better addressed by mid-loop effect pruning, not hook ordering.
+# susieR scalar-V IBSS (per outer iter, per effect l):
+#
+#   1. partial residual r_l
+#   2. compute_ser_statistics  (Bhat, Shat from r_l)
+#   3. (if optim/uniroot/simple) optim V                 [pre hook]
+#   4. loglik         -> lbf, alpha[l, ]
+#   5. moments        -> mu[l], mu2[l]
+#   6. KL             -> KL[l]
+#   7. (if EM)        optim V using updated alpha+moments [post hook]
+#
+# Steps 4-7 run ONCE per effect per outer iter. For a scalar V
+# prior this is enough: the V optim is fast and the (V, alpha)
+# joint update converges in a couple of outer iters. susieR has
+# no inner-EM concept.
+#
+# mfsusieR mixture-prior IBSS (this file, per outer iter, per
+# effect l):
+#
+#   1. partial residual r_l
+#   2. compute_ser_statistics  (per-outcome Bhat, Shat from r_l)
+#   3. pre_loglik_prior_hook.mf_individual                [pre hook]
+#        - swap fitted_g_per_effect[[l]] -> G_prior scratchpad
+#          (so each effect sees its own persistent prior, not
+#          another effect's last-written one)
+#        - NO M-step here: at iter 1 alpha[l, ] is uniform 1/p
+#          and mixsqp on uniform-weighted data collapses pi to
+#          all-null, cascading lbf=0 through every effect.
+#   4. loglik         -> lbf, alpha[l, ]
+#   5. moments, KL
+#   6. post_loglik_prior_hook.mf_individual               [post hook]
+#        Inner EM loop, `params$inner_em_steps` M-step calls
+#        (default 2; set 1 to disable). This control is local to
+#        mfsusieR; susieR exposes no equivalent.
+#        Per cycle:
+#          a. M-step (mixsqp / ebnm) using current alpha[l, ]
+#             -> writes new pi to G_prior + fitted_g_per_effect[[l]]
+#          b. (skipped on the last cycle) re-run loglik / moments /
+#             KL so alpha[l, ] reflects the new pi within this iter
+#        With 2 cycles the per-effect (alpha, pi) end the iter
+#        in lockstep.
+#
+# Big-picture intuition: scalar-V susieR is fine with one M-step
+# per outer iter because V is one number and (V, alpha) settles
+# quickly. mfsusieR's mixture pi is a K-dim simplex tightly
+# coupled to alpha; the inner loop keeps the two in sync per
+# effect per outer iter, so spurious effects collapse cleanly
+# instead of slowly drifting on residual-noise correlations.
+#
+# Per-prior empirical note: per_scale_normal (ebnm) already
+# converges in few outer iters even with a single inner step,
+# because each scale's prior is fit independently and the
+# pi-alpha drift is naturally decoupled. per_outcome (mixsqp on
+# a single pooled prior per outcome) is the path that benefits
+# most from the inner loop. The same code path applies to both;
+# no special-casing needed.
+#
+# Cost: ~2x M-step + 1 extra loglik/moments/KL per effect per
+# outer iter, recovered by ~2x fewer outer iters at the default
+# inner_em_steps = 2. Higher values trade more inner work for
+# fewer outer iters (diminishing returns past ~5).
+# =============================================================
+
 #' @keywords internal
 #' @export
 pre_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
@@ -638,9 +688,6 @@ pre_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
   list(V = 1, model = model)
 }
 
-# Post-loglik slot: dispatch to optimize_prior_variance.mf_individual.
-# That helper writes the M-step result to BOTH the shared G_prior
-# scratchpad AND the per-effect fitted_g_per_effect[[l]] sidecar.
 #' @keywords internal
 #' @export
 post_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
@@ -648,13 +695,28 @@ post_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
   if (!isTRUE(params$estimate_prior_variance)) {
     return(list(V = 1, model = model))
   }
-  out <- optimize_prior_variance.mf_individual(
-    data, params, model, ser_stats,
-    l       = l,
-    alpha   = getFromNamespace("get_alpha_l", "susieR")(model, l),
-    moments = getFromNamespace("get_posterior_moments_l", "susieR")(model, l),
-    V_init  = V_init)
-  list(V = 1, model = out$model)
+  inner_steps <- max(1L, as.integer(params$inner_em_steps %||% 2L))
+  loglik_fn  <- getFromNamespace("loglik",                       "susieR")
+  cpm_fn     <- getFromNamespace("calculate_posterior_moments",  "susieR")
+  ckl_fn     <- getFromNamespace("compute_kl",                   "susieR")
+  get_alpha  <- getFromNamespace("get_alpha_l",                  "susieR")
+  get_post   <- getFromNamespace("get_posterior_moments_l",      "susieR")
+
+  for (k in seq_len(inner_steps)) {
+    out <- optimize_prior_variance.mf_individual(
+      data, params, model, ser_stats,
+      l = l, alpha = get_alpha(model, l),
+      moments = get_post(model, l), V_init = V_init)
+    model <- out$model
+    if (k == inner_steps) break
+    # Re-run loglik / moments / KL against the freshly-M-stepped
+    # G_prior so alpha[l, ] reflects the new pi before the next
+    # M-step cycle.
+    model <- loglik_fn(data, params, model, V = 1, ser_stats, l)
+    model <- cpm_fn(data, params, model, V = 1, l)
+    model <- ckl_fn(data, params, model, l)
+  }
+  list(V = 1, model = model)
 }
 
 #' mixsqp M-step on `pi_V` per (outcome, scale)
