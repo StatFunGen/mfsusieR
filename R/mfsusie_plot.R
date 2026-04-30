@@ -75,6 +75,50 @@ mf_cs_colors <- function(n_cs) {
   smoothed$lfsr_curves[[m]][[l]]
 }
 
+# Conditional local false sign rate per (variant, wavelet-coef)
+# for effect `l`, outcome `m`. Each entry is
+#   pnorm(-|mu[l, m, j, t]| / sd[l, m, j, t])
+# where sd = sqrt(mu2 - mu^2). Reads
+# `smoothed$clfsr_curves[[m]][[l]]` when populated by a smoother
+# call; otherwise computes from the SuSiE posterior moments
+# directly. Shape: `p x T_basis[m]`. Independent of which
+# smoother (if any) ran.
+compute_clfsr_matrix <- function(fit, l, m, smoothed = NULL) {
+  if (!is.null(smoothed) && !is.null(smoothed$clfsr_curves) &&
+      !is.null(smoothed$clfsr_curves[[m]]) &&
+      !is.null(smoothed$clfsr_curves[[m]][[l]])) {
+    return(smoothed$clfsr_curves[[m]][[l]])
+  }
+  mu <- fit$mu[[l]][[m]]
+  sd <- sqrt(pmax(fit$mu2[[l]][[m]] - mu^2, 0))
+  lfsr_from_gaussian(mu, sd)
+}
+
+# Single length-T_m lfsr curve per (l, m) for a per-CS overlay.
+#   "smoother" -> `smoothed$lfsr_curves[[m]][[l]]` directly
+#                 (length T_m, smoother-derived per-position lfsr).
+#   "lfsr"     -> `alpha[l, ] %*% clfsr_matrix[l, m]` truncated to
+#                 length T_m. Alpha-weighted aggregation of the
+#                 per-variant conditional matrix.
+#   "clfsr"    -> identical curve to "lfsr". The unaggregated
+#                 `p x T_basis[m]` matrix is available from
+#                 `compute_clfsr_matrix`; a single per-CS overlay
+#                 needs a 1D reduction, and the alpha-weighted
+#                 form is the natural one.
+# "smoother" requires a smoothed payload (returns NULL if absent).
+# "lfsr" and "clfsr" derive from `fit$mu` / `fit$mu2` and work on
+# fits that have not been post-smoothed.
+.resolve_lfsr_curve <- function(fit, l, m, smoothed,
+                                source = c("smoother", "lfsr", "clfsr")) {
+  source <- match.arg(source)
+  if (source == "smoother") return(.lfsr_curve(fit, l, m, smoothed))
+
+  cl <- compute_clfsr_matrix(fit, l, m, smoothed)
+  T_target <- fit$dwt_meta$T_basis[m]
+  agg <- as.numeric(fit$alpha[l, ] %*% cl)
+  agg[seq_len(min(T_target, length(agg)))]
+}
+
 # Contiguous (start, end) runs where the credible band excludes
 # zero. Returns a list of integer index pairs into `pos`.
 credibly_nonzero_runs <- function(band) {
@@ -645,12 +689,27 @@ credibly_nonzero_mask <- function(band) {
 #'   Layout of multiple credible sets within an effect panel.
 #' @param show_grid_dots logical, draw circles at each post-remap
 #'   grid point on top of the curves. Default `FALSE`.
-#' @param show_lfsr_curve logical, overlay HMM lfsr curves on a
-#'   secondary axis when `fit$lfsr_curves` is populated. Only
-#'   honored in `effect_style = "band"`. Default `TRUE`. The
-#'   solid line is the effect (left axis), the dashed line is
-#'   the lfsr (right axis, 0 to 1). For a dedicated per-CS
+#' @param show_lfsr_curve logical, overlay an lfsr curve on a
+#'   secondary axis. Only honored in `effect_style = "band"`.
+#'   Default `TRUE`. The solid line is the effect (left axis), the
+#'   dashed line is the lfsr (right axis, 0 to 1). The lfsr source
+#'   is selected by `lfsr_source` below. For a dedicated per-CS
 #'   lfsr view see `mfsusie_plot_lfsr()`.
+#' @param lfsr_source which lfsr to overlay, one of
+#'   `"smoother"`, `"lfsr"`, `"clfsr"`. Default `"smoother"`.
+#'   - `"smoother"`: reads `fit$smoothed[[method]]$lfsr_curves[[m]][[l]]`,
+#'     a length-`T_m` per-position vector produced by the smoother
+#'     kernel itself.
+#'   - `"lfsr"`: alpha-weighted aggregation of the per-variant
+#'     conditional lfsr matrix, `alpha[l, ] %*% clfsr_matrix[l, m]`,
+#'     truncated to length `T_m`. Computed from `fit$mu` /
+#'     `fit$mu2` so it is available even on a fit that has not been
+#'     post-smoothed.
+#'   - `"clfsr"`: same alpha-weighted aggregation as `"lfsr"`. The
+#'     unaggregated `p x T_basis[m]` conditional matrix
+#'     `pnorm(-|mu[l, m, j, t]| / sd[l, m, j, t])` is exposed via
+#'     `compute_clfsr_matrix(fit, l, m)` for code that needs the
+#'     full per-variant view.
 #' @param show_affected_region logical, mark contiguous segments
 #'   where each CS's credible band excludes zero with thick bars
 #'   at the bottom of the effect panel (band mode) or with black
@@ -689,7 +748,7 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
                          facet_cs = c("auto", "stack", "overlay"),
                          show_grid_dots = FALSE,
                          show_lfsr_curve = TRUE,
-                         lfsr_source = c("smoother", "clfsr"),
+                         lfsr_source = c("smoother", "lfsr", "clfsr"),
                          show_affected_region = TRUE,
                          lfsr_threshold = 0.01,
                          lwd = 2.0,
@@ -708,19 +767,22 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
   picked   <- .pick_smooth_method(fit, smooth_method)
   smoothed <- if (!is.null(picked)) fit$smoothed[[picked]] else NULL
 
-  # Swap in the alpha-aggregated per-variant clfsr in place of the
-  # smoother's position-space lfsr. Truncated to the position-grid
-  # length when the wavelet basis is longer (non-power-of-2).
-  if (!is.null(smoothed) && lfsr_source == "clfsr" &&
-      !is.null(smoothed$clfsr_curves)) {
-    T_m_vec <- fit$dwt_meta$T_basis
-    for (m_i in seq_along(smoothed$clfsr_curves)) {
-      for (l_i in seq_along(smoothed$clfsr_curves[[m_i]])) {
-        clfsr_lm <- smoothed$clfsr_curves[[m_i]][[l_i]]
-        if (is.null(clfsr_lm)) next
-        agg <- as.numeric(fit$alpha[l_i, ] %*% clfsr_lm)
-        T_target <- length(smoothed$lfsr_curves[[m_i]][[l_i]] %||% agg)
-        smoothed$lfsr_curves[[m_i]][[l_i]] <- agg[seq_len(T_target)]
+  # Replace the lfsr overlay vector per (l, m) with the requested
+  # source. "smoother" is a no-op (downstream reads
+  # `smoothed$lfsr_curves` directly via `.lfsr_curve`).
+  if (lfsr_source != "smoother") {
+    if (is.null(smoothed)) smoothed <- list(lfsr_curves = NULL)
+    M_loc <- length(fit$dwt_meta$T_basis)
+    L_loc <- nrow(fit$alpha)
+    if (is.null(smoothed$lfsr_curves)) {
+      smoothed$lfsr_curves <- replicate(M_loc,
+                                        vector("list", L_loc),
+                                        simplify = FALSE)
+    }
+    for (m_i in seq_len(M_loc)) {
+      for (l_i in seq_len(L_loc)) {
+        smoothed$lfsr_curves[[m_i]][[l_i]] <- .resolve_lfsr_curve(
+          fit, l_i, m_i, smoothed, source = lfsr_source)
       }
     }
   }
@@ -1240,6 +1302,21 @@ mfsusie_plot_lfsr_dimensions <- function(fit, add_legend = TRUE) {
 #'   boolean vector or list-of-CS-vectors.
 #' @param cex_max numeric, upper clamp on `-log10(lfsr)` for
 #'   the dot size. Default `6`.
+#' @param lfsr_source which lfsr to bubble-plot, one of
+#'   `"smoother"`, `"lfsr"`, `"clfsr"`. Default `"smoother"`.
+#'   - `"smoother"`: reads
+#'     `fit$smoothed[[method]]$lfsr_curves[[m]][[l]]`, the
+#'     length-`T_m` per-position lfsr produced by the smoother.
+#'     Requires a smoothed payload.
+#'   - `"lfsr"`: alpha-weighted aggregation of the per-variant
+#'     conditional lfsr matrix,
+#'     `alpha[l, ] %*% clfsr_matrix[l, m]`, truncated to length
+#'     `T_m`. Computed from `fit$mu` / `fit$mu2` so it works on
+#'     fits that have not been post-smoothed.
+#'   - `"clfsr"`: same alpha-weighted aggregation as `"lfsr"`.
+#'     The unaggregated `p x T_basis[m]` conditional matrix is
+#'     exposed via `compute_clfsr_matrix(fit, l, m)` for code
+#'     that needs the per-variant view.
 #' @param save optional file path. When non-NULL the bubble grid
 #'   is written to the file at a size proportional to the number
 #'   of outcomes and credible sets. The graphics device is
@@ -1254,24 +1331,47 @@ mfsusie_plot_lfsr <- function(fit,
                               cex_max        = 6,
                               add_legend     = TRUE,
                               smooth_method  = NULL,
+                              lfsr_source    = c("smoother", "lfsr", "clfsr"),
                               save           = NULL, ...) {
   if (!inherits(fit, "mfsusie")) {
     stop("`fit` must be an `mfsusie` (or `fsusie`) fit object.")
   }
-  # `mfsusie_plot_lfsr` only makes sense for HMM-smoothed fits.
-  # When the user does not name a smoothing, default to HMM if
-  # present; otherwise emit a clear error.
+  lfsr_source <- match.arg(lfsr_source)
   if (is.null(smooth_method)) {
     if (!is.null(fit$smoothed) && !is.null(fit$smoothed[["HMM"]])) {
       smooth_method <- "HMM"
     }
   }
-  if (is.null(smooth_method) ||
-      is.null(fit$smoothed[[smooth_method]]$lfsr_curves)) {
-    stop("`mfsusie_plot_lfsr()` requires HMM-smoothed lfsr ",
-         "curves. Call `mf_post_smooth(method = \"HMM\")` first.")
+  # `lfsr_source = "smoother"` requires a smoothed payload.
+  # `lfsr` and `clfsr` derive from the SuSiE posterior moments and
+  # work on a fit that has not been post-smoothed.
+  if (lfsr_source == "smoother") {
+    if (is.null(smooth_method) ||
+        is.null(fit$smoothed[[smooth_method]]$lfsr_curves)) {
+      stop("`lfsr_source = \"smoother\"` requires HMM-smoothed ",
+           "lfsr curves. Call `mf_post_smooth(method = \"HMM\")` ",
+           "first, or pass `lfsr_source = \"lfsr\"` / \"clfsr\".")
+    }
   }
-  smoothed <- fit$smoothed[[smooth_method]]
+  smoothed <- if (!is.null(smooth_method))
+    fit$smoothed[[smooth_method]] else NULL
+
+  if (lfsr_source != "smoother") {
+    M_loc <- length(fit$dwt_meta$T_basis)
+    L_loc <- nrow(fit$alpha)
+    if (is.null(smoothed)) smoothed <- list()
+    if (is.null(smoothed$lfsr_curves)) {
+      smoothed$lfsr_curves <- replicate(M_loc,
+                                        vector("list", L_loc),
+                                        simplify = FALSE)
+    }
+    for (m_i in seq_len(M_loc)) {
+      for (l_i in seq_len(L_loc)) {
+        smoothed$lfsr_curves[[m_i]][[l_i]] <- .resolve_lfsr_curve(
+          fit, l_i, m_i, smoothed, source = lfsr_source)
+      }
+    }
+  }
 
   M <- length(fit$dwt_meta$T_basis)
   K <- length(fit$sets$cs %||% list())

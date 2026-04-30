@@ -48,3 +48,61 @@ test_that("mfsusie_plot(lfsr_source = 'clfsr') runs end-to-end without error", {
   on.exit({ grDevices::dev.off(); unlink(tmp) }, add = TRUE)
   expect_silent(mfsusieR::mfsusie_plot(fit, lfsr_source = "clfsr"))
 })
+
+test_that("mfsusie_plot_lfsr supports all three lfsr_source modes", {
+  skip_if_not_installed("ashr")
+  skip_if_not_installed("wavethresh")
+  set.seed(1L)
+  N <- 50L; J <- 30L; T_basis <- 16L
+  X    <- matrix(rnorm(N * J), N, J)
+  beta <- matrix(0, J, T_basis); beta[5L, ] <- 1.0; beta[15L, ] <- 0.7
+  Y1   <- X %*% beta + matrix(rnorm(N * T_basis, sd = 0.3), N, T_basis)
+  fit  <- mfsusieR::mfsusie(X = X, Y = list(Y1),
+                            L = 4L, max_iter = 10L, verbose = FALSE)
+  fit  <- mfsusieR::mf_post_smooth(fit, method = "HMM")
+
+  tmp <- tempfile(fileext = ".pdf")
+  grDevices::pdf(tmp)
+  on.exit({ grDevices::dev.off(); unlink(tmp) }, add = TRUE)
+  expect_silent(mfsusieR::mfsusie_plot_lfsr(fit, lfsr_source = "smoother"))
+  expect_silent(mfsusieR::mfsusie_plot_lfsr(fit, lfsr_source = "lfsr"))
+  expect_silent(mfsusieR::mfsusie_plot_lfsr(fit, lfsr_source = "clfsr"))
+})
+
+test_that("mfsusie_plot supports all three lfsr_source modes", {
+  skip_if_not_installed("ashr")
+  skip_if_not_installed("wavethresh")
+  set.seed(1L)
+  N <- 50L; J <- 30L; T_basis <- 16L
+  X    <- matrix(rnorm(N * J), N, J)
+  beta <- matrix(0, J, T_basis); beta[5L, ] <- 1.0; beta[15L, ] <- 0.7
+  Y1   <- X %*% beta + matrix(rnorm(N * T_basis, sd = 0.3), N, T_basis)
+  fit  <- mfsusieR::mfsusie(X = X, Y = list(Y1),
+                            L = 4L, max_iter = 10L, verbose = FALSE)
+  fit  <- mfsusieR::mf_post_smooth(fit, method = "TI")
+
+  tmp <- tempfile(fileext = ".pdf")
+  grDevices::pdf(tmp)
+  on.exit({ grDevices::dev.off(); unlink(tmp) }, add = TRUE)
+  expect_silent(mfsusieR::mfsusie_plot(fit, lfsr_source = "smoother"))
+  expect_silent(mfsusieR::mfsusie_plot(fit, lfsr_source = "lfsr"))
+  expect_silent(mfsusieR::mfsusie_plot(fit, lfsr_source = "clfsr"))
+})
+
+test_that("compute_clfsr_matrix returns the SuSiE-posterior lfsr matrix", {
+  skip_if_not_installed("ashr")
+  set.seed(2L)
+  N <- 40L; J <- 20L; T_basis <- 8L
+  X    <- matrix(rnorm(N * J), N, J)
+  beta <- matrix(0, J, T_basis); beta[5L, ] <- 1.0
+  Y1   <- X %*% beta + matrix(rnorm(N * T_basis, sd = 0.3), N, T_basis)
+  fit  <- mfsusieR::mfsusie(X = X, Y = list(Y1),
+                            L = 3L, max_iter = 5L, verbose = FALSE)
+  for (l in seq_len(nrow(fit$alpha))) {
+    cl <- mfsusieR:::compute_clfsr_matrix(fit, l, m = 1L, smoothed = NULL)
+    mu <- fit$mu[[l]][[1L]]
+    expected <- mfsusieR:::lfsr_from_gaussian(
+      mu, sqrt(pmax(fit$mu2[[l]][[1L]] - mu^2, 0)))
+    expect_equal(cl, expected, tolerance = 0)
+  }
+})
