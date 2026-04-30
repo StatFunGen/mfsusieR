@@ -78,12 +78,17 @@ make_ser_stats <- function(data) list(
                          ncol = data$T_basis[1L])))
 
 # Minimal model state for the dispatch tests: one outcome,
-# uniform alpha, prior just constructed.
-make_seed_model <- function(data, prior) list(
+# uniform alpha, prior just constructed. pi_V and
+# fitted_g_per_effect are per-effect (list[L]) sidecars; the
+# dispatch tests use L = 1.
+make_seed_model <- function(data, prior, L = 1L) list(
   M       = data$M,
   G_prior = prior$G_prior,
-  pi_V    = prior$pi,
-  alpha   = matrix(1 / data$p, nrow = 1L, ncol = data$p))
+  pi_V    = lapply(seq_len(L), function(.) prior$pi),
+  fitted_g_per_effect = lapply(seq_len(L), function(.)
+    lapply(prior$G_prior, function(G_m)
+      lapply(G_m, function(g_s) g_s$fitted_g))),
+  alpha   = matrix(1 / data$p, nrow = L, ncol = data$p))
 
 # Run mfsusie on the sparse fixture under the named scope. Used
 # by the end-to-end shape and power tests.
@@ -164,7 +169,7 @@ test_that("5: end-to-end mfsusie() builds a fit on per_scale_normal", {
   expect_equal(class(fit$G_prior[[1L]]),
                 "mixture_point_normal_per_scale")
   S_m <- length(fit$G_prior[[1L]])
-  expect_equal(dim(fit$pi_V[[1L]]), c(S_m, 2L))
+  expect_equal(dim(fit$pi_V[[1L]][[1L]]), c(S_m, 2L))
   expect_true(is.matrix(fit$alpha))
   expect_true(!is.null(fit$pip))
   expect_true(!is.null(fit$sets$cs))
@@ -177,17 +182,19 @@ test_that("5: end-to-end mfsusie() builds a fit on per_scale_laplace", {
                 "mixture_point_laplace_per_scale")
   expect_equal(class(fit$G_prior[[1L]][[1L]]$fitted_g), "laplacemix")
   S_m <- length(fit$G_prior[[1L]])
-  expect_equal(dim(fit$pi_V[[1L]]), c(S_m, 2L))
+  expect_equal(dim(fit$pi_V[[1L]][[1L]]), c(S_m, 2L))
 })
 
 test_that("5: ebnm M-step writes both fitted_g and pi_V", {
-  # Dispatch wires `fit$fitted_g` -> `G_prior$fitted_g` and
-  # `fit$fitted_g$pi` -> `pi_V[[m]][s, ]`. Pin the equality.
+  # Dispatch writes to per-effect sidecars in lockstep:
+  #   fit$pi_V[[l]][[m]][s, ] == fit$fitted_g_per_effect[[l]][[m]][[s]]$pi.
   fit <- fit_sparse("per_scale_normal")
-  for (s in seq_along(fit$G_prior[[1L]])) {
-    expect_equal(fit$pi_V[[1L]][s, ],
-                 fit$G_prior[[1L]][[s]]$fitted_g$pi,
-                 tolerance = 0)
+  for (l in seq_along(fit$pi_V)) {
+    for (s in seq_along(fit$G_prior[[1L]])) {
+      expect_equal(fit$pi_V[[l]][[1L]][s, ],
+                   fit$fitted_g_per_effect[[l]][[1L]][[s]]$pi,
+                   tolerance = 0)
+    }
   }
 })
 

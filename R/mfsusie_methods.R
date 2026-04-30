@@ -283,12 +283,11 @@ summary.mfsusie <- function(object, ...) {
     NULL
   }
 
-  # Summarize the mixture-prior null mass across (m, s) groups.
-  # `pi_V[[m]]` is an `S_m x K` matrix; column 1 is the null
-  # component. The min/median/max of column 1 across all (m, s)
-  # groups is a one-line diagnostic for prior collapse / overfit.
+  # Summarize null mass across all (l, m, s) cells. pi_V is per-effect:
+  # list[L] of list[M] of S_m x K matrix; column 1 is the null component.
   pi_null_summary <- if (!is.null(object$pi_V)) {
-    null_mass <- unlist(lapply(object$pi_V, function(piVm) piVm[, 1L]))
+    null_mass <- unlist(lapply(object$pi_V, function(pi_l)
+      lapply(pi_l, function(piVm) piVm[, 1L])))
     if (length(null_mass) > 0L) {
       list(min    = min(null_mass),
            median = stats::median(null_mass),

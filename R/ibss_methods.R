@@ -120,6 +120,25 @@ expand_model_init_to_L <- function(mi, L_new, p, M, T_basis) {
   if (!is.null(mi$V)) mi$V <- c(mi$V, rep(1, L_diff))
   if (!is.null(mi$KL))  mi$KL  <- c(mi$KL,  rep(NA_real_, L_diff))
   if (!is.null(mi$lbf)) mi$lbf <- c(mi$lbf, rep(NA_real_, L_diff))
+
+  # Extend per-effect prior storage. When growing L, append L_diff
+  # cold-start copies of effect 1's prior state. Detects (and
+  # upgrades) the legacy non-per-effect pi_V shape from older
+  # warm-starts.
+  if (!is.null(mi$pi_V) && !is.null(mi$pi_V[[1L]]) &&
+      is.matrix(mi$pi_V[[1L]])) {
+    # Legacy shape: list[M] of matrix. Wrap into list[L_prev] of that.
+    mi$pi_V <- lapply(seq_len(L_prev), function(.) mi$pi_V)
+  }
+  if (!is.null(mi$pi_V)) {
+    seed_pi <- mi$pi_V[[1L]]
+    mi$pi_V <- c(mi$pi_V, lapply(seq_len(L_diff), function(.) seed_pi))
+  }
+  if (!is.null(mi$fitted_g_per_effect)) {
+    seed_fge <- mi$fitted_g_per_effect[[1L]]
+    mi$fitted_g_per_effect <- c(mi$fitted_g_per_effect,
+      lapply(seq_len(L_diff), function(.) seed_fge))
+  }
   mi
 }
 
@@ -154,7 +173,8 @@ ibss_initialize.mf_individual <- function(data, params) {
     mi <- expand_model_init_to_L(params$model_init, params$L,
                                  data$p, data$M, data$T_basis)
     warm_fields <- c("alpha", "mu", "mu2", "V", "V_grid",
-                     "pi_V", "G_prior", "sigma2", "fitted",
+                     "pi_V", "fitted_g_per_effect",
+                     "G_prior", "sigma2", "fitted",
                      "intercept")
     for (f in warm_fields) {
       if (!is.null(mi[[f]])) mat_init[[f]] <- mi[[f]]
