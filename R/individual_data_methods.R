@@ -650,6 +650,11 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
 #' @export
 pre_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
                                                 l, V_init) {
+  # `V_init` is intentionally discarded. `loglik.mf_individual`
+  # uses the per-(outcome, scale) mixture sd grid directly; the
+  # per-effect adaptation lives in `model$pi_V` / `model$G_prior`,
+  # not in the susieR scalar V. The pre-hook returns V = 1 so the
+  # SER orchestrator's BF computation runs against the mixture as-is.
   if (!is.null(model$fitted_g_per_effect)) {
     fge_l <- model$fitted_g_per_effect[[l]]
     for (m in seq_len(data$M)) {
@@ -677,15 +682,15 @@ post_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
   loglik_fn  <- getFromNamespace("loglik",                       "susieR")
   cpm_fn     <- getFromNamespace("calculate_posterior_moments",  "susieR")
   ckl_fn     <- getFromNamespace("compute_kl",                   "susieR")
+  opv_fn     <- getFromNamespace("optimize_prior_variance",      "susieR")
   get_alpha  <- getFromNamespace("get_alpha_l",                  "susieR")
-  get_post   <- getFromNamespace("get_posterior_moments_l",      "susieR")
 
   for (k in seq_len(inner_cap)) {
     prev_lbf <- model$lbf[l]
-    out <- optimize_prior_variance.mf_individual(
+    out <- opv_fn(
       data, params, model, ser_stats,
       l = l, alpha = get_alpha(model, l),
-      moments = get_post(model, l), V_init = V_init)
+      V_init = V_init)
     model <- out$model
     if (k == inner_cap) break
     # Re-run loglik / moments / KL against the freshly-M-stepped

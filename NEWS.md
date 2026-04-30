@@ -1,3 +1,13 @@
+# mfsusieR (development version)
+
+- `pip` now incorporates the `V[l] > prior_tol` filter. The
+  per-effect effective slab variance (mean over (m, s) of
+  `sum_k pi[l, m, s, k] * var_k`) populates `model$V[l]` after
+  every IBSS sweep; effects whose mixture pi has collapsed onto
+  the null spike are dropped from the PIP product and zeroed
+  by `trim_null_effects.mf_individual` on the rest of the fit.
+  Pass `prior_tol = 0` to disable the filter.
+
 # mfsusieR 0.0.1 (2026-04-25)
 
 First release.

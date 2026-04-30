@@ -225,17 +225,37 @@ track_ibss_fit.mf_individual <- function(data, params, model, tracking, iter, el
 
 # ---- trim_null_effects ----------------------------------------
 
-#' Drop effects with negligible posterior mass (no-op)
+#' Drop effects with negligible effective slab variance
 #'
-#' susieR's default zeros out effects with `V[l] < prior_tol`.
-#' mfsusieR holds `V[l] = 1` for all l (mixture prior absorbs the
-#' per-effect adaptation), so the V-based pruning does not apply.
-#' A future refinement may prune effects whose mixture weight
-#' concentrates on the null component.
+#' Zeros out `alpha[l, ]`, `mu[[l]][[m]]`, `mu2[[l]][[m]]`,
+#' `lbf[l]`, `KL[l]`, `lbf_variable[l, ]`, and
+#' `lbf_variable_outcome[l, , ]` for every effect `l` with
+#' `model$V[l] < params$prior_tol`. Mirrors
+#' `susieR::trim_null_effects.default` over mfsusieR's
+#' list-of-list `mu` / `mu2` shape so that effects dropped by
+#' `susie_get_pip`'s `V > prior_tol` filter are also zeroed
+#' on the rest of the fit (no double-counting).
 #'
 #' @keywords internal
 #' @noRd
 trim_null_effects.mf_individual <- function(data, params, model) {
+  null_idx <- which(model$V < (params$prior_tol %||% 1e-9))
+  if (length(null_idx) == 0L) return(model)
+
+  model$V[null_idx]              <- 0
+  model$alpha[null_idx, ]        <- rep(model$pi, each = length(null_idx))
+  model$lbf[null_idx]            <- 0
+  model$KL[null_idx]             <- 0
+  model$lbf_variable[null_idx, ] <- 0
+  if (!is.null(model$lbf_variable_outcome)) {
+    model$lbf_variable_outcome[null_idx, , ] <- 0
+  }
+  for (l in null_idx) {
+    for (m in seq_len(data$M)) {
+      model$mu[[l]][[m]][]  <- 0
+      model$mu2[[l]][[m]][] <- 0
+    }
+  }
   model
 }
 

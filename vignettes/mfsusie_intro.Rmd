@@ -168,6 +168,16 @@ B_hat <- coef(fit)
 sapply(B_hat, dim)
 ```
 
+`mf_summarize_effects(fit)` returns a tidy data frame of the
+per-(CS, outcome) credibly-non-zero windows (start, end,
+n_positions), derived from the credible bands of the picked
+smoother. Useful when you want a tabular handle on which
+positions each CS lights up at, separately from the plot.
+
+```{r summarize-effects}
+mf_summarize_effects(fit_s)
+```
+
 ## Choosing `prior_variance_scope`
 
 - `"per_outcome"` (default; used above): one mixture-of-normals
