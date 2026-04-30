@@ -1,22 +1,13 @@
-# Post-smoother that delegates to smashr::smash.gaus on a per-
-# effect, per-outcome basis.
-#
-# Per-effect, per-outcome:
-#   1. Per-effect, per-outcome, isolate the position-space
-#      response by subtracting the alpha-weighted contribution
-#      of every other effect.
-#   2. Compute the per-position OLS estimate `(Bhat, Shat)` of
-#      that response on the per-effect alpha-weighted X
-#      aggregate, after column-scaling both sides.
-#   3. Pass `(Bhat, Shat)` to `smashr::smash.gaus(post.var = TRUE)`.
-#   4. Undo the column scaling and assemble the position-space
-#      effect estimate and credible band.
-#
-# `smashr` is a Suggests dependency; the dispatch in
-# `mf_post_smooth` checks `requireNamespace` before reaching this
-# kernel.
+# Post-smoother kernel + per-position smash routine. Two flavors:
+#   "ash"    -- cycle-spinning + per-coefficient `ashr::ash` on the
+#               wavelet decomposition of the per-position OLS
+#               estimate, with the per-position OLS Shat used as
+#               the noise level. No `smashr` dependency.
+#   "smashr" -- `smashr::smash.gaus` on the per-position OLS
+#               estimate. Requires the `smashr` Suggests package;
+#               the `requireNamespace` gate lives in `mf_post_smooth`.
 
-.post_smooth_smash <- function(fit, level) {
+.post_smooth_smash <- function(fit, level, flavor = "ash") {
   z_crit <- stats::qnorm((1 + level) / 2)
   alpha  <- 1 - level
   Y_pos_cache <- vector("list", length(fit$dwt_meta$T_basis))
@@ -24,7 +15,8 @@
     if (is.null(Y_pos_cache[[m]]))
       Y_pos_cache[[m]] <<- .iso_response_pos(fit, m)
     iso <- Y_pos_cache[[m]] - .other_effects_pos(fit, m, exclude = l)
-    out <- univariate_smash_regression(iso, fit$X_eff[[l]], alpha)
+    out <- univariate_smash_regression(iso, fit$X_eff[[l]], alpha,
+                                       flavor = flavor)
     # Recover sd from the credible-band half-width:
     # (upper - lower) / 2 = z_crit * sd.
     sd_pos <- (out$cred_band[1L, ] - out$cred_band[2L, ]) /
@@ -42,10 +34,10 @@
 #'
 #' For a single regressor `X` (length `n`) and a multi-position
 #' response `Y` (`n x T`), compute the per-position OLS estimate
-#' of `Y` on `X` and pass it to `smashr::smash.gaus` for
-#' empirical-Bayes wavelet shrinkage. Returns the smoothed
+#' of `Y` on `X` and pass it to one of two empirical-Bayes wavelet
+#' shrinkers selected by `flavor`. Returns the smoothed
 #' position-space effect estimate and a `(1 - alpha)` credible
-#' band derived from the smash posterior variance.
+#' band derived from the posterior variance.
 #'
 #' Used internally by `mf_post_smooth(method = "smash")`; also
 #' useful as a standalone post-processing utility on a single
@@ -57,25 +49,29 @@
 #'   `n`. Single regressor.
 #' @param alpha numeric in `(0, 1)`. Credible-band level is
 #'   `1 - alpha`. Default `0.05`.
+#' @param flavor `"ash"` (default) runs cycle-spinning +
+#'   per-coefficient `ashr::ash`; `"smashr"` calls
+#'   `smashr::smash.gaus` and requires the `smashr` Suggests
+#'   package.
 #' @return A list with components `effect_estimate` (length `T`
 #'   numeric) and `cred_band` (`2 x T` matrix with rows
 #'   `c("up", "low")`).
 #' @examples
 #' \donttest{
-#' if (requireNamespace("smashr", quietly = TRUE)) {
-#'   set.seed(1L)
-#'   X <- matrix(rnorm(60), 60, 1L)
-#'   Y <- X %*% matrix(c(rep(0, 24), rep(1, 16), rep(0, 24)),
-#'                     1L, 64L) + matrix(rnorm(60 * 64, sd = 0.5), 60)
-#'   out <- univariate_smash_regression(Y, X)
-#'   plot(out$effect_estimate, type = "l")
-#' }
+#' set.seed(1L)
+#' X <- matrix(rnorm(60), 60, 1L)
+#' Y <- X %*% matrix(c(rep(0, 24), rep(1, 16), rep(0, 24)),
+#'                   1L, 64L) + matrix(rnorm(60 * 64, sd = 0.5), 60)
+#' out <- univariate_smash_regression(Y, X)
+#' plot(out$effect_estimate, type = "l")
 #' }
 #' @export
-univariate_smash_regression <- function(Y, X, alpha = 0.05) {
+univariate_smash_regression <- function(Y, X, alpha = 0.05,
+                                        flavor = c("ash", "smashr")) {
   Y <- as.matrix(Y)
   X <- as.matrix(X)
   stopifnot(ncol(X) == 1L)
+  flavor <- match.arg(flavor)
 
   coeff <- stats::qnorm(1 - alpha / 2)
 
@@ -101,12 +97,13 @@ univariate_smash_regression <- function(Y, X, alpha = 0.05) {
     sds[bad] <- stats::median(sds[!bad], na.rm = TRUE)
   }
 
-  s <- smashr::smash.gaus(
-    x        = est,
-    sigma    = sds,
-    ashparam = list(optmethod = "mixVBEM"),
-    post.var = TRUE
-  )
+  s <- if (flavor == "smashr") {
+    smashr::smash.gaus(x = est, sigma = sds,
+                       ashparam = list(optmethod = "mixVBEM"),
+                       post.var = TRUE)
+  } else {
+    mf_smash_ash(noisy_signal = est, noise_level = sds)
+  }
 
   # Undo X scaling.
   fitted_func <- s$mu.est * csd_Y / csd_X
@@ -119,3 +116,89 @@ univariate_smash_regression <- function(Y, X, alpha = 0.05) {
   list(effect_estimate = fitted_func, cred_band = cred_band)
 }
 
+# Cycle-spinning + per-coefficient `ashr::ash` shrinkage on the
+# wavelet decomposition of `noisy_signal`, given a per-position
+# noise sd `noise_level`. Pads to a power-of-2 by reflection,
+# double-reflects for boundary handling, averages the inverse
+# transforms across `n.shifts` cyclic shifts. Pure dependencies:
+# `wavethresh` + `ashr`.
+mf_smash_ash <- function(noisy_signal, noise_level = 1,
+                         n.shifts = 50L,
+                         filter.number = 1L,
+                         family = "DaubExPhase") {
+  x <- as.numeric(noisy_signal)
+  n <- length(x)
+  sds <- if (length(noise_level) == 1L) rep(noise_level, n) else noise_level
+  if (length(sds) != n)
+    stop("`noise_level` must be length 1 or length(noisy_signal).")
+
+  # Pad to next power-of-2 by reflection.
+  if ((log2(n) %% 1) != 0) {
+    next_pow2 <- 2L^ceiling(log2(n))
+    extra     <- next_pow2 - n
+    x_padded   <- c(x, rev(x[seq_len(extra)]))
+    sds_padded <- c(sds, rev(sds[seq_len(extra)]))
+  } else {
+    x_padded   <- x
+    sds_padded <- sds
+  }
+
+  # Double-reflect for boundary handling.
+  x_reflect <- c(x_padded, rev(x_padded))
+  s_reflect <- c(sds_padded, rev(sds_padded))
+  n_padded  <- length(x_padded)
+  pos_orig        <- seq_len(n)
+  pos_orig_padded <- (n_padded + 1L):(n_padded + n)
+  n_r <- length(x_reflect)
+  k   <- floor(n / n.shifts)
+
+  W <- wavethresh::GenW(n = n_r,
+                        filter.number = filter.number,
+                        family = family)
+  wavelet_var <- as.numeric(W^2 %*% (s_reflect^2))
+
+  est     <- vector("list", n.shifts)
+  est_var <- vector("list", n.shifts)
+  idx_wave <- gen_wavelet_indx(log2(n_r))
+
+  for (i in seq_len(n.shifts)) {
+    shifted_x <- c(x_reflect[(i * k + 1L):n_r], x_reflect[seq_len(i * k)])
+    wd_shifted <- wavethresh::wd(shifted_x, filter.number = filter.number,
+                                 family = family)
+    d  <- rep(0, length(wd_shifted$D))
+    d2 <- rep(0, length(wd_shifted$D) + 1L)  # extra slot for the C coef
+    for (s_idx in seq_len(length(idx_wave) - 1L)) {
+      ix <- idx_wave[[s_idx]]
+      t_ash <- ashr::ash(wd_shifted$D[ix],
+                         sqrt(wavelet_var[ix]),
+                         nullweight = 300)
+      d[ix]  <- t_ash$result$PosteriorMean
+      d2[ix] <- t_ash$result$PosteriorSD^2
+    }
+    wd_shifted$D <- d
+    est[[i]]     <- wavethresh::wr(wd_shifted)
+    est_var[[i]] <- as.numeric(W^2 %*% d2)
+  }
+
+  recover <- function(shifted_x, i, k) {
+    n_s <- length(shifted_x)
+    shift_back <- (n_s - i * k) %% n_s
+    c(shifted_x[(shift_back + 1L):n_s], shifted_x[seq_len(shift_back)])
+  }
+  est_f   <- do.call(rbind, lapply(seq_along(est),
+                                   function(i) recover(est[[i]], i, k)))
+  est_v_f <- do.call(rbind, lapply(seq_along(est_var),
+                                   function(i) recover(est_var[[i]], i, k)))
+
+  est_orig   <- matrix(0, n.shifts, n)
+  est_v_orig <- matrix(0, n.shifts, n)
+  for (i in seq_len(n.shifts)) {
+    est_orig[i, ]   <- 0.5 * (est_f[i, pos_orig] +
+                              rev(est_f[i, pos_orig_padded]))
+    est_v_orig[i, ] <- 0.5 * (est_v_f[i, pos_orig] +
+                              rev(est_v_f[i, pos_orig_padded]))
+  }
+
+  list(mu.est     = colMeans(est_orig),
+       mu.est.var = colMeans(est_v_orig))
+}

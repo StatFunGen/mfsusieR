@@ -31,30 +31,30 @@ per-variant SuSiE posterior moments `mu` and `mu2`.
   truncated to the position-grid length, instead of the
   smoother's position-space lfsr
 
-### Requirement: smash flavor switch
+### Requirement: smash and ash as separate post-smooth methods
 
-`mf_post_smooth(method = "smash", flavor = ...)` SHALL accept
-`flavor = c("ash", "smashr")` (default `"ash"`).
+`mf_post_smooth(fit, method = ...)` SHALL accept `"smash"` and
+`"ash"` as distinct method names instead of a `flavor` argument.
 
+- `"smash"` SHALL invoke `smashr::smash.gaus` and gate on
+  `requireNamespace("smashr")`.
 - `"ash"` SHALL invoke a cycle-spinning + per-coefficient
   `ashr::ash` kernel that uses the per-position OLS Shat as the
   noise level. This path SHALL NOT require the `smashr` package.
-- `"smashr"` SHALL invoke `smashr::smash.gaus` and gate on
-  `requireNamespace("smashr")`.
 
-#### Scenario: ash flavor on a smashr-less install
+#### Scenario: ash method on a smashr-less install
 
-- **WHEN** `mf_post_smooth(method = "smash", flavor = "ash")` is
-  called on a system where `smashr` is not installed
+- **WHEN** `mf_post_smooth(method = "ash")` is called on a system
+  where `smashr` is not installed
 - **THEN** the call SHALL succeed and populate
-  `fit$smoothed[["smash"]]`
+  `fit$smoothed[["ash"]]`
 
-#### Scenario: smashr flavor on a smashr-less install
+#### Scenario: smash method on a smashr-less install
 
-- **WHEN** `mf_post_smooth(method = "smash", flavor = "smashr")` is
-  called on a system where `smashr` is not installed
+- **WHEN** `mf_post_smooth(method = "smash")` is called on a
+  system where `smashr` is not installed
 - **THEN** the call SHALL error with a message naming `smashr` and
-  pointing at `flavor = "ash"` as the alternative
+  pointing at `method = "ash"` as the alternative
 
 ### Requirement: TI uniform scaling mode
 
