@@ -374,11 +374,16 @@ math derivations are colocated in
     outcomes) before passing it to the per-outcome mixsqp M
     step. mfsusieR's per-(outcome, scale) M step lives in
     `R/individual_data_methods.R::optimize_prior_variance.mf_individual`
-    and originally consumed `params$mixsqp_null_penalty %||% 0.7`
-    unscaled.
+    and originally consumed `params$mixture_null_weight %||% 0.05`
+    unscaled. (Public-API rename from `mixsqp_null_penalty` to
+    `mixture_null_weight`; default lowered from 0.7 to 0.05 as
+    part of the per-(outcome, scale) calibration done in PR group
+    6 because the per-(m, s) M step splits the regularization
+    pressure across `M * S` independent solves rather than mvf's
+    single joint solve.)
   Decision: scale-mfsusieR-by-M in
     `R/individual_data_methods.R::optimize_prior_variance.mf_individual`:
-    `mixsqp_null_penalty <- (params$mixsqp_null_penalty %||% 0.7) *
+    `mixture_null_weight <- (params$mixture_null_weight %||% 0.05) *
                              max(1L, data$M)`.
   Reason: derivation in
     `inst/notes/cross-package-audit-derivations.md` section 1.
@@ -551,3 +556,72 @@ math derivations are colocated in
     (mixture x NIG composition; no manuscript derivation
     exists). Johnson-t is the implementable port that
     addresses the same use case.
+
+### Cross-package audit (post hooks, 2026-04-30)
+
+Phase A reports: `inst/notes/sessions/2026-04-30-cross-package-audit-{a,b,c}-*.md`.
+Triage summary: `inst/notes/cross-package-audit-summary-posthooks.md`.
+OpenSpec follow-ups: see summary for the V-semantics-cluster and
+audit-followups change names. The three add-to-ledger entries from
+this round follow.
+
+- fsusieR/R/EM.R:67-71 (`max_SNP_EM` top-K thinning of M-step input)
+  vs mvf.susie.alpha/R/EM.R:67-71
+  Behavior: upstream caps the M-step input to the top
+    `max_SNP_EM = 100` SNPs by `lBF`. Under heavy LD the cutoff
+    varies per IBSS iter and modality.
+  Decision: replaced-by-alpha-threshold in
+    `R/individual_data_methods.R::optimize_prior_variance.mf_individual`
+    via `keep_idx <- which(zeta_l > params$alpha_thin_eps)`
+    (`alpha_thin_eps = 5e-5` default).
+  Reason: alpha-driven thinning is invariant to lBF-scale shifts
+    across (m, s) groups, so the per-(outcome, scale) M step in
+    mfsusieR sees a consistent variant set per outer iter regardless
+    of which modality or scale is being solved. Top-K thinning by
+    lBF is incompatible with the per-(m, s) split because each (m,
+    s) has its own lBF magnitude; running top-K independently per
+    (m, s) would produce inconsistent variant sets across (m, s)
+    within one effect's SER step. The alpha threshold is set well
+    below SuSiE's `prior_tol = 1e-9` (the V-on-effect filter), so
+    no truly-signal variant is dropped: an alpha < 5e-5 means the
+    variant contributes < 0.005% to the SER posterior. Audit ID
+    C-2 (2026-04-30).
+
+- fsusieR/R/computational_functions.R:1604-1693 (`TI_regression.susiF`,
+  lead-variant column) and 771-875 (`HMM_regression.susiF`)
+  Behavior: upstream picks the lead variable via
+    `which.max(obj$alpha[[l]])` and regresses on the single
+    column `X[, idx[l]]` for the per-effect TI / HMM smoother.
+  Decision: replaced-by-alpha-weighted-aggregate in
+    `R/mfsusie.R:419-427` via
+    `X_eff[[l]] <- X %*% (fit$alpha[l, ] * data$csd)`, consumed
+    by `R/mfsusie_methods.R:738` (TI) and `R/mfsusie_methods.R:914`
+    (HMM).
+  Reason: the SuSiE variational posterior on the variable index
+    is a categorical distribution with mass `alpha[l, ]`. The
+    lead-variant approach commits to one variant; the alpha-
+    weighted aggregate respects the posterior coverage uncertainty
+    and gives the same answer when alpha is concentrated on a
+    single variant. The two coincide on tightly-mapped SuSiE fits
+    and diverge when the credible set is broad; the latter is
+    where preserving posterior uncertainty matters. Audit ID B-8
+    (2026-04-30). Phase 5 FDR investigation should compare both
+    on the same fixtures before this design is locked.
+
+- mvf.susie.alpha/R/EM.R:33 (`espsilon = 0.0001` separate inner-EM tol)
+  Behavior: upstream maintains a separate `espsilon` for the inner
+    EM convergence cutoff (`abs(newloglik - oldloglik) < espsilon`),
+    distinct from the outer ELBO-change tol.
+  Decision: shared-tol-in mfsusieR. The post-loglik hook reads
+    `inner_tol <- params$tol %||% 1e-4`
+    (`R/individual_data_methods.R:702`), reusing the IBSS outer
+    convergence tol for the inner per-effect lbf-change cutoff.
+  Reason: the user-facing surface for tolerance control is a
+    single `tol` argument on `mfsusie()` (mfsusie.R:267); a
+    separate inner_em_tol would proliferate knobs for a
+    rarely-tuned semantic. Both checks compare per-iteration
+    log-likelihood-proxy changes at the same scale, so a shared
+    threshold is reasonable. If a Phase 5 / Phase 7 investigation
+    surfaces a need to tune the two independently, the shared-tol
+    decision can be split into a public `inner_em_tol` argument.
+    Audit ID C-6 (2026-04-30).
