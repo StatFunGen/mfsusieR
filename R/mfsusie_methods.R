@@ -621,7 +621,7 @@ mf_post_smooth <- function(fit,
 # Priority order used by `mfsusie_plot()` and friends when the
 # fit carries multiple smoothings and the user has not named
 # one explicitly.
-.smoother_priority <- c("TI", "smash", "ash", "HMM", "scalewise")
+.smoother_priority <- c("HMM", "TI", "smash", "ash", "scalewise")
 
 # Pick the highest-priority smoothing on `fit$smoothed` and emit
 # a hint listing the others. Returns NULL when no smoothing is
