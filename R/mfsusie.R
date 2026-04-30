@@ -289,14 +289,6 @@ mfsusie <- function(X, Y,
   }
   convergence_method      <- match.arg(convergence_method)
 
-  # Translate `estimate_prior_variance` to susieR's internal
-  # vocabulary. susieR's `single_effect_regression.default` skips
-  # the per-effect prior update entirely when
-  # `estimate_prior_method == "none"`; `"optim"` routes through
-  # our mfsusieR override `optimize_prior_variance.mf_individual`,
-  # which runs the mixsqp M step on `pi_V` per (outcome, scale).
-  estimate_prior_method <- if (isTRUE(estimate_prior_variance)) "optim" else "none"
-
   # The wavelet basis needs at least 4 sampled positions per curve.
   # 1 position routes to the scalar (degenerate) path; 2 or 3
   # positions sit in a no-man's-land that fits per-position
@@ -349,8 +341,8 @@ mfsusie <- function(X, Y,
     residual_variance          = residual_variance,
     residual_variance_scope    = residual_variance_scope,
     estimate_residual_variance = isTRUE(estimate_residual_variance),
-    estimate_prior_variance    = (estimate_prior_method != "none"),
-    estimate_prior_method      = estimate_prior_method,   # forwarded to single_effect_regression scaffolding
+    estimate_prior_variance    = isTRUE(estimate_prior_variance),
+    estimate_prior_method      = "EM",  # placeholder; placement is via post_loglik_prior_hook.mf_individual
     convergence_method         = convergence_method,
     pip_stall_window           = pip_stall_window,
     check_null_threshold       = 0,
