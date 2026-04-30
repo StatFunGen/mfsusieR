@@ -6,7 +6,7 @@
 \usage{
 mf_post_smooth(
   fit,
-  method = c("TI", "scalewise", "HMM", "smash"),
+  method = c("TI", "scalewise", "HMM", "smash", "ash"),
   level = 0.95,
   threshold_factor = 1,
   wavelet_filter = 1L,
@@ -14,7 +14,8 @@ mf_post_smooth(
   halfK = 20L,
   overwrite_previous = FALSE,
   X = NULL,
-  Y = NULL
+  Y = NULL,
+  ...
 )
 }
 \arguments{
@@ -46,6 +47,16 @@ matrix. Required when the fit was built with
 original per-outcome response matrices. Required when the
 fit was built with \code{attach_smoothing_inputs = FALSE}; ignored
 otherwise.}
+
+\item{...}{extra arguments forwarded to the underlying
+shrinkage tool for the chosen method. Routing:
+\code{method = "ash"} and \code{method = "TI"} and \code{method = "HMM"}
+forward to \code{ashr::ash} (e.g., \code{nullweight = 10} for milder
+null shrinkage). \code{method = "smash"} forwards to
+\code{smashr::smash.gaus}. \code{method = "TI"} also accepts
+\code{scaling = c("per_scale", "uniform")} (default \code{"per_scale"})
+to pick between scalewise per-scale ash and a single uniform
+ash on raw Y. \code{method = "scalewise"} ignores \code{...}.}
 }
 \value{
 the input fit with \verb{$effect_curves}, \verb{$credible_bands},

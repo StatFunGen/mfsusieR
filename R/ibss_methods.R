@@ -80,10 +80,36 @@ initialize_fitted.mf_individual <- function(data, mat_init, ...) {
 #'
 #' @keywords internal
 #' @noRd
-expand_model_init_to_L <- function(mi, L_new, p, M, T_basis) {
+validate_model_init <- function(mi) {
   if (is.null(mi$alpha)) {
     stop("model_init must carry an `alpha` matrix.")
   }
+  finite_or_stop <- function(x, name) {
+    if (is.null(x)) return(invisible())
+    bad <- !is.finite(unlist(x, use.names = FALSE))
+    if (any(bad))
+      stop(sprintf("model_init$%s contains NA / NaN / Inf.", name))
+  }
+  for (nm in c("alpha", "V", "KL", "lbf", "sigma2"))
+    finite_or_stop(mi[[nm]], nm)
+  for (nm in c("mu", "mu2", "pi_V", "fitted_g_per_effect")) {
+    if (is.null(mi[[nm]])) next
+    if (!is.list(mi[[nm]]))
+      stop(sprintf("model_init$%s must be a list-of-list, got %s.",
+                   nm, class(mi[[nm]])[1L]))
+    finite_or_stop(mi[[nm]], nm)
+  }
+  L <- nrow(mi$alpha)
+  for (nm in c("mu", "mu2")) {
+    if (!is.null(mi[[nm]]) && length(mi[[nm]]) != L)
+      stop(sprintf("model_init$%s has length %d but alpha has %d rows.",
+                   nm, length(mi[[nm]]), L))
+  }
+  invisible(mi)
+}
+
+expand_model_init_to_L <- function(mi, L_new, p, M, T_basis) {
+  validate_model_init(mi)
   L_prev <- nrow(mi$alpha)
   if (L_prev > L_new) {
     stop(sprintf(

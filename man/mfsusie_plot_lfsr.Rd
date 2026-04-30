@@ -11,6 +11,7 @@ mfsusie_plot_lfsr(
   cex_max = 6,
   add_legend = TRUE,
   smooth_method = NULL,
+  lfsr_source = c("smoother", "lfsr", "clfsr"),
   save = NULL,
   ...
 )
@@ -32,6 +33,24 @@ boolean vector or list-of-CS-vectors.}
 
 \item{cex_max}{numeric, upper clamp on \code{-log10(lfsr)} for
 the dot size. Default \code{6}.}
+
+\item{lfsr_source}{which lfsr to bubble-plot, one of
+\code{"smoother"}, \code{"lfsr"}, \code{"clfsr"}. Default \code{"smoother"}.
+\itemize{
+\item \code{"smoother"}: reads
+\code{fit$smoothed[[method]]$lfsr_curves[[m]][[l]]}, the
+length-\code{T_m} per-position lfsr produced by the smoother.
+Requires a smoothed payload.
+\item \code{"lfsr"}: alpha-weighted aggregation of the per-variant
+conditional lfsr matrix,
+\code{alpha[l, ] \%*\% clfsr_matrix[l, m]}, truncated to length
+\code{T_m}. Computed from \code{fit$mu} / \code{fit$mu2} so it works on
+fits that have not been post-smoothed.
+\item \code{"clfsr"}: same alpha-weighted aggregation as \code{"lfsr"}.
+The unaggregated \verb{p x T_basis[m]} conditional matrix is
+exposed via \code{compute_clfsr_matrix(fit, l, m)} for code
+that needs the per-variant view.
+}}
 
 \item{save}{optional file path. When non-NULL the bubble grid
 is written to the file at a size proportional to the number

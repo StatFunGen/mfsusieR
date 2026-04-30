@@ -191,3 +191,10 @@ test_that("combine_outcome_lbfs with single modality returns the input", {
                                            model_state = NULL)
   expect_equal(out, c(1, 2, 3), tolerance = 0)
 })
+
+test_that("combine_outcome_lbfs.default errors with the registered class list", {
+  bogus <- structure(list(), class = "mf_prior_cross_outcome_unknown")
+  expect_error(
+    mfsusieR:::combine_outcome_lbfs(bogus, list(c(1)), model_state = NULL),
+    "mf_prior_cross_outcome_independent")
+})

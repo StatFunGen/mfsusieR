@@ -4,7 +4,13 @@
 \alias{univariate_smash_regression}
 \title{Per-position smash regression of a multi-position response}
 \usage{
-univariate_smash_regression(Y, X, alpha = 0.05)
+univariate_smash_regression(
+  Y,
+  X,
+  alpha = 0.05,
+  flavor = c("ash", "smashr"),
+  ...
+)
 }
 \arguments{
 \item{Y}{numeric matrix (\verb{n x T}) or numeric vector of length
@@ -15,6 +21,16 @@ univariate_smash_regression(Y, X, alpha = 0.05)
 
 \item{alpha}{numeric in \verb{(0, 1)}. Credible-band level is
 \code{1 - alpha}. Default \code{0.05}.}
+
+\item{flavor}{\code{"ash"} (default) runs cycle-spinning +
+per-coefficient \code{ashr::ash}; \code{"smashr"} calls
+\code{smashr::smash.gaus} and requires the \code{smashr} Suggests
+package.}
+
+\item{...}{extra arguments forwarded to the underlying
+shrinkage tool. For \code{flavor = "ash"}, forwarded to
+\code{ashr::ash} (e.g., \code{nullweight = 10}). For
+\code{flavor = "smashr"}, forwarded to \code{smashr::smash.gaus}.}
 }
 \value{
 A list with components \code{effect_estimate} (length \code{T}
@@ -24,10 +40,10 @@ numeric) and \code{cred_band} (\verb{2 x T} matrix with rows
 \description{
 For a single regressor \code{X} (length \code{n}) and a multi-position
 response \code{Y} (\verb{n x T}), compute the per-position OLS estimate
-of \code{Y} on \code{X} and pass it to \code{smashr::smash.gaus} for
-empirical-Bayes wavelet shrinkage. Returns the smoothed
+of \code{Y} on \code{X} and pass it to one of two empirical-Bayes wavelet
+shrinkers selected by \code{flavor}. Returns the smoothed
 position-space effect estimate and a \code{(1 - alpha)} credible
-band derived from the smash posterior variance.
+band derived from the posterior variance.
 }
 \details{
 Used internally by \code{mf_post_smooth(method = "smash")}; also
@@ -36,13 +52,11 @@ variable and a single functional outcome.
 }
 \examples{
 \donttest{
-if (requireNamespace("smashr", quietly = TRUE)) {
-  set.seed(1L)
-  X <- matrix(rnorm(60), 60, 1L)
-  Y <- X \%*\% matrix(c(rep(0, 24), rep(1, 16), rep(0, 24)),
-                    1L, 64L) + matrix(rnorm(60 * 64, sd = 0.5), 60)
-  out <- univariate_smash_regression(Y, X)
-  plot(out$effect_estimate, type = "l")
-}
+set.seed(1L)
+X <- matrix(rnorm(60), 60, 1L)
+Y <- X \%*\% matrix(c(rep(0, 24), rep(1, 16), rep(0, 24)),
+                  1L, 64L) + matrix(rnorm(60 * 64, sd = 0.5), 60)
+out <- univariate_smash_regression(Y, X)
+plot(out$effect_estimate, type = "l")
 }
 }
