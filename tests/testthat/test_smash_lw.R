@@ -78,3 +78,19 @@ test_that("mf_smash_ash returns the documented shape", {
   expect_length(out$mu.est.var, T_pos)
   expect_true(all(out$mu.est.var >= 0))
 })
+
+test_that("`...` forwards method-specific args to the underlying ash call", {
+  skip_if_not_installed("ashr")
+  skip_if_not_installed("wavethresh")
+  set.seed(3L)
+  T_pos <- 64L
+  truth <- c(rep(0, 24), rep(1, 16), rep(0, 24))
+  noisy <- truth + rnorm(T_pos, sd = 0.5)
+  default_nw <- mfsusieR:::mf_smash_ash(noisy, noise_level = 0.5,
+                                        n.shifts = 8L)
+  weak_nw    <- suppressWarnings(
+    mfsusieR:::mf_smash_ash(noisy, noise_level = 0.5,
+                            n.shifts = 8L, nullweight = 50))
+  # Different ash null shrinkage gives different posteriors.
+  expect_false(isTRUE(all.equal(default_nw$mu.est, weak_nw$mu.est)))
+})

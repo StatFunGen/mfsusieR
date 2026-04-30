@@ -535,11 +535,6 @@ lfsr_from_gaussian <- function(mean, sd) {
 #'   stationary-wavelet transform. Default `"DaubExPhase"`.
 #' @param halfK integer, half-grid size for the HMM `fit_hmm`
 #'   helper. Default 20.
-#' @param flavor for `method = "smash"`, the smoother kernel.
-#'   `"ash"` (default) runs cycle-spinning + per-coefficient
-#'   `ashr::ash` and requires no extra packages. `"smashr"` calls
-#'   `smashr::smash.gaus` and gates on the `smashr` Suggests
-#'   dependency. Ignored by other methods.
 #' @param X optional numeric matrix `n x p`, the original genotype
 #'   matrix. Required when the fit was built with
 #'   `attach_smoothing_inputs = FALSE`; ignored otherwise.
@@ -547,6 +542,12 @@ lfsr_from_gaussian <- function(mean, sd) {
 #'   original per-outcome response matrices. Required when the
 #'   fit was built with `attach_smoothing_inputs = FALSE`; ignored
 #'   otherwise.
+#' @param ... extra arguments forwarded to the underlying
+#'   shrinkage tool for the chosen method. For `method = "ash"`
+#'   they are passed to `ashr::ash` (e.g.,
+#'   `nullweight = 10` for milder null shrinkage); for
+#'   `method = "smash"` they are passed to `smashr::smash.gaus`.
+#'   Other methods currently ignore `...`.
 #' @return the input fit with `$effect_curves`, `$credible_bands`,
 #'   and `$lfsr_curves` populated. Scalar outcomes
 #'   (`T_basis[m] = 1`) skip the wavelet step (smoothing is a
@@ -561,7 +562,8 @@ mf_post_smooth <- function(fit,
                            wavelet_family   = "DaubExPhase",
                            halfK            = 20L,
                            overwrite_previous = FALSE,
-                           X = NULL, Y = NULL) {
+                           X = NULL, Y = NULL,
+                           ...) {
   if (!inherits(fit, "mfsusie")) {
     stop("`fit` must be an `mfsusie` (or `fsusie`) fit object.")
   }
@@ -605,8 +607,8 @@ mf_post_smooth <- function(fit,
     "TI"        = .post_smooth_ti(fit, level, wavelet_filter,
                                   wavelet_family),
     "HMM"       = .post_smooth_hmm(fit, level, halfK),
-    "smash"     = .post_smooth_smash(fit, level, flavor = "smashr"),
-    "ash"       = .post_smooth_smash(fit, level, flavor = "ash"))
+    "smash"     = .post_smooth_smash(fit, level, flavor = "smashr", ...),
+    "ash"       = .post_smooth_smash(fit, level, flavor = "ash", ...))
 
   if (is.null(fit$smoothed)) fit$smoothed <- list()
   fit$smoothed[[method]] <- payload
