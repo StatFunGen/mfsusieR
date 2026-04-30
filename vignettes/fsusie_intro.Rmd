@@ -228,40 +228,81 @@ non-uniform local density.
 
 ## Prior choices
 
-The wavelet-domain mixture prior on ${\bf B}^{(l)}$ has two
-options for sharing variance components. The default,
-`prior_variance_scope = "per_outcome"`, fits one mixture weight
-vector per outcome (collapsed across scales). The alternative,
-`prior_variance_scope = "per_scale"`, fits a separate weight
-vector at each wavelet scale; this is the original fSuSiE prior
-and can yield higher power and estimation accuracy on signals
-whose shape varies systematically with scale. Per-scale costs
-roughly `S_m`-fold more per IBSS iter (one `mixsqp` call per
-scale per outcome instead of one per outcome), so it is opt-in.
+The wavelet-domain mixture prior on ${\bf B}^{(l)}$ has three
+options that trade flexibility, sample-size efficiency, and
+runtime:
 
-```{r prior-comparison, message = FALSE}
+- `prior_variance_scope = "per_outcome"` (default): one
+  K+1-component scale-mixture-of-normals per outcome, with
+  weights pooled across all wavelet scales. Fit by `mixsqp`.
+  Cheapest per IBSS iteration.
+- `prior_variance_scope = "per_scale"`: a separate
+  K+1-component mixture per (outcome, scale). Fit by `mixsqp`.
+  Helps when the signal magnitude varies systematically with
+  scale, at roughly `S_m`-fold more `mixsqp` calls per IBSS
+  iteration.
+- `prior_variance_scope = "per_scale_normal"`: a 2-component
+  point-Normal spike-and-slab per (outcome, scale), fit by
+  `ebnm::ebnm_point_normal()`. Two parameters per (outcome,
+  scale) cell: `pi_0` (null mass) and `sigma` (slab standard
+  deviation).
+
+The rationale for `per_scale_normal`: within a single wavelet
+scale `s` the coefficients share a characteristic effect-size
+scale, so a 2-parameter spike-and-slab is the right Bayesian
+model. With two parameters per cell instead of the
+K+1 ≈ 30 of `per_scale`, the data goes ~15x further per fitted
+parameter, and the parametric form is intrinsically regularized
+(no `mixture_null_weight` knob is consumed). A companion option
+`prior_variance_scope = "per_scale_laplace"` swaps the Normal
+slab for a Laplace slab and accommodates sparse-within-scale
+signals (1-2 active positions out of the scale's grid).
+
+Fit all three on the example:
+
+```{r prior-comparison, message = FALSE, warning = FALSE}
 fit_per_out   <- fsusie(coverage_example$Y, coverage_example$X,
-                        pos = coverage_example$pos)             # per-outcome (default)
+                        pos = coverage_example$pos)             # per_outcome (default)
 fit_per_scale <- fsusie(coverage_example$Y, coverage_example$X,
                         pos = coverage_example$pos,
                         prior_variance_scope = "per_scale")
-fit_per_out$niter
-fit_per_scale$niter
+fit_per_scale_n <- fsusie(coverage_example$Y, coverage_example$X,
+                          pos = coverage_example$pos,
+                          prior_variance_scope = "per_scale_normal")
+c(per_outcome      = fit_per_out$niter,
+  per_scale        = fit_per_scale$niter,
+  per_scale_normal = fit_per_scale_n$niter)
 ```
 
-```{r prior-scatter, fig.height = 4, fig.width = 4}
+Pairwise PIP comparison in two panels: `per_scale` vs
+`per_outcome` (left), `per_scale_normal` vs `per_scale`
+(right).
+
+```{r prior-scatter, fig.height = 4.2, fig.width = 8}
+par(mfrow = c(1L, 2L), mar = c(4, 4, 2.5, 1))
 plot(fit_per_out$pip, fit_per_scale$pip,
      pch = 16, cex = 0.8, col = "#1f78b4",
-     xlab = "PIP (per-outcome prior, default)",
-     ylab = "PIP (per-scale prior)",
+     xlab = "PIP (per_outcome, default)",
+     ylab = "PIP (per_scale)",
      xlim = c(0, 1), ylim = c(0, 1),
-     main = "Prior comparison: PIPs")
+     main = "per_scale vs per_outcome")
+abline(0, 1, lty = 3, col = "grey50")
+plot(fit_per_scale$pip, fit_per_scale_n$pip,
+     pch = 16, cex = 0.8, col = "#1f78b4",
+     xlab = "PIP (per_scale)",
+     ylab = "PIP (per_scale_normal)",
+     xlim = c(0, 1), ylim = c(0, 1),
+     main = "per_scale_normal vs per_scale")
 abline(0, 1, lty = 3, col = "grey50")
 ```
 
-The PIPs are nearly identical for the variants in either
-credible set. The per-scale prior is the recommended default
-for functional fine-mapping problems.
+The three priors put the causal mass on the same variants;
+PIPs sit on the diagonal for the lead variants in each
+credible set. Pick `per_outcome` for the cheapest fit, `per_scale`
+when scale-heterogeneous shape is important, and
+`per_scale_normal` when each wavelet scale has a single
+characteristic effect-size scale and the K+1-component
+`mixsqp` fit is under-determined on coarse scales.
 
 ## Wavelet-domain preprocessing
 

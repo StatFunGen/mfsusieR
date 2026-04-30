@@ -11,13 +11,18 @@ vignette: >
 ---
 
 This vignette runs a formal colocalization analysis on a pair of
-SuSiE-suite fine-mapping fits using `coloc::coloc.susie()`. The
-recipe applies to any pair of susie-class fits — `susieR::susie()`,
+SuSiE-suite fine-mapping fits using
+`susieR::susie_post_outcome_configuration(method = "coloc_pairwise")`.
+That function is a port of the `coloc::coloc.bf_bf` pairwise-ABF
+recipe maintained inside susieR for convenience, so this workflow
+adds no soft dependency on the `coloc` package. The recipe
+applies to any pair of susie-class fits (`susieR::susie()`,
 `mfsusieR::fsusie()`, `mfsusieR::mfsusie()`, `mvsusieR::mvsusie()`,
-and `susieR::susie_rss()` — because each returns the
+`susieR::susie_rss()`) because each returns the
 `(class = "susie", $sets$cs_index, $lbf_variable)` triple that
-`coloc.susie()` reads. `susie_rss()` is particularly useful for
-GWAS summary-statistics fine-mapping fits.
+`susie_post_outcome_configuration()` reads. `susie_rss()` is
+particularly useful for GWAS summary-statistics fine-mapping
+fits.
 
 For pre-fit covariate adjustment, see
 [the covariates vignette](fsusie_covariates_adjustment.html).
@@ -59,51 +64,55 @@ fit3 <- fsusie(Y3, X, pos = positions, verbose = FALSE)
 
 ## Colocalization
 
-`coloc::coloc.susie()` reads the credible-set indices from
-`fit$sets$cs_index` and the per-effect log-Bayes-factor matrix
-from `fit$lbf_variable`. Both are populated by `fsusie()` /
-`mfsusie()` on the standard fit path, so the call is a one-
-liner per pair. The returned `$summary` table reports the
-posterior probabilities of five hypotheses for each pair of
-credible sets:
+`susie_post_outcome_configuration(list(fit1, fit2),
+method = "coloc_pairwise")` reads the credible-set indices from
+each fit's `$sets$cs` and the per-effect log-Bayes-factor matrix
+from `$lbf_variable`. Both are populated by `fsusie()` /
+`mfsusie()` on the standard fit path, so the call is a one-liner
+per pair of fits. The returned `$coloc_pairwise` data.frame
+reports the posterior probabilities of five hypotheses for each
+pair of credible sets:
 
 | | meaning |
 |---|---|
-| `PP.H0.abf` | no causal in either trait |
-| `PP.H1.abf` | causal in trait 1 only |
-| `PP.H2.abf` | causal in trait 2 only |
-| `PP.H3.abf` | causal in both, but at distinct variants |
-| `PP.H4.abf` | shared causal variant |
+| `PP.H0` | no causal in either trait |
+| `PP.H1` | causal in trait 1 only |
+| `PP.H2` | causal in trait 2 only |
+| `PP.H3` | causal in both, but at distinct variants |
+| `PP.H4` | shared causal variant |
 
-`hit1` and `hit2` name the lead variant in each fit; `idx1` and
-`idx2` are the credible-set indices being compared.
+`hit1` and `hit2` name the lead variant in each fit; `l1` and
+`l2` are the credible-set indices being compared; `trait1` and
+`trait2` index the input fits.
 
 ### Shared causal signals
 
 `fit1` and `fit2` were simulated with the same causal SNP at
-`SNP42`. The coloc summary should put nearly all posterior
+`SNP42`. The pairwise summary should put nearly all posterior
 mass on `PP.H4` (shared causal):
 
 ```{r coloc-shared}
-res_shared <- tryCatch(coloc::coloc.susie(fit1, fit2), error = function(e) list())
-res_shared$summary
+res_shared <- susieR::susie_post_outcome_configuration(
+  list(fit1, fit2), method = "coloc_pairwise")
+res_shared$coloc_pairwise
 ```
 
-`PP.H4.abf` is essentially 1 and `hit1 == hit2 == SNP42`,
+`PP.H4` is essentially 1 and `hit1 == hit2 == SNP42`,
 matching the simulation.
 
 ### Distinct causal signals
 
 `fit1` carries a signal at SNP42; `fit3` carries one at SNP88.
-The coloc summary should put posterior mass on `PP.H3`
+The pairwise summary should put posterior mass on `PP.H3`
 (both have a causal, but at different variants):
 
 ```{r coloc-distinct}
-res_distinct <- tryCatch(coloc::coloc.susie(fit1, fit3), error = function(e) list())
-res_distinct$summary
+res_distinct <- susieR::susie_post_outcome_configuration(
+  list(fit1, fit3), method = "coloc_pairwise")
+res_distinct$coloc_pairwise
 ```
 
-`PP.H3.abf` is essentially 1, with `hit1 = SNP42` and
+`PP.H3` is essentially 1, with `hit1 = SNP42` and
 `hit2 = SNP88`.
 
 ## Notes
@@ -115,11 +124,11 @@ res_distinct$summary
   for all outcomes is to run `mfsusie()` jointly across them;
   the multi-outcome fit shares signal across modalities and
   identifies per-outcome and shared credible sets in one pass
-  without a post-hoc combination step. `coloc.susie()` becomes
-  essential when one or more inputs are summary-statistics fits
-  (e.g., a GWAS `susie_rss()` fit colocalized against a
-  molecular-QTL `fsusie()` fit), where the underlying
-  individual-level data is not available.
+  without a post-hoc combination step. The pairwise-ABF
+  recipe shown here becomes essential when one or more inputs
+  are summary-statistics fits (e.g., a GWAS `susie_rss()` fit
+  colocalized against a molecular-QTL `fsusie()` fit), where
+  the underlying individual-level data is not available.
 - Joint `mfsusie()` fine-mapping that takes summary statistics
   from a GWAS as one of its outcomes is future work.
 - For multi-outcome colocalization across more than two

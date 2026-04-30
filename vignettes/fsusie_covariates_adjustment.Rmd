@@ -163,7 +163,7 @@ plot_dims <- mfsusie_plot_dimensions(fit_adj)
 ```
 
 ```{r plot-fit-adj, fig.width = plot_dims$width, fig.height = plot_dims$height}
-mfsusie_plot(fit_adj)
+mfsusie_plot(fit_adj, effect_variables = c(pos1, pos2))
 ```
 
 ## Comparison with no adjustment
@@ -177,11 +177,21 @@ fit_unadj$sets$cs
 fit_unadj$pip[c(pos1, pos2)]
 ```
 
-Match each fitted CS to its causal SNP by lead-PIP, then
-overlay the recovered effect curve from each fit against the
+`fsusie()` returns raw inverse-DWT effect curves via `coef()`;
+position-space smoothing with a 95% credible band is an opt-in
+post-processing step. Run `mf_post_smooth(fit, method = "TI")`
+on each fit to get translation-invariant cycle-spun curves,
+then read them back via `coef(fit_s, smooth_method = "TI")`.
+Match each fitted CS to its causal SNP by lead-PIP and overlay
+the smoothed recovered curve from each fit against the
 ground-truth `f1` and `f2`.
 
-```{r compare-effects, fig.height = 4, fig.width = 8}
+```{r post-smooth, message = FALSE}
+fit_adj_s   <- mf_post_smooth(fit_adj,   method = "TI")
+fit_unadj_s <- mf_post_smooth(fit_unadj, method = "TI")
+cf_adj   <- coef(fit_adj_s,   smooth_method = "TI")[[1L]]
+cf_unadj <- coef(fit_unadj_s, smooth_method = "TI")[[1L]]
+
 match_cs <- function(fit, target_snp) {
   if (length(fit$sets$cs) == 0L) return(NA_integer_)
   leads <- vapply(fit$sets$cs, function(idx) {
@@ -191,37 +201,42 @@ match_cs <- function(fit, target_snp) {
   if (length(hit) == 0L) NA_integer_ else hit[1L]
 }
 
-par(mfrow = c(1L, 2L))
-for (cfg in list(list(snp = pos1, truth = f1, col = "blue",
-                      label = "f1 (SNP 25)"),
-                 list(snp = pos2, truth = f2, col = "darkgreen",
-                      label = "f2 (SNP 75)"))) {
-  l_adj   <- match_cs(fit_adj,   cfg$snp)
-  l_unadj <- match_cs(fit_unadj, cfg$snp)
-  cf_adj   <- coef(fit_adj)[[1L]]
-  cf_unadj <- coef(fit_unadj)[[1L]]
+plot_effect <- function(snp, truth, col, label) {
+  l_adj   <- match_cs(fit_adj,   snp)
+  l_unadj <- match_cs(fit_unadj, snp)
   rec_adj   <- if (!is.na(l_adj))   cf_adj[l_adj, ]     else NULL
   rec_unadj <- if (!is.na(l_unadj)) cf_unadj[l_unadj, ] else NULL
-  yrng <- range(c(cfg$truth, rec_adj, rec_unadj), na.rm = TRUE)
-  plot(cfg$truth, pch = 20L, col = "grey30", cex = 0.7,
+  yrng <- range(c(truth, rec_adj, rec_unadj), na.rm = TRUE)
+  plot(truth, pch = 20L, col = "grey30", cex = 0.7,
        xlab = "position", ylab = "effect", ylim = yrng,
-       main = paste("Estimated effect:", cfg$label))
+       main = paste("Estimated effect:", label))
   abline(h = 0, lty = 3, col = "grey50")
-  if (!is.null(rec_adj))   lines(rec_adj,   col = cfg$col, lwd = 1.5)
-  if (!is.null(rec_unadj)) lines(rec_unadj, col = cfg$col, lwd = 1.5, lty = 2)
+  if (!is.null(rec_adj))   lines(rec_adj,   col = col, lwd = 1.8)
+  if (!is.null(rec_unadj)) lines(rec_unadj, col = col, lwd = 1.5, lty = 2)
   legend("topright",
          legend = c("truth", "fSuSiE adjusted", "fSuSiE unadjusted"),
-         col    = c("grey30", cfg$col, cfg$col),
-         lty    = c(NA, 1, 2), lwd = c(NA, 1.5, 1.5),
-         pch    = c(20, NA, NA), bty = "n", cex = 0.8)
+         col    = c("grey30", col, col),
+         lty    = c(NA, 1, 2), lwd = c(NA, 1.8, 1.5),
+         pch    = c(20, NA, NA), bty = "n", cex = 0.85)
 }
-par(mfrow = c(1L, 1L))
 ```
 
-The adjusted fit tracks the truth on both signals; the
-unadjusted fit is biased toward the covariate-induced
-confounding and the recovered curves drift away from the
-truth.
+Estimated effect 1 (true causal at SNP 25):
+
+```{r effect-1, fig.height = 4, fig.width = 8}
+plot_effect(pos1, f1, "blue", "f1 (SNP 25)")
+```
+
+Estimated effect 2 (true causal at SNP 75):
+
+```{r effect-2, fig.height = 4, fig.width = 8}
+plot_effect(pos2, f2, "darkgreen", "f2 (SNP 75)")
+```
+
+The TI-smoothed adjusted-fit curves track the truth on both
+signals at near-perfect correlation. The unadjusted fit is
+biased toward the covariate-induced confounding and the
+recovered curves drift away from the truth.
 
 ## Scalar traits: OLS adjustment with the FWL correction
 
