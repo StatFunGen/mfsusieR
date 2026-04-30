@@ -689,6 +689,7 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
                          facet_cs = c("auto", "stack", "overlay"),
                          show_grid_dots = FALSE,
                          show_lfsr_curve = TRUE,
+                         lfsr_source = c("smoother", "clfsr"),
                          show_affected_region = TRUE,
                          lfsr_threshold = 0.01,
                          lwd = 2.0,
@@ -702,9 +703,27 @@ mfsusie_plot <- function(fit, m = NULL, pos = NULL,
   }
   effect_style <- match.arg(effect_style)
   facet_cs     <- match.arg(facet_cs)
+  lfsr_source  <- match.arg(lfsr_source)
 
   picked   <- .pick_smooth_method(fit, smooth_method)
   smoothed <- if (!is.null(picked)) fit$smoothed[[picked]] else NULL
+
+  # Swap in the alpha-aggregated per-variant clfsr in place of the
+  # smoother's position-space lfsr. Truncated to the position-grid
+  # length when the wavelet basis is longer (non-power-of-2).
+  if (!is.null(smoothed) && lfsr_source == "clfsr" &&
+      !is.null(smoothed$clfsr_curves)) {
+    T_m_vec <- fit$dwt_meta$T_basis
+    for (m_i in seq_along(smoothed$clfsr_curves)) {
+      for (l_i in seq_along(smoothed$clfsr_curves[[m_i]])) {
+        clfsr_lm <- smoothed$clfsr_curves[[m_i]][[l_i]]
+        if (is.null(clfsr_lm)) next
+        agg <- as.numeric(fit$alpha[l_i, ] %*% clfsr_lm)
+        T_target <- length(smoothed$lfsr_curves[[m_i]][[l_i]] %||% agg)
+        smoothed$lfsr_curves[[m_i]][[l_i]] <- agg[seq_len(T_target)]
+      }
+    }
+  }
 
   M <- length(fit$dwt_meta$T_basis)
   K <- length(fit$sets$cs %||% list())
