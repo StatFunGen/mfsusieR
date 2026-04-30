@@ -533,10 +533,18 @@ av_basis_variance <- function(wst) {
 #' supported on a single position.
 #'
 #' @param var_w length-`T_basis` numeric vector of coefficient-
-#'   space variances (one per packed wavelet entry).
+#'   space variances (one per packed wavelet entry). When the IBSS
+#'   ran on a wavelet matrix that was per-column standardized
+#'   (`wavelet_standardize = TRUE`), `var_w` is in standardized-
+#'   coefficient units; pass the matching `wavelet_scale` so the
+#'   coefficient variance is rescaled to raw-coefficient units
+#'   (`wavelet_scale[k]^2 * var_w[k]`) before the inverse DWT.
 #' @param T_basis power of two; length of the wavelet basis.
 #' @param filter_number wavelet filter number (Daubechies).
 #' @param family character, wavelet family.
+#' @param wavelet_scale optional length-`T_basis` numeric vector
+#'   of per-coefficient standard deviations recorded by `mf_dwt`.
+#'   Defaults to all ones (no rescaling).
 #' @return numeric vector of length `T_basis`, the position-
 #'   space variance.
 #' @keywords internal
@@ -544,16 +552,23 @@ av_basis_variance <- function(wst) {
 mf_invert_variance_curve <- function(var_w,
                                      T_basis,
                                      filter_number = 10L,
-                                     family        = "DaubLeAsymm") {
+                                     family        = "DaubLeAsymm",
+                                     wavelet_scale = NULL) {
   if (length(var_w) != T_basis) {
     stop(sprintf("var_w has length %d but T_basis = %d.",
                  length(var_w), T_basis))
   }
+  if (is.null(wavelet_scale)) wavelet_scale <- rep(1, T_basis)
+  if (length(wavelet_scale) != T_basis) {
+    stop(sprintf("wavelet_scale has length %d but T_basis = %d.",
+                 length(wavelet_scale), T_basis))
+  }
+  var_w_raw <- (wavelet_scale^2) * var_w
 
   # Build squared inverse-DWT matrix column-by-column. The
   # `T_basis = 1` case reduces to identity here: the single basis
   # function is `e_1`, `mf_invert_dwt(e_1) = 1`, so `W_sq = 1`
-  # and the function returns `var_w` unchanged.
+  # and the function returns `var_w_raw` unchanged.
   W_sq <- matrix(0, nrow = T_basis, ncol = T_basis)
   for (k in seq_len(T_basis)) {
     e_k <- numeric(T_basis); e_k[k] <- 1
@@ -564,5 +579,5 @@ mf_invert_variance_curve <- function(var_w,
                            family        = family)
     W_sq[, k] <- as.numeric(inv_k)^2
   }
-  as.numeric(W_sq %*% var_w)
+  as.numeric(W_sq %*% var_w_raw)
 }

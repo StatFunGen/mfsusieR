@@ -688,9 +688,10 @@ mf_post_smooth <- function(fit,
       # combination of standard deviations for the position SD.
       sd_pos <- sqrt(mf_invert_variance_curve(
         var_w,
-        T_basis      = T_m,
+        T_basis       = T_m,
         filter_number = meta$wavelet_filter %||% 10L,
-        family        = meta$wavelet_family %||% "DaubLeAsymm"))
+        family        = meta$wavelet_family %||% "DaubLeAsymm",
+        wavelet_scale = meta$wavelet_scale[[m]]))
       mean_pos <- effect_curves[[m]][[l]]
       credible_bands[[m]][[l]] <- cbind(mean_pos - z_crit * sd_pos,
                                         mean_pos + z_crit * sd_pos)

@@ -306,7 +306,7 @@ characteristic effect-size scale and the K+1-component
 
 ## Wavelet-domain preprocessing
 
-`fsusie()` exposes two preprocessing flags for the wavelet
+`fsusie()` exposes three preprocessing flags for the wavelet
 matrix:
 
 - `wavelet_magnitude_cutoff` (default `0`): wavelet columns with

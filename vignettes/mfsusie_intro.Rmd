@@ -185,7 +185,7 @@ the fit object structure are identical.
 
 ## Wavelet-domain preprocessing
 
-Two arguments control preprocessing of the per-outcome wavelet
+Three arguments control preprocessing of the per-outcome wavelet
 matrix before the IBSS loop:
 
 - `wavelet_magnitude_cutoff` (default `0`): wavelet columns with
@@ -200,14 +200,10 @@ matrix before the IBSS loop:
 - `wavelet_qnorm` (default `FALSE`): applies a column-wise
   rank-normal transform to the wavelet matrix so each wavelet
   position has marginal `N(0, 1)` across samples by construction.
-  This matches the SER step's Wakefield Normal approximation and
-  can keep PIPs and credible sets calibrated when the per-outcome
-  residuals are heavy-tailed (read counts, sparse pileups). Leave
-  it `FALSE` when the wavelet coefficients of `Y` are already
-  close to Gaussian and recovered effect amplitudes need to line
-  up with the raw `Y` scale; see the [covariate-adjustment
-  vignette](fsusie_covariates_adjustment.html) for the trade-off
-  in full.
+  Useful when the per-outcome residuals are heavy-tailed (read
+  counts, sparse pileups). The transform is non-linear, so
+  `coef(fit)` curves recover shape and CS membership but not
+  amplitude on the raw `Y` scale.
 
 `wavelet_magnitude_cutoff` also routes through
 `mf_adjust_for_covariates()`. The qnorm and wavelet-standardize
