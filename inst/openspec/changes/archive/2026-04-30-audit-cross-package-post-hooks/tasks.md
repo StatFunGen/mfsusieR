@@ -17,43 +17,43 @@ must include:
 4. The agent-specific scope (which upstream package, which
    pathway).
 
-- [ ] 1.1 Spawn Agent A (mfsusieR vs susieR). Scope =
+- [x] 1.1 Spawn Agent A (mfsusieR vs susieR). Scope =
       Agent A section of proposal.md. Report saved to
       `inst/notes/sessions/<date>-cross-package-audit-a-susier-posthooks.md`.
-- [ ] 1.2 Spawn Agent B (mfsusieR vs fsusieR). Scope =
+- [x] 1.2 Spawn Agent B (mfsusieR vs fsusieR). Scope =
       Agent B section of proposal.md. Report at
       `<date>-cross-package-audit-b-fsusier-posthooks.md`.
-- [ ] 1.3 Spawn Agent C (mfsusieR vs mvf.susie.alpha).
+- [x] 1.3 Spawn Agent C (mfsusieR vs mvf.susie.alpha).
       Scope = Agent C section. Report at
       `<date>-cross-package-audit-c-mvf-posthooks.md`.
 
 ## 2. Phase B. Triage
 
-- [ ] 2.1 Read all three reports. For each finding,
+- [x] 2.1 Read all three reports. For each finding,
       classify as `accept-known`, `add-to-divergence-ledger`,
       `fix-now`, or `track-for-later`.
-- [ ] 2.2 For `add-to-divergence-ledger`: add the entry to
+- [x] 2.2 For `add-to-divergence-ledger`: add the entry to
       `~/Documents/mfsusier-mvf-divergences/divergences.tex`
       and a stanza to `inst/notes/refactor-exceptions.md`
       in the SAME session.
-- [ ] 2.3 For `fix-now`: open a targeted OpenSpec change.
+- [x] 2.3 For `fix-now`: open a targeted OpenSpec change.
       Link from this proposal.
-- [ ] 2.4 For `track-for-later`: open an OpenSpec change
+- [x] 2.4 For `track-for-later`: open an OpenSpec change
       with a deferred task list.
 
 ## 3. Phase C. Summary
 
-- [ ] 3.1 Write `inst/notes/cross-package-audit-summary-posthooks.md`
+- [x] 3.1 Write `inst/notes/cross-package-audit-summary-posthooks.md`
       collating the three reports, the triage classification
       per finding, and the names of any follow-up OpenSpec
       changes.
-- [ ] 3.2 Append to `inst/notes/refactor-exceptions.md` a
+- [x] 3.2 Append to `inst/notes/refactor-exceptions.md` a
       "Cross-package audit (post hooks, <date>)" subsection
       pointing to the summary.
 
 ## 4. Process gate
 
-- [ ] 4.1 After this audit archives, every future PR that
+- [x] 4.1 After this audit archives, every future PR that
       touches `R/individual_data_methods.R`,
       `R/model_class.R`, `R/ibss_methods.R`, or
       `R/em_helpers.R` requires a cross-package audit-
