@@ -18,7 +18,7 @@ make_data_for_ev <- function(n = 30, J = 8, T_per_outcome = c(64L, 128L)) {
   set.seed(mfsusier_test_seed())
   X <- matrix(rnorm(n * J), nrow = n)
   Y <- lapply(T_per_outcome, function(T_m) matrix(rnorm(n * T_m), nrow = n))
-  mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = X, Y = Y, verbose = FALSE)
+  mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, X = X, Y = Y, verbose = FALSE)
 }
 
 make_model_with_post <- function(data, L = 2, sigma2_scalar = 1) {
@@ -468,7 +468,7 @@ test_that("mfsusie ELBO is non-decreasing post-iter-1 at machine precision (<= 1
   # correct, just slow; we want max_iter > niter so the convergence
   # warning doesn't fire and so the monotonicity check has real data
   # past the iter-1 transient.
-  fit <- mfsusie(wavelet_qnorm = FALSE, X, Y, L = 5, max_iter = 200, verbose = FALSE)
+  fit <- mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, X, Y, L = 5, max_iter = 200, verbose = FALSE)
 
   # Need at least three iterations to make the post-iter-1 check
   # meaningful (drop the first diff, then test the remainder).
@@ -522,7 +522,7 @@ test_that("mf_prior_scale_mixture errors when data is not an mf_individual objec
 
 test_that("mf_prior_scale_mixture per_outcome scope on data-driven path returns single-row pi", {
   set.seed(mfsusier_test_seed())
-  data <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, 
+  data <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, 
     X = matrix(rnorm(20 * 4), 20),
     Y = list(matrix(rnorm(20 * 16), 20)),
     verbose = FALSE

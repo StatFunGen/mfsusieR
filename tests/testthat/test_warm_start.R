@@ -27,7 +27,7 @@ test_that("warm-started fit from a converged fit hits the convergence floor", {
   # converged cold fit hits that floor; the cold fit takes
   # strictly more iterations.
   sim <- build_warm_sim()
-  fit_cold <- fsusie(wavelet_qnorm = FALSE, max_iter = 100, sim$Y, sim$X, L = 5,
+  fit_cold <- fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, max_iter = 100, sim$Y, sim$X, L = 5,
                      verbose = FALSE)
   expect_true(fit_cold$converged)
   # Cold-fit floor: at least 3 iters (PIP-difference convergence is
@@ -35,7 +35,7 @@ test_that("warm-started fit from a converged fit hits the convergence floor", {
   # default took 4+).
   expect_gte(fit_cold$niter, 3L)
 
-  fit_warm <- fsusie(wavelet_qnorm = FALSE, max_iter = 100, sim$Y, sim$X, L = 5,
+  fit_warm <- fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, max_iter = 100, sim$Y, sim$X, L = 5,
                      model_init = fit_cold,
                      verbose = FALSE)
   expect_true(fit_warm$converged)
@@ -47,9 +47,9 @@ test_that("warm-started fit from a converged fit hits the convergence floor", {
 
 test_that("warm-started fit reaches the same posterior as a cold fit", {
   sim <- build_warm_sim()
-  fit_cold <- fsusie(wavelet_qnorm = FALSE, max_iter = 100, sim$Y, sim$X, L = 5,
+  fit_cold <- fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, max_iter = 100, sim$Y, sim$X, L = 5,
                      verbose = FALSE)
-  fit_warm <- fsusie(wavelet_qnorm = FALSE, max_iter = 100, sim$Y, sim$X, L = 5,
+  fit_warm <- fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, max_iter = 100, sim$Y, sim$X, L = 5,
                      model_init = fit_cold,
                      verbose = FALSE)
   # The warm fit re-runs at least one IBSS iteration and may
@@ -63,12 +63,12 @@ test_that("warm-started fit reaches the same posterior as a cold fit", {
 
 test_that("capping max_iter then resuming via model_init reaches convergence", {
   sim <- build_warm_sim()
-  fit_partial <- fsusie(wavelet_qnorm = FALSE, sim$Y, sim$X, L = 5,
+  fit_partial <- fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, sim$Y, sim$X, L = 5,
                         max_iter = 2,
                         verbose = FALSE)
   expect_false(isTRUE(fit_partial$converged))
 
-  fit_resumed <- fsusie(wavelet_qnorm = FALSE, max_iter = 100, sim$Y, sim$X, L = 5,
+  fit_resumed <- fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, max_iter = 100, sim$Y, sim$X, L = 5,
                         model_init = fit_partial,
                         verbose = FALSE)
   expect_true(fit_resumed$converged)
@@ -78,9 +78,9 @@ test_that("capping max_iter then resuming via model_init reaches convergence", {
 
 test_that("model_init with smaller L is expanded to the requested L", {
   sim <- build_warm_sim()
-  fit_small <- fsusie(wavelet_qnorm = FALSE, max_iter = 100, sim$Y, sim$X, L = 3,
+  fit_small <- fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, max_iter = 100, sim$Y, sim$X, L = 3,
                       verbose = FALSE)
-  fit_grown <- fsusie(wavelet_qnorm = FALSE, max_iter = 100, sim$Y, sim$X, L = 5,
+  fit_grown <- fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, max_iter = 100, sim$Y, sim$X, L = 5,
                       model_init = fit_small,
                       verbose = FALSE)
   expect_equal(nrow(fit_grown$alpha), 5L)
@@ -91,10 +91,10 @@ test_that("model_init with smaller L is expanded to the requested L", {
 
 test_that("model_init with larger L than requested errors cleanly", {
   sim <- build_warm_sim()
-  fit_cold <- fsusie(wavelet_qnorm = FALSE, max_iter = 100, sim$Y, sim$X, L = 5,
+  fit_cold <- fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, max_iter = 100, sim$Y, sim$X, L = 5,
                      verbose = FALSE)
   expect_error(
-    fsusie(wavelet_qnorm = FALSE, max_iter = 100, sim$Y, sim$X, L = 3, model_init = fit_cold,
+    fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, max_iter = 100, sim$Y, sim$X, L = 3, model_init = fit_cold,
            verbose = FALSE),
     "shrinking is not supported"
   )

@@ -19,7 +19,7 @@ test_that("mfsusie() emits a hint when a response matrix has 2 or 3 columns", {
   Y_short <- X %*% matrix(rep(beta, 3L), nrow = J) +
              matrix(rnorm(n * 3L, sd = 0.3), nrow = n)
   expect_message(
-    mfsusie(wavelet_qnorm = FALSE, X, list(Y_short), L = 2, max_iter = 5, verbose = FALSE),
+    mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, X, list(Y_short), L = 2, max_iter = 5, verbose = FALSE),
     "has 3 columns"
   )
 })
@@ -32,7 +32,7 @@ test_that("mfsusie() is silent for 1 column or >= 4 columns", {
 
   y <- as.numeric(X %*% beta + rnorm(n, sd = 0.3))
   expect_no_message(suppressMessages(
-    mfsusie(wavelet_qnorm = FALSE, X, list(matrix(y, ncol = 1)), L = 2,
+    mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, X, list(matrix(y, ncol = 1)), L = 2,
             prior_variance_grid = 0.2, estimate_prior_variance = FALSE,
             max_iter = 5, verbose = FALSE)),
     message = "columns")
@@ -40,7 +40,7 @@ test_that("mfsusie() is silent for 1 column or >= 4 columns", {
   Y_ok <- X %*% matrix(rep(beta, 4L), nrow = J) +
           matrix(rnorm(n * 4L, sd = 0.3), nrow = n)
   expect_no_message(suppressMessages(
-    mfsusie(wavelet_qnorm = FALSE, X, list(Y_ok), L = 2, max_iter = 5, verbose = FALSE)),
+    mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, X, list(Y_ok), L = 2, max_iter = 5, verbose = FALSE)),
     message = "columns")
 })
 
@@ -53,7 +53,7 @@ test_that("susieR::susie_get_pip and susie_get_cs agree with the fit fields", {
   beta <- numeric(J); beta[1] <- 1
   Y <- X %*% matrix(rep(beta, T_m), nrow = J) +
        matrix(rnorm(n * T_m, sd = 0.4), nrow = n)
-  fit <- mfsusie(wavelet_qnorm = FALSE, X, list(Y), L = 3, max_iter = 20, verbose = FALSE)
+  fit <- mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, X, list(Y), L = 3, max_iter = 20, verbose = FALSE)
 
   # susie_get_pip rebuilds PIPs from alpha; should equal fit$pip.
   pip_via_getter <- susieR::susie_get_pip(fit, prior_tol = 1e-9,
@@ -93,7 +93,7 @@ test_that("mfsusie zeros (or attenuates) PIP for SNPs filtered out of every CS",
   beta <- numeric(J); beta[1] <- 1
   Y <- X %*% matrix(rep(beta, T_m), nrow = J) +
        matrix(rnorm(n * T_m, sd = 0.4), nrow = n)
-  fit <- mfsusie(wavelet_qnorm = FALSE, X, list(Y), L = 5, max_iter = 30, verbose = FALSE)
+  fit <- mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, X, list(Y), L = 5, max_iter = 30, verbose = FALSE)
 
   # Form the union of all SNPs in any retained CS.
   cs_union <- if (is.null(fit$sets$cs)) integer(0)

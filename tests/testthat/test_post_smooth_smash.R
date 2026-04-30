@@ -42,7 +42,7 @@ test_that("mf_post_smooth(method = 'smash') populates effect_curves and credible
   Y    <- X %*% (matrix(beta, p, 1) %*% matrix(shape, 1, T_m)) +
             matrix(rnorm(n * T_m, sd = 0.3), n)
 
-  fit <- fsusie(wavelet_qnorm = FALSE, Y, X, L = 1, max_iter = 30, verbose = FALSE)
+  fit <- fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, Y, X, L = 1, max_iter = 30, verbose = FALSE)
   fit_s <- mf_post_smooth(fit, method = "smash")
 
   payload <- fit_s$smoothed$smash

@@ -44,10 +44,12 @@ Both fits return raw inverse-DWT effect curves through `coef()`.
 For a smoothed position-space curve with a pointwise credible
 band (and, for the HMM smoother, a per-position lfsr curve),
 post-process with `mf_post_smooth()`. Four methods are
-available — `"TI"` (the default; translation-invariant wavelet
-denoising via cycle spinning), `"scalewise"` (per-scale soft-
-thresholding), `"HMM"` (hidden Markov model with per-position
-lfsr), and `"smash"` (delegates to `smashr::smash.gaus`). See
+available: (i) `"TI"` (the default), translation-invariant
+wavelet denoising via cycle spinning; (ii) `"scalewise"`,
+per-scale soft-thresholding of the wavelet posterior;
+(iii) `"HMM"`, a hidden Markov model on per-position regression
+residuals with a per-position lfsr curve; (iv) `"smash"`,
+delegates to `smashr::smash.gaus`. See
 [`vignette("post_processing")`](post_processing.html) for the
 walk-through and the comparison workflow when several smoothers
 coexist on one fit.
@@ -69,9 +71,9 @@ fit_f$pip[c(5, 17)]
 length(fit_f$sets$cs)
 ```
 
-`fsusie()` is a wrapper around `mfsusie(X, list(Y), list(pos),
-...)` with no numerical difference.
-`mfsusie_plot()` works on the result either way:
+`fsusie()` is a thin wrapper around
+`mfsusie(X, list(Y), list(pos), ...)`; the two fits are
+bit-identical. `mfsusie_plot()` works on either:
 
 ```{r fsusie-plot-dims}
 plot_dims_f <- mfsusie_plot_dimensions(fit_f)
@@ -160,10 +162,15 @@ summary(fit_m)
 
 ## Numerical equivalence with `susieR::susie`
 
-When `Y` is scalar, the prior collapses to a single Gaussian component,
-the null component is removed, and the per-(scale, outcome) variance
-structure collapses to a scalar, `mfsusie()` reduces **exactly** to
-`susieR::susie()` when we set it a fixed effects size prior.
+For scalar `Y` (`T = 1`), with a length-1 `prior_variance_grid`,
+`null_prior_init = 0`, and `estimate_prior_variance = FALSE`,
+the per-(outcome, scale) mixture collapses to a single fixed
+Gaussian effect prior and the per-(scale, outcome) variance
+structure collapses to one scalar per outcome. In that
+parameter regime `mfsusie()` reduces to `susieR::susie()`
+bit-for-bit. We use this degenerate equivalence as a sanity
+check that the multi-outcome wavelet plumbing introduces no
+per-iteration drift on top of the susieR backbone.
 
 ```{r susie-degeneracy}
 y_scalar <- as.numeric(X %*% beta + rnorm(n, sd = 0.4))
@@ -203,19 +210,22 @@ identical(lapply(fit_d$sets$cs, sort),
           lapply(fit_s$sets$cs, sort))
 ```
 
-This degenerate-case is introduced as a sanity check, as `mfsusieR` is implemented on the backbone of `susieR`
-and is expect to produce the same result mathematically under degenerated-case like this.
+All seven comparisons agree at machine precision and the
+credible sets coincide.
 
 ## Where to next
 
 - Single-outcome applications:
   [Single-outcome intro](fsusie_intro.html),
-  [covariate adjustment + colocalization](fsusie_covariates_and_coloc.html),
+  [covariate adjustment](fsusie_covariates_adjustment.html),
+  [colocalization](fsusie_colocalization.html),
   [DNAm case study](fsusie_dnam_case_study.html),
   [why functional](fsusie_why_functional.html).
 - Multi-outcome applications:
   [Multi-outcome intro](mfsusie_intro.html),
   [long-running fits](mfsusie_long_running_fits.html).
+- Smoothing the recovered effect curves:
+  [post-processing](post_processing.html).
 
 ## Session info
 

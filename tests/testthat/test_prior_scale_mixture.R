@@ -18,7 +18,7 @@ make_data <- function(n = 30, J = 8, T_per_outcome = c(64L, 128L)) {
   X <- matrix(rnorm(n * J), nrow = n)
   Y <- lapply(T_per_outcome,
               function(T_m) matrix(rnorm(n * T_m), nrow = n))
-  mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = X, Y = Y, verbose = FALSE)
+  mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, X = X, Y = Y, verbose = FALSE)
 }
 
 # ---- distribute_mixture_weights ---------------------------------------
@@ -98,10 +98,9 @@ test_that("susieR-degeneracy contract C1 inputs produce single-component prior",
   expect_equal(prior$pi[[1]][1, ], c(0, 1), tolerance = 1e-12)
 })
 
-# ---- Data-driven path: C2 fidelity vs fsusieR -------------------------
+# ---- Data-driven path: deterministic robust grid ----------------------
 
-test_that("data-driven init matches fsusieR::init_prior.default at 1e-12", {
-  skip_if_not_installed("fsusieR")
+test_that("data-driven init builds a deterministic zero-anchored grid", {
   set.seed(2)
   n <- 50; p <- 10; T_basis <- 64
   X <- matrix(rnorm(n * p), nrow = n)
@@ -109,30 +108,27 @@ test_that("data-driven init matches fsusieR::init_prior.default at 1e-12", {
   Y_m <- matrix(rnorm(n * T_basis), nrow = n)
   scale_index <- mfsusieR:::gen_wavelet_indx(log2(T_basis))
 
-  # mfsusieR sets the init pi directly from `null_prior_init`.
-  # Upstream fsusieR hardcodes `pi_null = 0.8`. Pass 0.8 directly
-  # for bit-fidelity at `tol = 1e-12`.
   ours <- mfsusieR:::init_scale_mixture_prior_default(
     Y_m = Y_m, X = X,
     prior_class       = "mixture_normal_per_scale",
     groups            = scale_index,
     null_prior_init = 0.8
   )
-  ref <- fsusieR::init_prior(
-    Y = Y_m, X = X, prior = "mixture_normal_per_scale",
-    v1 = rep(1, n), indx_lst = scale_index, lowc_wc = NULL,
-    control_mixsqp = list(verbose = FALSE), nullweight = 0.7
-  )
 
-  expect_equal(length(ours$G_prior), length(ref$G_prior))
-  expect_equal(ours$G_prior[[1]]$fitted_g$pi,
-               ref$G_prior[[1]]$fitted_g$pi, tolerance = 1e-12)
-  expect_equal(ours$G_prior[[1]]$fitted_g$sd,
-               ref$G_prior[[1]]$fitted_g$sd, tolerance = 1e-12)
-  expect_equal(ours$G_prior[[1]]$fitted_g$mean,
-               ref$G_prior[[1]]$fitted_g$mean, tolerance = 1e-12)
-  expect_equal(ours$tt$Bhat, ref$tt$Bhat, tolerance = 1e-12)
-  expect_equal(ours$tt$Shat, ref$tt$Shat, tolerance = 1e-12)
+  expect_equal(length(ours$G_prior), length(scale_index))
+  g <- ours$G_prior[[1]]$fitted_g
+  expect_equal(g$sd[1L], 0)
+  expect_true(all(diff(g$sd[-1L]) > 0))
+  expect_true(all(g$mean == 0))
+  expect_equal(g$pi[1L], 0.8, tolerance = 1e-12)
+  expect_equal(sum(g$pi), 1, tolerance = 1e-12)
+  expect_equal(g$pi[-1L], rep((1 - 0.8) / (length(g$pi) - 1L),
+                              length(g$pi) - 1L),
+               tolerance = 1e-12)
+
+  ref <- susieR::compute_marginal_bhat_shat(X, Y_m)
+  expect_equal(ours$tt$Bhat, ref$Bhat, tolerance = 1e-12)
+  expect_equal(ours$tt$Shat, ref$Shat, tolerance = 1e-12)
 })
 
 # ---- T_m = 1 unification: same code path, no special case --------------

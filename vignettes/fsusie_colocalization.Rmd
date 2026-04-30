@@ -10,26 +10,24 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-This vignette runs a formal colocalization analysis on a pair of
-SuSiE-suite fine-mapping fits using
-`susieR::susie_post_outcome_configuration(method = "coloc_pairwise")`.
-That function is a port of the `coloc::coloc.bf_bf` pairwise-ABF
-recipe maintained inside susieR for convenience, so this workflow
-adds no soft dependency on the `coloc` package. The recipe
-applies to any pair of susie-class fits (`susieR::susie()`,
-`mfsusieR::fsusie()`, `mfsusieR::mfsusie()`, `mvsusieR::mvsusie()`,
+This vignette runs a colocalization analysis on a pair of
+SuSiE-suite fine-mapping fits with
+`susieR::susie_post_outcome_configuration(method = "coloc_pairwise")`,
+a port of the `coloc::coloc.bf_bf` pairwise-ABF recipe
+maintained inside susieR. Calling the susieR port keeps the
+workflow self-contained and adds no soft dependency on the
+`coloc` package. The recipe applies to any pair of susie-class
+fits (`susieR::susie()`, `mfsusieR::fsusie()`,
+`mfsusieR::mfsusie()`, `mvsusieR::mvsusie()`,
 `susieR::susie_rss()`) because each returns the
 `(class = "susie", $sets$cs_index, $lbf_variable)` triple that
-`susie_post_outcome_configuration()` reads. `susie_rss()` is
-particularly useful for GWAS summary-statistics fine-mapping
-fits.
+`susie_post_outcome_configuration()` reads. `susie_rss()` covers
+the GWAS summary-statistics case.
 
-For pre-fit covariate adjustment, see
+We illustrate with `fsusie()` (single-outcome functional
+fine-mapping); `mfsusie()` works the same way when both fits
+cover multiple outcomes. For pre-fit covariate adjustment, see
 [the covariates vignette](fsusie_covariates_adjustment.html).
-
-For illustration we use `fsusie()` (single-outcome functional
-fine-mapping); `mfsusie()` works the same way and is the natural
-choice when both fits cover multiple outcomes.
 
 ```{r setup, message = FALSE}
 library(mfsusieR)
@@ -117,25 +115,24 @@ res_distinct$coloc_pairwise
 
 ## Notes
 
-- This vignette assumes the user already has a pair of
-  fine-mapping fits, possibly from different SuSiE Suite
-  packages, and wants to test for colocalization between them.
-  The natural alternative when subject-level data is available
-  for all outcomes is to run `mfsusie()` jointly across them;
-  the multi-outcome fit shares signal across modalities and
-  identifies per-outcome and shared credible sets in one pass
-  without a post-hoc combination step. The pairwise-ABF
-  recipe shown here becomes essential when one or more inputs
-  are summary-statistics fits (e.g., a GWAS `susie_rss()` fit
-  colocalized against a molecular-QTL `fsusie()` fit), where
-  the underlying individual-level data is not available.
-- Joint `mfsusie()` fine-mapping that takes summary statistics
-  from a GWAS as one of its outcomes is future work.
-- For multi-outcome colocalization across more than two
-  outcomes, see [the multi-outcome intro](mfsusie_intro.html),
-  which fits all outcomes jointly and avoids the post-hoc
-  combine. The disadvantage is that it would subject to mfSuSiE modeling
-  assumptions and not as modular as integrating SuSiE Suite fits.
+The pairwise-ABF recipe assumes the user already has a pair of
+fine-mapping fits, possibly from different SuSiE-suite packages.
+When subject-level data is available for every outcome, the
+natural alternative is `mfsusie()` jointly across them: the
+multi-outcome fit shares signal across modalities and identifies
+per-outcome and shared credible sets in one pass without a
+post-hoc combination step. The pairwise recipe is essential when
+one or more inputs are summary-statistics fits, e.g., a GWAS
+`susie_rss()` fit colocalized against a molecular-QTL `fsusie()`
+fit, where the underlying individual-level data is not available.
+Joint `mfsusie()` fine-mapping that takes GWAS summary statistics
+as one of its outcomes is future work.
+
+For colocalization across more than two outcomes, see
+[the multi-outcome intro](mfsusie_intro.html); the joint fit
+avoids the post-hoc combine but rides on mfSuSiE's modeling
+assumptions and is less modular than integrating separate
+SuSiE-suite fits.
 
 ## Session info
 

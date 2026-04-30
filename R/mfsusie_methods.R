@@ -26,6 +26,8 @@ mf_invert_per_outcome <- function(coef_wavelet, m, dwt_meta,
   # in Y-standardized units.
   cm    <- if (intercept) dwt_meta$column_center[[m]] else rep(0, T_pad)
   csd   <- dwt_meta$column_scale[[m]]
+  wcm   <- if (intercept) dwt_meta$wavelet_center[[m]] else rep(0, T_pad)
+  wcsd  <- dwt_meta$wavelet_scale[[m]]
 
   # `mf_invert_dwt` returns one curve per row of `coef_wavelet`,
   # on the post-remap padded grid stored at `dwt_meta$pos[[m]]`
@@ -35,6 +37,8 @@ mf_invert_per_outcome <- function(coef_wavelet, m, dwt_meta,
     D_packed       = coef_wavelet,
     column_center  = cm,
     column_scale   = csd,
+    wavelet_center = wcm,
+    wavelet_scale  = wcsd,
     filter_number  = dwt_meta$wavelet_filter,
     family         = dwt_meta$wavelet_family
   )
@@ -953,6 +957,8 @@ dwt_invert_packed <- function(D_packed_row, meta, m) {
     D_packed      = D_packed_row,
     column_center = rep(0, ncol(D_packed_row)),
     column_scale  = rep(1, ncol(D_packed_row)),
+    wavelet_center = rep(0, ncol(D_packed_row)),
+    wavelet_scale  = meta$wavelet_scale[[m]] %||% rep(1, ncol(D_packed_row)),
     filter_number = meta$wavelet_filter %||% 10L,
     family        = meta$wavelet_family %||% "DaubLeAsymm")
   as.numeric(inverted)

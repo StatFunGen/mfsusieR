@@ -39,11 +39,8 @@ distribute_mixture_weights <- function(K, null_prior_init) {
 #' Per-outcome data-driven prior init
 #'
 #' Calls `compute_marginal_bhat_shat(X, Y_m)` to obtain
-#' Bhat / Shat, draws a sample, and fits `ash` to obtain
-#' the K-vector grid of mixture variances. The internal
-#' `set.seed(1)` and sample-size caps (5000 for
-#' `mixture_normal`, 50000 for `mixture_normal_per_scale`) make
-#' the prior grid deterministic for a given input.
+#' Bhat / Shat and builds a deterministic K-vector grid of
+#' mixture variances.
 #'
 #' @param Y_m numeric matrix `n x T_basis[m]` of wavelet
 #'   coefficients for outcome m.
@@ -59,7 +56,7 @@ distribute_mixture_weights <- function(K, null_prior_init) {
 #'   columns are excluded from the ash sampling pool so
 #'   masked-zero coefficients do not pull the prior toward a
 #'   degenerate spike.
-#' @return list with `G_prior` (the ash fit, possibly replicated)
+#' @return list with `G_prior` (the grid prior, possibly replicated)
 #'   and `tt` (the marginal Bhat / Shat from the susieR helper).
 #' @keywords internal
 #' @noRd
@@ -87,26 +84,28 @@ init_scale_mixture_prior_default <- function(Y_m,
   pool_Bhat <- bs$Bhat[, keep_cols, drop = FALSE]
   pool_Shat <- bs$Shat[, keep_cols, drop = FALSE]
 
-  sample_size <- if (prior_class == "mixture_normal_per_scale") 50000 else 5000
-  pool_dim    <- prod(dim(pool_Bhat))
-  draw_n      <- min(pool_dim, sample_size)
+  sd_min <- as.numeric(stats::quantile(pool_Shat, 0.1, na.rm = TRUE)) / 10
+  sd_max <- 2 * sqrt(max(pmax(pool_Bhat^2 - pool_Shat^2, 0), na.rm = TRUE))
+  K_nonnull <- if (is.finite(sd_min) && sd_min > 0 &&
+                   is.finite(sd_max) && sd_max > sd_min) {
+    max(2L, ceiling(log(sd_max / sd_min) / log(grid_multiplier)))
+  } else {
+    2L
+  }
+  if (!is.finite(sd_min) || sd_min <= 0) {
+    sd_min <- sqrt(.Machine$double.eps)
+  }
+  sd_grid <- c(0, sd_min * grid_multiplier^seq(0L, K_nonnull))
+  t_ash <- list(fitted_g = normalmix(rep(1, length(sd_grid)),
+                                     rep(0, length(sd_grid)),
+                                     sd_grid))
 
-  set.seed(1)
-  betahat <- c(max(abs(pool_Bhat)), sample(pool_Bhat, size = draw_n))
-  set.seed(1)
-  sdhat <- c(0.01, sample(pool_Shat, size = draw_n))
-
-  t_ash <- ash(betahat, sdhat,
-                     mixcompdist = "normal",
-                     outputlevel = 0,
-                     gridmult    = grid_multiplier)
-
-  # Use ash's sd-grid but discard its fitted pi: under LD the iid
-  # assumption ash makes is violated. Set the init pi directly
-  # from `null_prior_init` (a probability in `[0, 1]`); the EM
-  # M-step washes this out within a few iterations, so this is
-  # only the cold-start point. The same parameter drives both the
-  # ash-driven path and the user-supplied-grid path
+  # Use the robust ash-like sd-grid but discard its fitted pi: under LD
+  # the iid assumption ash makes is violated. Set the init pi
+  # directly from `null_prior_init` (a probability in `[0, 1]`);
+  # the EM M-step washes this out within a few iterations, so this
+  # is only the cold-start point. The same parameter drives both
+  # the automatic-grid path and the user-supplied-grid path
   # (`distribute_mixture_weights`).
   K <- length(t_ash$fitted_g$pi)
   pi_null <- null_prior_init
@@ -342,7 +341,7 @@ mf_prior_scale_mixture <- function(data,
       attr(G_prior_per_outcome[[m]], "class") <- prior_class
       pi_weights[[m]] <- fill_pi_weights(pi_kvec, length(groups_m))
     } else {
-      # Data-driven path: susieR helper -> ash. Helper
+      # Data-driven path: susieR helper -> deterministic grid. Helper
       # returns one G_prior entry per group, with `$idx` attached.
       out <- init_scale_mixture_prior_default(
         Y_m               = data$D[[m]],

@@ -94,11 +94,11 @@ test_that("mfsusie() and fsusie() run end-to-end after a fresh devtools::load_al
   # Single-modality functional via mfsusie
   Y_func <- X %*% matrix(rep(beta, 32L), nrow = J) +
             matrix(rnorm(n * 32L, sd = 0.3), nrow = n)
-  fit_m <- mfsusie(wavelet_qnorm = FALSE, X, list(Y_func), L = 2, max_iter = 20, verbose = FALSE)
+  fit_m <- mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, X, list(Y_func), L = 2, max_iter = 20, verbose = FALSE)
   expect_s3_class(fit_m, "mfsusie")
   expect_true(isTRUE(fit_m$converged) || fit_m$niter > 0L)
 
   # Drop-in via fsusie
-  fit_f <- fsusie(wavelet_qnorm = FALSE, Y_func, X, L = 2, max_iter = 20, verbose = FALSE)
+  fit_f <- fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, Y_func, X, L = 2, max_iter = 20, verbose = FALSE)
   expect_s3_class(fit_f, "mfsusie")
 })

@@ -139,11 +139,17 @@
 #'   high-frequency wavelet coefficients are dominated by zeros.
 #'   Default `0`; only columns with a strictly-zero absolute-value
 #'   median are masked.
-#' @param wavelet_qnorm logical. When `TRUE` (default), applies a
+#' @param wavelet_qnorm logical. When `TRUE`, applies a
 #'   column-wise rank-based normal quantile transform to the
 #'   wavelet-domain response before the IBSS loop. Useful for
 #'   non-Gaussian wavelet coefficients arising from heavy-tailed
-#'   assays.
+#'   assays. Default `FALSE`.
+#' @param wavelet_standardize logical. When `TRUE`, centers and
+#'   scales each packed wavelet coefficient column before the IBSS
+#'   loop, after the position-space DWT and before optional
+#'   `wavelet_qnorm`. This mirrors the established functional
+#'   fine-mapping preprocessing while preserving invertible
+#'   coefficient back-transforms. Default `TRUE`.
 #' @param control_mixsqp optional named list of `mixsqp` control
 #'   arguments forwarded to the per-(outcome, scale) M-step.
 #' @param mixture_null_weight numeric in `[0, 1]` or `NULL`,
@@ -258,7 +264,8 @@ mfsusie <- function(X, Y,
                     wavelet_basis_order       = 10,
                     wavelet_family            = "DaubLeAsymm",
                     wavelet_magnitude_cutoff  = 0,
-                    wavelet_qnorm             = TRUE,
+                    wavelet_standardize       = TRUE,
+                    wavelet_qnorm             = FALSE,
                     control_mixsqp            = NULL,
                     mixture_null_weight               = NULL,
                     alpha_thin_eps            = 5e-5,
@@ -318,6 +325,7 @@ mfsusie <- function(X, Y,
     standardize              = standardize,
     intercept                = intercept,
     wavelet_magnitude_cutoff = wavelet_magnitude_cutoff,
+    wavelet_standardize      = wavelet_standardize,
     wavelet_qnorm            = wavelet_qnorm,
     verbose                  = verbose
   )
@@ -431,6 +439,8 @@ mfsusie <- function(X, Y,
     X_scale         = data$wavelet_meta$X_scale,
     column_center   = data$wavelet_meta$column_center,
     column_scale    = data$wavelet_meta$column_scale,
+    wavelet_center  = data$wavelet_meta$wavelet_center,
+    wavelet_scale   = data$wavelet_meta$wavelet_scale,
     wavelet_filter  = data$wavelet_meta$filter_number,
     wavelet_family  = data$wavelet_meta$family,
     outcome_names   = names(data$D) %||% names(Y)

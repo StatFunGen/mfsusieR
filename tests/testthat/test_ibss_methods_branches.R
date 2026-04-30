@@ -19,7 +19,7 @@ build_for_ibss <- function(seed = 23L, n = 60L, p = 8L, T_m = 32L,
 
 test_that("ibss_initialize.mf_individual clamps L to p when L > p", {
   d <- build_for_ibss(p = 5L)
-  fit <- fsusie(wavelet_qnorm = FALSE, d$Y, d$X, L = 10, max_iter = 30, verbose = FALSE)
+  fit <- fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, d$Y, d$X, L = 10, max_iter = 30, verbose = FALSE)
   # ibss_initialize sets params$L <- data$p when L > p; the fit
   # then returns L = p effects.
   expect_equal(nrow(fit$alpha), 5L)
@@ -32,7 +32,7 @@ test_that("track_ibss_fit.mf_individual exercises the recording branch when trac
   # The hook builds per-iteration snapshots when track_fit is
   # TRUE; the final fit has them stripped by susieR's cleanup,
   # so we assert run-to-completion rather than slot presence.
-  fit <- fsusie(wavelet_qnorm = FALSE, d$Y, d$X, L = 2, max_iter = 5, track_fit = TRUE,
+  fit <- fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, d$Y, d$X, L = 2, max_iter = 5, track_fit = TRUE,
                 verbose = FALSE)
   expect_true(fit$converged || fit$niter == 5L)
 })
@@ -41,14 +41,14 @@ test_that("track_ibss_fit.mf_individual exercises the recording branch when trac
 
 test_that("get_variable_names.mf_individual carries colnames(X) onto alpha and lbf_variable", {
   d   <- build_for_ibss(name_X = TRUE)
-  fit <- fsusie(wavelet_qnorm = FALSE, d$Y, d$X, L = 2, max_iter = 30, verbose = FALSE)
+  fit <- fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, d$Y, d$X, L = 2, max_iter = 30, verbose = FALSE)
   expect_equal(colnames(fit$alpha),        colnames(d$X))
   expect_equal(colnames(fit$lbf_variable), colnames(d$X))
 })
 
 test_that("get_variable_names.mf_individual leaves alpha unnamed when X is unnamed", {
   d   <- build_for_ibss(name_X = FALSE)
-  fit <- fsusie(wavelet_qnorm = FALSE, d$Y, d$X, L = 2, max_iter = 30, verbose = FALSE)
+  fit <- fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, d$Y, d$X, L = 2, max_iter = 30, verbose = FALSE)
   expect_null(colnames(fit$alpha))
 })
 
@@ -59,7 +59,7 @@ test_that("get_intercept.mf_individual returns zeros when intercept = FALSE", {
   # The fit pre-centers Y; the no-intercept branch in
   # `get_intercept.mf_individual` is exercised when
   # `params$intercept = FALSE`.
-  fit <- fsusie(wavelet_qnorm = FALSE, d$Y, d$X, L = 2, max_iter = 20,
+  fit <- fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, d$Y, d$X, L = 2, max_iter = 20,
                 intercept = FALSE, verbose = FALSE)
   inter <- mfsusieR:::get_intercept.mf_individual(
     data   = list(T_basis = fit$dwt_meta$T_basis),
@@ -73,8 +73,8 @@ test_that("get_intercept.mf_individual returns zeros when intercept = FALSE", {
 
 test_that("expand_model_init_to_L errors when L_prev > L_new", {
   d <- build_for_ibss()
-  fit_big <- fsusie(wavelet_qnorm = FALSE, d$Y, d$X, L = 5, max_iter = 30, verbose = FALSE)
+  fit_big <- fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, d$Y, d$X, L = 5, max_iter = 30, verbose = FALSE)
   expect_error(
-    fsusie(wavelet_qnorm = FALSE, max_iter = 100, d$Y, d$X, L = 2, model_init = fit_big, verbose = FALSE),
+    fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, max_iter = 100, d$Y, d$X, L = 2, model_init = fit_big, verbose = FALSE),
     "shrinking is not supported")
 })

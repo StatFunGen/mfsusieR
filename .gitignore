@@ -56,5 +56,6 @@ rsconnect/
 
 # Local Claude Code configuration, skills, and commands. These
 # are personal to a developer's environment and should not ship.
-.claude/
+.claude
+.codex
 pixi.lock

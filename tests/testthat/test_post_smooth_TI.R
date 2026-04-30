@@ -23,7 +23,7 @@ test_that("mf_post_smooth(method = 'TI') matches univariate_TI_regression bit-fo
   # `fit$X_eff` to the lead column so the bit-identity comparison
   # against the upstream routine still holds. Test hack only;
   # production code keeps the alpha-weighted form.
-  fit <- fsusie(wavelet_qnorm = FALSE, Y, X, L = 1, max_iter = 30, verbose = FALSE)
+  fit <- fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, Y, X, L = 1, max_iter = 30, verbose = FALSE)
   L <- nrow(fit$alpha)
   fit$X_eff <- lapply(seq_len(L), function(l) {
     lead_l <- which.max(fit$alpha[l, ])
