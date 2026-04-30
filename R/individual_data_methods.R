@@ -723,7 +723,29 @@ post_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
     model <- ckl_fn(data, params, model, l)
     if (!is.na(prev_lbf) && abs(model$lbf[l] - prev_lbf) < inner_tol) break
   }
-  list(V = 1, model = model)
+  list(V = .effective_V_l(model, l, data$M), model = model)
+}
+
+# Per-effect effective slab variance: mean over (m, s) of
+#   sum_k pi[l, m, s, k] * var_k
+# where var_k = sd[k]^2 (normalmix) or 2 * scale[k]^2 (laplacemix).
+# Used to populate model$V[l] with a meaningful per-effect summary
+# for verbose output and the cycle-PIP convergence filter; the
+# pre-loglik hook overwrites V back to 1 before BF computation.
+.effective_V_l <- function(model, l, M) {
+  fge_l <- model$fitted_g_per_effect[[l]]
+  if (is.null(fge_l)) return(1)
+  vs <- numeric(0L)
+  for (m in seq_len(M)) {
+    for (s in seq_along(fge_l[[m]])) {
+      g <- fge_l[[m]][[s]]
+      var_k <- if (!is.null(g$sd))         g$sd^2
+               else if (!is.null(g$scale)) 2 * g$scale^2
+               else next
+      vs <- c(vs, sum(g$pi * var_k))
+    }
+  }
+  if (length(vs) == 0L) 1 else mean(vs)
 }
 
 #' mixsqp M-step on `pi_V` per (outcome, scale)
@@ -960,11 +982,12 @@ get_objective.mfsusie <- function(data, params, model) {
 #' susieR's `cleanup_model.default` strips a standard set of
 #' temporary fields (`runtime`, `residuals`, `fitted_without_l`,
 #' `residual_variance`, ...) and unions in whatever this generic
-#' returns. mfsusieR adds `model$V` to the strip list because the
-#' length-L scalar prior coefficient is held at 1 throughout IBSS:
-#' the per-effect adaptation lives in the per-(scale, outcome)
-#' mixture weights `pi_V[[m]]`, not in V. Keeping V on the fit
-#' would mislead users into thinking it carries information.
+#' returns. mfsusieR keeps `model$V` on the final fit: the
+#' post-loglik hook populates it with the per-effect effective
+#' slab variance (mean over (m, s) of `sum_k pi[l, m, s, k] *
+#' var_k`), so it carries a meaningful per-effect summary for
+#' downstream consumers (`susie_get_pip`'s prior_tol filter,
+#' verbose diagnostics).
 #'
 #' `model$fitted` (the wavelet-domain running fit, list of length
 #' M) is intentionally NOT stripped: it is consumed by
@@ -977,7 +1000,7 @@ get_objective.mfsusie <- function(data, params, model) {
 #' @keywords internal
 #' @noRd
 cleanup_extra_fields.mf_individual <- function(data) {
-  c("V")
+  character(0L)
 }
 
 #' Aggregate expected log-likelihood across outcomes
