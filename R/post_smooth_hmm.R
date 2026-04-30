@@ -40,7 +40,12 @@ mf_fit_hmm <- function(x, sd,
                        maxiter          = 3L,
                        max_zscore       = 20,
                        thresh_sd        = 1e-30,
-                       epsilon          = 1e-2) {
+                       epsilon          = 1e-2,
+                       ...) {
+  # `...` collects extra args forwarded to every internal
+  # `ashr::ash` call (e.g., `nullweight`, `mixcompdist`).
+  ash_extras <- utils::modifyList(list(mixcompdist = "normal"),
+                                  list(...))
   # Defensive sd / x cleanup.
   too_small <- which(sd < thresh_sd)
   if (length(too_small) > 0L) sd[too_small] <- thresh_sd
@@ -154,8 +159,9 @@ mf_fit_hmm <- function(x, sd,
   for (i in 2L:length(idx_comp)) {
     mu_ash <- mu[idx_comp[i]]
     weight <- prob[, idx_comp[i]]
-    ash_obj[[i]] <- ash(x, sd, weight = weight, mode = mu_ash,
-                        mixcompdist = "normal")
+    ash_obj[[i]] <- do.call(ash,
+                            c(list(x, sd, weight = weight, mode = mu_ash),
+                              ash_extras))
     pm_i  <- ash_obj[[i]]$result$PosteriorMean
     psd_i <- ash_obj[[i]]$result$PosteriorSD
     x_post    <- x_post    + weight * pm_i
@@ -232,8 +238,9 @@ mf_fit_hmm <- function(x, sd,
     # second moment per state is sd^2 + mean^2.
     x_post_m2 <- numeric(T_pos)
     for (k in 2L:K) {
-      ash_obj[[k]] <- ash(x, sd, weight = prob[, k], mode = mu[k],
-                          mixcompdist = "normal")
+      ash_obj[[k]] <- do.call(ash,
+                              c(list(x, sd, weight = prob[, k], mode = mu[k]),
+                                ash_extras))
       pm_k  <- ash_obj[[k]]$result$PosteriorMean
       psd_k <- ash_obj[[k]]$result$PosteriorSD
       x_post    <- x_post    + prob[, k] * pm_k
@@ -293,7 +300,7 @@ mf_fit_hmm <- function(x, sd,
 #' the local false sign rate, and the underlying log-BF.
 #' @keywords internal
 #' @noRd
-mf_univariate_hmm_regression <- function(Y, X, halfK = 20L) {
+mf_univariate_hmm_regression <- function(Y, X, halfK = 20L, ...) {
   Y <- as.matrix(Y)
   X <- as.matrix(X)
   stopifnot(ncol(X) == 1L)
@@ -313,7 +320,7 @@ mf_univariate_hmm_regression <- function(Y, X, halfK = 20L) {
     sds[bad] <- median(sds[!bad], na.rm = TRUE)
   }
 
-  s <- mf_fit_hmm(x = est, sd = sds, halfK = halfK)
+  s <- mf_fit_hmm(x = est, sd = sds, halfK = halfK, ...)
   list(effect_estimate = s$x_post    * csd_Y / csd_X,
        effect_sd       = s$x_post_sd * csd_Y / csd_X,
        lfsr            = s$lfsr,

@@ -543,11 +543,14 @@ lfsr_from_gaussian <- function(mean, sd) {
 #'   fit was built with `attach_smoothing_inputs = FALSE`; ignored
 #'   otherwise.
 #' @param ... extra arguments forwarded to the underlying
-#'   shrinkage tool for the chosen method. For `method = "ash"`
-#'   they are passed to `ashr::ash` (e.g.,
-#'   `nullweight = 10` for milder null shrinkage); for
-#'   `method = "smash"` they are passed to `smashr::smash.gaus`.
-#'   Other methods currently ignore `...`.
+#'   shrinkage tool for the chosen method. Routing:
+#'   `method = "ash"` and `method = "TI"` and `method = "HMM"`
+#'   forward to `ashr::ash` (e.g., `nullweight = 10` for milder
+#'   null shrinkage). `method = "smash"` forwards to
+#'   `smashr::smash.gaus`. `method = "TI"` also accepts
+#'   `scaling = c("per_scale", "uniform")` (default `"per_scale"`)
+#'   to pick between scalewise per-scale ash and a single uniform
+#'   ash on raw Y. `method = "scalewise"` ignores `...`.
 #' @return the input fit with `$effect_curves`, `$credible_bands`,
 #'   and `$lfsr_curves` populated. Scalar outcomes
 #'   (`T_basis[m] = 1`) skip the wavelet step (smoothing is a
@@ -605,8 +608,8 @@ mf_post_smooth <- function(fit,
   payload <- switch(method,
     "scalewise" = .post_smooth_scalewise(fit, level, threshold_factor),
     "TI"        = .post_smooth_ti(fit, level, wavelet_filter,
-                                  wavelet_family),
-    "HMM"       = .post_smooth_hmm(fit, level, halfK),
+                                  wavelet_family, ...),
+    "HMM"       = .post_smooth_hmm(fit, level, halfK, ...),
     "smash"     = .post_smooth_smash(fit, level, flavor = "smashr", ...),
     "ash"       = .post_smooth_smash(fit, level, flavor = "ash", ...))
 
@@ -752,7 +755,8 @@ mf_post_smooth <- function(fit,
 
 # ---- TI: cycle-spinning translation-invariant wavelet denoising ----
 
-.post_smooth_ti <- function(fit, level, wavelet_filter, wavelet_family) {
+.post_smooth_ti <- function(fit, level, wavelet_filter, wavelet_family,
+                            ...) {
   z_crit <- stats::qnorm((1 + level) / 2)
   Y_pos_cache <- vector("list", length(fit$dwt_meta$T_basis))
   kernel <- function(fit, l, m, T_m, level) {
@@ -761,7 +765,7 @@ mf_post_smooth <- function(fit,
     iso <- Y_pos_cache[[m]] - .other_effects_pos(fit, m, exclude = l)
     out <- univariate_ti_regression(iso, fit$X_eff[[l]],
                                     wavelet_filter, wavelet_family,
-                                    z_crit)
+                                    z_crit, ...)
     list(effect_estimate = out$effect_estimate,
          credible_band   = cbind(out$cred_band[2L, ], out$cred_band[1L, ]),
          lfsr            = lfsr_from_gaussian(out$effect_estimate,
@@ -820,13 +824,23 @@ mf_post_smooth <- function(fit,
 # row 1 "up", row 2 "low").
 univariate_ti_regression <- function(Y_pos, x_eff,
                                       filter_number, family,
-                                      z_crit) {
-  # Per-column SD normalisation: scale Y (per position) and X
-  # (one column) to unit variance, run wavelet regression on the
-  # scaled inputs, then unscale at the end by the recorded column
-  # SDs.
-  Y_sc  <- col_scale(Y_pos, center = TRUE, scale = TRUE)
-  csd_Y <- attr(Y_sc, "scaled:scale")
+                                      z_crit,
+                                      scaling = c("per_scale", "uniform"),
+                                      ...) {
+  scaling <- match.arg(scaling)
+
+  # `per_scale`: column-scale Y and run a per-scale ash loop with
+  # `nullweight = 30`. `uniform`: skip Y scaling, run a single ash
+  # over all D coefficients with `nullweight = 3`. Both modes
+  # forward `...` to `ashr::ash` so callers can override defaults
+  # (e.g., `nullweight`, `mixcompdist`).
+  if (scaling == "per_scale") {
+    Y_sc  <- col_scale(Y_pos, center = TRUE, scale = TRUE)
+    csd_Y <- attr(Y_sc, "scaled:scale")
+  } else {
+    Y_sc  <- Y_pos
+    csd_Y <- rep(1, ncol(Y_pos))
+  }
   x_mat <- col_scale(matrix(x_eff, ncol = 1L),
                      center = TRUE, scale = TRUE)
   csd_X <- attr(x_mat, "scaled:scale")
@@ -851,24 +865,33 @@ univariate_ti_regression <- function(Y_pos, x_eff,
   bhat_c <- as.numeric(reg_c$Bhat)
   shat_c <- as.numeric(reg_c$Shat)
 
-  # Scalewise ash shrinkage of D coefficients. `n_basis` is the
-  # length of the original signal, distinct from sample count `n`.
   fl       <- dummy$fl.dbase$first.last.d
   n_basis  <- 2L^nlevelsWT(dummy)
   K        <- nrow(fl)
   wd_post  <- numeric(length(bhat_d))
   wd_var   <- numeric(length(bhat_d))
-  for (s in seq_len(K)) {
-    first_s   <- fl[s, 1L]
-    offset_s  <- fl[s, 3L]
-    idx <- (offset_s + 1L - first_s):(offset_s + n_basis - first_s)
-    t_ash <- ash(bhat_d[idx], shat_d[idx],
-                 nullweight = 30, mixcompdist = "normal")
-    wd_post[idx] <- t_ash$result$PosteriorMean
-    wd_var[idx]  <- t_ash$result$PosteriorSD^2
+  if (scaling == "per_scale") {
+    ash_d_args <- utils::modifyList(
+      list(nullweight = 30, mixcompdist = "normal"), list(...))
+    for (s in seq_len(K)) {
+      first_s   <- fl[s, 1L]
+      offset_s  <- fl[s, 3L]
+      idx <- (offset_s + 1L - first_s):(offset_s + n_basis - first_s)
+      t_ash <- do.call(ash,
+                       c(list(bhat_d[idx], shat_d[idx]), ash_d_args))
+      wd_post[idx] <- t_ash$result$PosteriorMean
+      wd_var[idx]  <- t_ash$result$PosteriorSD^2
+    }
+  } else {
+    ash_d_args <- utils::modifyList(
+      list(nullweight = 3, mixcompdist = "normal"), list(...))
+    t_ash <- do.call(ash, c(list(bhat_d, shat_d), ash_d_args))
+    wd_post <- t_ash$result$PosteriorMean
+    wd_var  <- t_ash$result$PosteriorSD^2
   }
-  t_ash_c <- ash(bhat_c, shat_c,
-                 nullweight = 3, mixcompdist = "normal")
+  ash_c_args <- utils::modifyList(
+    list(nullweight = 3, mixcompdist = "normal"), list(...))
+  t_ash_c <- do.call(ash, c(list(bhat_c, shat_c), ash_c_args))
 
   # Cycle-spinning average via av.basis.
   dummy$D <- wd_post
@@ -900,7 +923,7 @@ univariate_ti_regression <- function(Y_pos, x_eff,
 
 # ---- HMM denoising -------------------------------------------------
 
-.post_smooth_hmm <- function(fit, level, halfK) {
+.post_smooth_hmm <- function(fit, level, halfK, ...) {
   z_crit <- stats::qnorm((1 + level) / 2)
   Y_pos_cache <- vector("list", length(fit$dwt_meta$T_basis))
   kernel <- function(fit, l, m, T_m, level) {
@@ -910,7 +933,7 @@ univariate_ti_regression <- function(Y_pos, x_eff,
     out <- mf_univariate_hmm_regression(
       Y     = iso,
       X     = matrix(fit$X_eff[[l]], ncol = 1L),
-      halfK = halfK)
+      halfK = halfK, ...)
     list(effect_estimate = out$effect_estimate,
          credible_band   = cbind(
            out$effect_estimate - z_crit * out$effect_sd,

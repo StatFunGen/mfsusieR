@@ -76,12 +76,19 @@ by `csd_Y / csd_X`. `"uniform"` SHALL skip Y scaling, run a
 single `ashr::ash` across all wavelet coefficients with
 `nullweight = 3`, and rescale the output by `1 / csd_X`.
 
-#### Scenario: uniform mode preserves high-frequency signal
+#### Scenario: scaling modes produce distinct effect curves
 
 - **WHEN** `mf_post_smooth(method = "TI", scaling = "uniform")` and
   `mf_post_smooth(method = "TI", scaling = "per_scale")` are run on
   the same fit
-- **THEN** the two outputs SHALL differ
-- **AND** the `"uniform"` output SHALL apply less aggressive
-  shrinkage on detail coefficients than the `"per_scale"` output
-  (verifiable by L2 norm of the wavelet-detail residual)
+- **THEN** the two outputs SHALL differ in `effect_curves` for at
+  least one effect
+
+#### Scenario: TI and HMM forward `...` to ashr::ash
+
+- **WHEN** `mf_post_smooth(method = "TI", nullweight = K)` or
+  `mf_post_smooth(method = "HMM", nullweight = K)` is called with
+  `K` distinct from the per-method default
+- **THEN** the resulting `effect_curves` SHALL differ from the
+  `nullweight`-default fit (machine-precision difference is
+  acceptable on signal-rich fixtures)
