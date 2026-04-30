@@ -23,7 +23,7 @@
   # looser IBSS tol each branch can stop at a different iteration
   # within its own convergence criterion, leaving a residual gap
   # ~tol that breaks tight comparison.
-  mfsusie(wavelet_qnorm = FALSE, X, Y, L = 3,
+  mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, X, Y, L = 3,
           max_iter = 200, tol = 1e-10,
           convergence_method = method, verbose = FALSE)
 }
@@ -82,7 +82,7 @@ test_that("convergence_method = 'pip' respects pip_stall_window", {
       matrix(rnorm(n * T_m, sd = 0.3), n)
   })
   fit <- suppressWarnings(
-    mfsusie(wavelet_qnorm = FALSE, X, Y, L = 3, max_iter = 50, tol = 1e-30,
+    mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, X, Y, L = 3, max_iter = 50, tol = 1e-30,
             convergence_method = "pip", pip_stall_window = 2L,
             verbose = FALSE)
   )

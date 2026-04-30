@@ -13,7 +13,7 @@ make_toy_fit <- function(n = 30, J = 8, T_per = c(64L, 32L),
   })
   list(
     X = X, Y = Y,
-    fit = mfsusie(wavelet_qnorm = FALSE, X, Y, L = L, max_iter = max_iter, verbose = FALSE)
+    fit = mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, X, Y, L = L, max_iter = max_iter, verbose = FALSE)
   )
 }
 

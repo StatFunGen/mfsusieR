@@ -41,7 +41,7 @@ make_sparse_fixture <- function() {
 # susieR's stopping rule.
 fit_susie_degen <- function(scope, X, y, sigma2 = 0.2, L = 5L) {
   mfsusieR::mfsusie(
-    wavelet_qnorm           = FALSE,
+    wavelet_qnorm = FALSE, wavelet_standardize = FALSE,
     X, list(matrix(y, ncol = 1L)),
     L                       = L,
     prior_variance_scope    = scope,

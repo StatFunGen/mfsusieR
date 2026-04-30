@@ -26,7 +26,7 @@ test_that("per-modality log-BF rows match what mvf.susie.alpha::log_BF builds vi
 
   set.seed(mfsusier_test_seed())
   n <- 50; J <- 15
-  data <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, 
+  data <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, 
     X = matrix(rnorm(n * J), n),
     Y = list(matrix(rnorm(n * 64), n),
              matrix(rnorm(n * 32), n)),
@@ -99,7 +99,7 @@ test_that("mixture posterior matches fsusieR::post_mat_mean / post_mat_sd at <= 
 
   set.seed(mfsusier_test_seed())
   n <- 40; J <- 12
-  data <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, 
+  data <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, 
     X = matrix(rnorm(n * J), n),
     Y = list(matrix(rnorm(n * 32), n)),
     verbose = FALSE)
@@ -141,7 +141,7 @@ test_that("mf_em_likelihood_per_scale matches fsusieR::cal_L_mixsq_s_per_scale a
 
   set.seed(mfsusier_test_seed())
   n <- 40; J <- 12
-  data <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, 
+  data <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, 
     X = matrix(rnorm(n * J), n),
     Y = list(matrix(rnorm(n * 32), n)),
     verbose = FALSE)

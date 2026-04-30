@@ -26,7 +26,7 @@ make_toy_smoke <- function(n = 30, J = 8, T_per_outcome = c(64L, 32L),
 test_that("mfsusie() runs end-to-end on a toy fixture and returns a fit of class c('mfsusie', 'susie')", {
   toy <- make_toy_smoke()
 
-  fit <- mfsusie(wavelet_qnorm = FALSE, toy$X, toy$Y, L = 5, max_iter = 30, verbose = FALSE)
+  fit <- mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, toy$X, toy$Y, L = 5, max_iter = 30, verbose = FALSE)
 
   expect_s3_class(fit, c("mfsusie", "susie"), exact = FALSE)
   expect_true(is.list(fit))
@@ -64,7 +64,7 @@ test_that("mfsusie() runs end-to-end on a toy fixture and returns a fit of class
 
 test_that("mfsusie() ELBO is non-decreasing across iterations (within numerical tolerance)", {
   toy <- make_toy_smoke()
-  fit <- mfsusie(wavelet_qnorm = FALSE, toy$X, toy$Y, L = 5, max_iter = 50, verbose = FALSE)
+  fit <- mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, toy$X, toy$Y, L = 5, max_iter = 50, verbose = FALSE)
 
   # Skip the first ELBO diff: the initial sigma2 (var(Y) guess) gets
   # replaced by its first closed-form update, which is a one-shot
@@ -81,7 +81,7 @@ test_that("mfsusie() ELBO is non-decreasing across iterations (within numerical 
 
 test_that("mfsusie() fit fields contain no NaN / NA in alpha, mu, mu2, pip, elbo", {
   toy <- make_toy_smoke()
-  fit <- mfsusie(wavelet_qnorm = FALSE, toy$X, toy$Y, L = 5, max_iter = 30, verbose = FALSE)
+  fit <- mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, toy$X, toy$Y, L = 5, max_iter = 30, verbose = FALSE)
 
   expect_false(any(is.na(fit$alpha)))
   expect_false(any(is.nan(fit$alpha)))
@@ -103,7 +103,7 @@ test_that("mfsusie() fit fields contain no NaN / NA in alpha, mu, mu2, pip, elbo
 
 test_that("mfsusie() attaches Y_grid + X_eff by default and can opt out", {
   toy <- make_toy_smoke()
-  fit <- mfsusie(wavelet_qnorm = FALSE, toy$X, toy$Y, L = 5, max_iter = 30, verbose = FALSE)
+  fit <- mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, toy$X, toy$Y, L = 5, max_iter = 30, verbose = FALSE)
   expect_true(!is.null(fit$Y_grid))
   expect_identical(length(fit$Y_grid), length(toy$Y))
   for (m in seq_along(fit$Y_grid)) {
@@ -116,7 +116,7 @@ test_that("mfsusie() attaches Y_grid + X_eff by default and can opt out", {
   }
 
   # Opt-out drops both fields.
-  fit_lite <- mfsusie(wavelet_qnorm = FALSE, toy$X, toy$Y, L = 5, max_iter = 30,
+  fit_lite <- mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, toy$X, toy$Y, L = 5, max_iter = 30,
                       attach_smoothing_inputs = FALSE,
                       verbose = FALSE)
   expect_null(fit_lite$Y_grid)
@@ -127,7 +127,7 @@ test_that("mfsusie() attaches Y_grid + X_eff by default and can opt out", {
 
 test_that("mfsusie() works with M = 1 single-modality input", {
   toy <- make_toy_smoke(T_per_outcome = 64L)
-  fit <- mfsusie(wavelet_qnorm = FALSE, toy$X, toy$Y, L = 3, max_iter = 30, verbose = FALSE)
+  fit <- mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, toy$X, toy$Y, L = 3, max_iter = 30, verbose = FALSE)
   expect_s3_class(fit, "mfsusie")
   expect_identical(length(fit$mu[[1]]), 1L)
   expect_true(is.numeric(fit$pip))
@@ -137,7 +137,7 @@ test_that("mfsusie() works with M = 1 single-modality input", {
 
 test_that("mfsusie(L_greedy = K) runs without error and respects the saturation bound", {
   toy <- make_toy_smoke()
-  fit <- mfsusie(wavelet_qnorm = FALSE, toy$X, toy$Y, L = 8, L_greedy = 2, greedy_lbf_cutoff = 0.1,
+  fit <- mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, toy$X, toy$Y, L = 8, L_greedy = 2, greedy_lbf_cutoff = 0.1,
                  max_iter = 30, verbose = FALSE)
   # The greedy outer loop trims L; final number of effects must be in [L_greedy, L].
   expect_true(nrow(fit$alpha) >= 2L)

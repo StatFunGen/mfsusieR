@@ -128,7 +128,7 @@ test_that("susie_post_outcome_configuration on a real mfsusie fit returns the do
       matrix(rnorm(n * T_m, sd = 0.3), n)
   })
 
-  fit <- mfsusie(wavelet_qnorm = FALSE, X, Y, max_iter = 30,
+  fit <- mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, X, Y, max_iter = 30,
                  verbose = FALSE)
   expect_false(is.null(fit$lbf_variable_outcome),
                info = "lbf_variable_outcome should be attached by default.")

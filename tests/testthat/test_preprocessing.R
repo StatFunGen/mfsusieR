@@ -88,7 +88,7 @@ test_that("wavelet_magnitude_cutoff masks zero-median wavelet columns", {
   # into the wavelet domain via the response: a constant column
   # in Y produces a zero-median scaling coefficient.
   sim$Y[, 1L] <- 0
-  fit_filter <- fsusie(wavelet_qnorm = FALSE, max_iter = 100, sim$Y, sim$X, L = 3,
+  fit_filter <- fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, max_iter = 100, sim$Y, sim$X, L = 3,
                        wavelet_magnitude_cutoff = 0,
                        verbose = FALSE)
   expect_true(fit_filter$converged)

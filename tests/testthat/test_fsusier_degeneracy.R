@@ -63,7 +63,7 @@ c2_fit_pair <- function(X, Y, L = 3, max_iter = 50) {
                    cal_obj        = FALSE,
                    filter_cs      = FALSE)
   ))
-  fit_m <- mfsusieR::mfsusie(wavelet_qnorm = FALSE, 
+  fit_m <- mfsusieR::mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, 
     X, list(Y), L = L,
     max_iter = max_iter, tol = 1e-6,
     verbose = FALSE

@@ -29,6 +29,11 @@
 #' @param wavelet_magnitude_cutoff non-negative numeric. Wavelet
 #'   columns whose `median(|column|)` is at or below this cutoff
 #'   are zeroed and treated as uninformative.
+#' @param wavelet_standardize logical. When `TRUE`, centers and
+#'   scales each packed wavelet coefficient column before
+#'   downstream steps. The stored wavelet centers and scales are
+#'   used by inverse-DWT methods to return fitted values and
+#'   coefficients to the original response scale.
 #' @param wavelet_qnorm logical. When `TRUE`, applies a column-wise
 #'   rank-based normal quantile transform to the wavelet-domain
 #'   response before downstream steps.
@@ -48,7 +53,8 @@ create_mf_individual <- function(X,
                                  standardize              = TRUE,
                                  intercept                = TRUE,
                                  wavelet_magnitude_cutoff = 0,
-                                 wavelet_qnorm            = TRUE,
+                                 wavelet_standardize      = TRUE,
+                                 wavelet_qnorm            = FALSE,
                                  verbose                  = FALSE) {
   # ---- Input validation --------------------------------------------------
   if (!is.matrix(X) || !is.numeric(X)) {
@@ -114,6 +120,8 @@ create_mf_individual <- function(X,
   pos_grid      <- vector("list", M)
   column_center <- vector("list", M)
   column_scale  <- vector("list", M)
+  wavelet_center <- vector("list", M)
+  wavelet_scale  <- vector("list", M)
   lowc_idx      <- vector("list", M)
 
   for (m in seq_len(M)) {
@@ -122,6 +130,7 @@ create_mf_individual <- function(X,
                   max_padded_log2 = max_padded_log2,
                   filter_number   = wavelet_basis_order,
                   family          = wavelet_family,
+                  wavelet_standardize = wavelet_standardize,
                   verbose         = verbose)
     D[[m]]             <- out$D
     scale_index[[m]]   <- out$scale_index
@@ -129,6 +138,8 @@ create_mf_individual <- function(X,
     pos_grid[[m]]      <- out$pos
     column_center[[m]] <- out$column_center
     column_scale[[m]]  <- out$column_scale
+    wavelet_center[[m]] <- out$wavelet_center
+    wavelet_scale[[m]]  <- out$wavelet_scale
 
     # Functional-only preprocessing. Quantile-norm, low-count
     # masking, and position remap each operate on a multi-column
@@ -175,11 +186,14 @@ create_mf_individual <- function(X,
     M             = M,
     intercept    = intercept,
     standardize  = standardize,
+    wavelet_standardize = wavelet_standardize,
     wavelet_meta = list(
       filter_number = wavelet_basis_order,
       family        = wavelet_family,
       column_center = column_center,
       column_scale  = column_scale,
+      wavelet_center = wavelet_center,
+      wavelet_scale  = wavelet_scale,
       X_center      = X_center,
       X_scale       = X_scale
     )

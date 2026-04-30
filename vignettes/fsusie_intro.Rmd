@@ -56,13 +56,13 @@ coverage_example$causal_snps
 
 The data are simulated cis-QTL coverage on a power-of-two grid
 (`n = 574`, `p = 100`, `T = 128`). The genotype matrix is the
-real LD scaffold from `susieR::N3finemapping$X[, 1:100]`. Two
+LD scaffold from `susieR::N3finemapping$X[, 1:100]`. Two
 causal SNPs at positions 25 and 75 carry smooth random
 per-position effects sampled from the IBSS wavelet prior, the
-same prior class fSuSiE assumes. The example is assay-agnostic:
+same prior class fSuSiE assumes. The setup is assay-agnostic:
 the per-position response could be RNA-seq exon-body coverage,
-ATAC-seq peak coverage, WGBS / ChIP-seq read counts on a window,
-or any per-position coverage / read-count assay.
+ATAC-seq peak coverage, or WGBS / ChIP-seq read counts on a
+window.
 
 ```{r causal-shapes, fig.height = 3.5}
 plot(coverage_example$causal_betas[1L, ], type = "l",
@@ -112,10 +112,10 @@ mfsusie_plot(fit, effect_variables = coverage_example$causal_snps)
 ```
 
 The raw inverse-DWT effect curves track the true shapes but
-carry high-frequency content at the smaller wavelet scales.
-After post-smoothing with the default method (`"TI"`), the
-curves are denoised and pointwise 95% credible bands are
-available.
+carry high-frequency content from the finest wavelet scales.
+The default `"TI"` smoother (cycle-spinning translation-
+invariant wavelet denoising) trims that content and adds a
+pointwise 95% credible band.
 
 ```{r plot-smoothed-dims}
 fit_s <- mf_post_smooth(fit)
@@ -314,10 +314,13 @@ matrix:
   `(Bhat = 0, Shat = 1)` to the SER step. Use a small positive
   value when the response has sparse non-zero entries (e.g.,
   ATAC-seq read pileups).
-- `wavelet_qnorm` (default `TRUE`): applies a column-wise
+- `wavelet_standardize` (default `TRUE`): centers and scales each
+  packed wavelet coefficient column before IBSS, then maps
+  fitted values and coefficients back through that linear scaling.
+- `wavelet_qnorm` (default `FALSE`): applies a column-wise
   rank-based normal quantile transform to the wavelet matrix.
   Useful when the per-position residuals are heavy-tailed or
-  visibly non-Gaussian. Set to `FALSE` to skip the transform when
+  visibly non-Gaussian. Leave it `FALSE` to skip the transform when
   the wavelet coefficients are already approximately Gaussian.
 
 See `?mfsusie` for the full set of preprocessing options.

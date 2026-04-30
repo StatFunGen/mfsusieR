@@ -44,7 +44,7 @@ with_runtime <- function(label, expr, budget_sec = 120) {
 mfsusie_args_noqnorm <- list(L = 5, max_iter = 40,
                               prior_variance_scope    = "per_outcome",
                               residual_variance_scope = "per_outcome",
-                              wavelet_qnorm = FALSE,
+                              wavelet_qnorm = FALSE, wavelet_standardize = FALSE,
                               verbose = FALSE)
 
 mfsusie_args_qnorm   <- list(L = 5, max_iter = 40,
@@ -62,7 +62,7 @@ test_that("na_idx = seq_len(n) and xtx_diag_list == xtx_diag when Y has no NA", 
   Y <- list(matrix(rnorm(n * 8), n, 8),
             matrix(rnorm(n * 4), n, 4))
   rt <- with_runtime("create_mf_individual (no NA)", {
-    mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X, Y, verbose = FALSE)
+    mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, X, Y, verbose = FALSE)
   })
   data <- rt$result
   expect_lt(rt$elapsed, rt$budget_sec)
@@ -83,7 +83,7 @@ test_that("na_idx excludes NA rows and xtx_diag_list < xtx_diag for trait with N
   Y[[2]][na_rows, ] <- NA
 
   rt <- with_runtime("create_mf_individual (NA trait)", {
-    mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X, Y, verbose = FALSE)
+    mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, X, Y, verbose = FALSE)
   })
   data <- rt$result
   expect_lt(rt$elapsed, rt$budget_sec)
@@ -108,7 +108,7 @@ test_that("each trait gets an independent na_idx when missing rows differ", {
   Y[[2]][6:12, ] <- NA
   # Y[[3]] complete
 
-  data <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X, Y, verbose = FALSE)
+  data <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, X, Y, verbose = FALSE)
 
   expect_false(identical(data$na_idx[[1]], data$na_idx[[2]]))
   expect_identical(data$na_idx[[3]], seq_len(n))
@@ -118,7 +118,7 @@ test_that("each trait gets an independent na_idx when missing rows differ", {
 
 # ---- mfsusie end-to-end: no crash with NA rows -------------------------
 
-test_that("mfsusie wavelet_qnorm=FALSE does not crash with 20% NA rows per trait", {
+test_that("mfsusie wavelet_qnorm = FALSE, wavelet_standardize = FALSE does not crash with 20% NA rows per trait", {
   d <- make_na_XY()
   rt <- with_runtime("mfsusie qnorm=FALSE 20% NA", {
     do.call(mfsusie, c(list(X = d$X, Y = d$Y), mfsusie_args_noqnorm))
@@ -136,7 +136,7 @@ test_that("mfsusie wavelet_qnorm=TRUE does not crash with 20% NA rows per trait"
   expect_s3_class(rt$result, "susie")
 })
 
-test_that("mfsusie wavelet_qnorm=FALSE returns valid pip with 20% NA", {
+test_that("mfsusie wavelet_qnorm = FALSE, wavelet_standardize = FALSE returns valid pip with 20% NA", {
   d <- make_na_XY()
   rt <- with_runtime("mfsusie qnorm=FALSE pip check", {
     do.call(mfsusie, c(list(X = d$X, Y = d$Y), mfsusie_args_noqnorm))
@@ -162,7 +162,7 @@ test_that("mfsusie wavelet_qnorm=TRUE returns valid pip with 20% NA", {
 
 # ---- causal signal recovery under NA -----------------------------------
 
-test_that("causal pip > 0.5 under wavelet_qnorm=FALSE with 20% NA (strong signal)", {
+test_that("causal pip > 0.5 under wavelet_qnorm = FALSE, wavelet_standardize = FALSE with 20% NA (strong signal)", {
   d <- make_na_XY(effect = 2)
   rt <- with_runtime("mfsusie qnorm=FALSE signal recovery", {
     do.call(mfsusie, c(list(X = d$X, Y = d$Y), mfsusie_args_noqnorm))
@@ -217,7 +217,7 @@ test_that("runtime comparison: qnorm=FALSE vs qnorm=TRUE at 5%, 20%, 40% NA", {
 
 # ---- edge cases --------------------------------------------------------
 
-test_that("mfsusie wavelet_qnorm=FALSE does not crash: univariate T_m=1 with NA", {
+test_that("mfsusie wavelet_qnorm = FALSE, wavelet_standardize = FALSE does not crash: univariate T_m=1 with NA", {
   set.seed(mfsusier_test_seed())
   n <- 50; p <- 15
   X <- scale(matrix(rbinom(n * p, 2, 0.3), n, p))
@@ -225,7 +225,7 @@ test_that("mfsusie wavelet_qnorm=FALSE does not crash: univariate T_m=1 with NA"
             matrix(2 * X[, 3] + rnorm(n), n, 1))
   Y[[1]][sample(n, 10), ] <- NA
   rt <- with_runtime("mfsusie qnorm=FALSE T_m=1 NA", {
-    mfsusie(X, Y, L = 3, max_iter = 30, wavelet_qnorm = FALSE, verbose = FALSE)
+    mfsusie(X, Y, L = 3, max_iter = 30, wavelet_qnorm = FALSE, wavelet_standardize = FALSE, verbose = FALSE)
   })
   expect_lt(rt$elapsed, rt$budget_sec)
   expect_s3_class(rt$result, "susie")
@@ -245,7 +245,7 @@ test_that("mfsusie wavelet_qnorm=TRUE does not crash: univariate T_m=1 with NA",
   expect_s3_class(rt$result, "susie")
 })
 
-test_that("mfsusie wavelet_qnorm=FALSE: null simulation with NA stays well-behaved", {
+test_that("mfsusie wavelet_qnorm = FALSE, wavelet_standardize = FALSE: null simulation with NA stays well-behaved", {
   set.seed(mfsusier_test_seed() + 5L)
   n <- 50; p <- 20
   X <- scale(matrix(rbinom(n * p, 2, 0.3), n, p))
@@ -255,7 +255,7 @@ test_that("mfsusie wavelet_qnorm=FALSE: null simulation with NA stays well-behav
     y
   })
   rt <- with_runtime("mfsusie qnorm=FALSE null+NA", {
-    mfsusie(X, Y, L = 5, max_iter = 30, wavelet_qnorm = FALSE, verbose = FALSE)
+    mfsusie(X, Y, L = 5, max_iter = 30, wavelet_qnorm = FALSE, wavelet_standardize = FALSE, verbose = FALSE)
   })
   expect_lt(rt$elapsed, rt$budget_sec)
   expect_true(all(rt$result$pip >= 0 & rt$result$pip <= 1))
@@ -305,7 +305,7 @@ test_that("mfsusie per_scale scope does not crash with NA (qnorm=FALSE)", {
     mfsusie(d$X, d$Y, L = 3, max_iter = 30,
             prior_variance_scope    = "per_scale",
             residual_variance_scope = "per_scale",
-            wavelet_qnorm = FALSE, verbose = FALSE)
+            wavelet_qnorm = FALSE, wavelet_standardize = FALSE, verbose = FALSE)
   })
   expect_lt(rt$elapsed, rt$budget_sec)
   expect_s3_class(rt$result, "susie")

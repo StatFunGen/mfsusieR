@@ -11,7 +11,7 @@ make_smoothed_toy <- function(T_m = 32L, signal_idx = 3L,
   shape <- exp(-((seq_len(T_m) - T_m / 2)^2) / (2 * 6^2))
   Y <- X %*% (matrix(beta, p, 1) %*% matrix(shape, 1, T_m)) +
          matrix(rnorm(n * T_m, sd = 0.3), n)
-  fit <- fsusie(wavelet_qnorm = FALSE, Y, X, L = 1, max_iter = 30, verbose = FALSE)
+  fit <- fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, Y, X, L = 1, max_iter = 30, verbose = FALSE)
   mf_post_smooth(fit, method = "TI")
 }
 
@@ -36,7 +36,7 @@ test_that("mf_summarize_effects errors when no smoothed bands are on the fit", {
   n <- 60L; p <- 12L
   X <- matrix(rnorm(n * p), n)
   Y <- list(matrix(rnorm(n * 32L), n))
-  fit <- mfsusie(wavelet_qnorm = FALSE, X, Y, L = 2, max_iter = 20, verbose = FALSE)
+  fit <- mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, X, Y, L = 2, max_iter = 20, verbose = FALSE)
   expect_error(mf_summarize_effects(fit), "post-smoothed")
 })
 
@@ -58,7 +58,7 @@ test_that("mf_summarize_effects on a multi-outcome fit returns rows per (m, l)",
     X %*% (matrix(beta, p, 1) %*% matrix(shape, 1, T_m)) +
       matrix(rnorm(n * T_m, sd = 0.3), n)
   })
-  fit <- mfsusie(wavelet_qnorm = FALSE, X, Y, L = 1, max_iter = 30, verbose = FALSE)
+  fit <- mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, X, Y, L = 1, max_iter = 30, verbose = FALSE)
   fit_s <- mf_post_smooth(fit, method = "TI")
   out <- mf_summarize_effects(fit_s)
   # Every row's outcome must be in 1..M.

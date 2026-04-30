@@ -18,7 +18,7 @@ make_data <- function(n = 20, J = 8, T_per_outcome = c(64L, 128L)) {
   set.seed(mfsusier_test_seed())
   X <- matrix(rnorm(n * J), nrow = n)
   Y <- lapply(T_per_outcome, function(T_m) matrix(rnorm(n * T_m), nrow = n))
-  mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = X, Y = Y, verbose = FALSE)
+  mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, X = X, Y = Y, verbose = FALSE)
 }
 
 make_params <- function(L = 3, J = 8) {
@@ -203,7 +203,7 @@ test_that("T_m = 1 univariate case produces a J x 1 mu matrix", {
   set.seed(mfsusier_test_seed())
   X <- matrix(rnorm(20 * 8), nrow = 20)
   Y <- list(matrix(rnorm(20), ncol = 1))
-  data <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, X = X, Y = Y, pos = list(1),
+  data <- mfsusieR:::create_mf_individual(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, X = X, Y = Y, pos = list(1),
                                           verbose = FALSE)
   params <- make_params(L = 3, J = 8)
   var_y <- list(rep(1, 1))

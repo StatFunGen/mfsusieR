@@ -13,7 +13,7 @@ build_small_fit <- function(seed = 41L, n = 60L, p = 12L, T_m = 32L) {
   shape <- exp(-((seq_len(T_m) - T_m / 2)^2) / (2 * 4^2))
   Y    <- X %*% (matrix(beta, p, 1) %*% matrix(shape, 1, T_m)) +
           matrix(rnorm(n * T_m, sd = 0.3), n)
-  fsusie(wavelet_qnorm = FALSE, Y, X, L = 2, max_iter = 30, verbose = FALSE)
+  fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, Y, X, L = 2, max_iter = 30, verbose = FALSE)
 }
 
 # --- mf_post_smooth error paths --------------------------------
@@ -66,7 +66,7 @@ test_that("summary.mfsusie returns NULL cs and prints `No credible sets` when fi
   n <- 40L; p <- 8L; T_m <- 16L
   X <- matrix(rnorm(n * p), n, p)
   Y <- matrix(rnorm(n * T_m), n, T_m)   # pure noise
-  fit_null <- fsusie(wavelet_qnorm = FALSE, Y, X, L = 2, max_iter = 20, verbose = FALSE)
+  fit_null <- fsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, Y, X, L = 2, max_iter = 20, verbose = FALSE)
   s <- summary(fit_null)
   expect_null(s$cs)
   out <- capture.output(print(s))
@@ -83,7 +83,7 @@ build_scalar_mfsusie <- function(seed = 53L, n = 60L, p = 8L) {
   Y_functional <- X %*% (matrix(beta, p, 1) %*%
                          matrix(exp(-((1:32 - 16)^2 / 8)), 1, 32L)) +
                   matrix(rnorm(n * 32, sd = 0.3), n)
-  mfsusie(wavelet_qnorm = FALSE, X, list(matrix(Y_scalar, n, 1L), Y_functional),
+  mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, X, list(matrix(Y_scalar, n, 1L), Y_functional),
           L = 2, max_iter = 30, verbose = FALSE)
 }
 

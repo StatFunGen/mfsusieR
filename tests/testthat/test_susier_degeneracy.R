@@ -49,7 +49,7 @@ c1_fit_pair <- function(X, y, L = 5, V = 0.2) {
   # final fits are bit-comparable. mfsusie's default is `"pip"` because
   # alpha is robust to mixsqp's GEM residual; for the susieR-degeneracy
   # contract we want apple-to-apple ELBO convergence.
-  fit_m <- mfsusieR::mfsusie(wavelet_qnorm = FALSE, 
+  fit_m <- mfsusieR::mfsusie(wavelet_qnorm = FALSE, wavelet_standardize = FALSE, 
     X, list(matrix(y, ncol = 1)),
     L                        = L,
     prior_variance_grid      = V,

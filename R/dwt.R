@@ -39,13 +39,18 @@
 #' @param filter_number integer, see `filter.select`.
 #' @param family character, wavelet family name. See
 #'   `wd`.
+#' @param wavelet_standardize logical. When `TRUE`, centers and
+#'   scales each packed wavelet coefficient column after the DWT.
+#'   The returned `wavelet_center` and `wavelet_scale` make this
+#'   linear preprocessing invertible.
 #' @param verbose logical, forwarded to `remap_data`.
 #' @return list with elements `D` (packed wavelet matrix `n x
 #'   T_basis`), `scale_index` (integer vector from
 #'   `gen_wavelet_indx`), `T_basis` (integer scalar), `pos`
 #'   (post-remap position grid, length `T_basis`),
 #'   `column_center`, `column_scale` (vectors of length `T_basis`,
-#'   for inverse DWT), `family`, `filter_number`.
+#'   for inverse DWT), `wavelet_center`, `wavelet_scale`,
+#'   `family`, `filter_number`.
 #' @keywords internal
 #' @noRd
 mf_dwt <- function(Y_m,
@@ -53,6 +58,7 @@ mf_dwt <- function(Y_m,
                    max_padded_log2  = 10,
                    filter_number    = 10,
                    family           = "DaubLeAsymm",
+                   wavelet_standardize = FALSE,
                    verbose          = FALSE) {
   if (!is.matrix(Y_m)) {
     Y_m <- as.matrix(Y_m)
@@ -102,6 +108,15 @@ mf_dwt <- function(Y_m,
     scale_index <- gen_wavelet_indx(log2(T_basis))
   }
 
+  wavelet_center <- rep(0, T_basis)
+  wavelet_scale  <- rep(1, T_basis)
+  if (wavelet_standardize && T_basis > 1L) {
+    D_scaled       <- col_scale(D_packed, center = TRUE, scale = TRUE)
+    wavelet_center <- attr(D_scaled, "scaled:center")
+    wavelet_scale  <- attr(D_scaled, "scaled:scale")
+    D_packed       <- unclass(D_scaled)
+  }
+
   list(
     D             = D_packed,
     scale_index   = scale_index,
@@ -109,6 +124,8 @@ mf_dwt <- function(Y_m,
     pos           = outing_grid,
     column_center = column_center,
     column_scale  = column_scale,
+    wavelet_center = wavelet_center,
+    wavelet_scale  = wavelet_scale,
     family        = family,
     filter_number = filter_number
   )
@@ -143,6 +160,8 @@ mf_dwt <- function(Y_m,
 mf_invert_dwt <- function(D_packed,
                           column_center,
                           column_scale,
+                          wavelet_center = NULL,
+                          wavelet_scale  = NULL,
                           filter_number = 10,
                           family        = "DaubLeAsymm") {
   if (is.null(dim(D_packed))) {
@@ -150,6 +169,10 @@ mf_invert_dwt <- function(D_packed,
   }
   T_basis <- ncol(D_packed)
   n <- nrow(D_packed)
+  if (is.null(wavelet_center)) wavelet_center <- rep(0, T_basis)
+  if (is.null(wavelet_scale))  wavelet_scale  <- rep(1, T_basis)
+  D_packed <- sweep(sweep(D_packed, 2, wavelet_scale, "*"),
+                    2, wavelet_center, "+")
 
   # `wavethresh::wr` rejects length-1 inputs, so the scalar
   # case takes the identity path. The reverse-center+scale step

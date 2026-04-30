@@ -148,10 +148,10 @@ uncertainty estimate once heavy-tail outliers are no longer
 inflating per-variable Bayes factors.
 
 ```{r usage-qn, eval = FALSE}
-fit <- mfsusie(X, Y_list)            # wavelet_qnorm = TRUE (default)
+fit <- mfsusie(X, Y_list, wavelet_qnorm = TRUE)
 ```
 
-```{r plot-qn, fig.cap = "PIP comparison: default vs wavelet_qnorm."}
+```{r plot-qn, fig.cap = "PIP comparison: default vs wavelet_qnorm = TRUE."}
 pip_qn <- practical_fits$qn$pip
 plot(pip_default, pip_qn,
      xlim = c(0, 1), ylim = c(0, 1),

@@ -75,22 +75,21 @@ length(fit$sets$cs)
 fit$pip[multiomic_example$causal_snps]
 ```
 
-# Post-hoc per-outcome causal-configuration assessment
+## Post-hoc per-outcome causal-configuration assessment
 
 For each credible set, ask which outcomes share the causal
 variant. `susie_post_outcome_configuration(fit, by = "outcome",
-method = ...)` runs one of two complementary post-hoc analyses
-on the joint mfsusie fit; pick the one you want via `method` and
-call again to get the other:
+method = ...)` runs one of two post-hoc analyses on the joint
+mfsusie fit; call again with the other `method` to get both:
 
-- `method = "susiex"` (default) -- combinatorial enumeration:
-  posterior probability of each of the `2^M` binary
+- `method = "susiex"` (default): combinatorial enumeration.
+  Posterior probability of each of the `2^M` binary
   "which-outcomes-share-the-causal" patterns, plus a per-outcome
   marginal probability of being active. One list element per CS
-  index shared across all outcomes (so for `M` outcomes that
-  share `K` CSes, `length(configs$susiex) == K`).
-- `method = "coloc_pairwise"` -- standard H0/H1/H2/H3/H4 coloc
-  posteriors for every outcome pair x CS pair (one data.frame).
+  index shared across all outcomes, so for `M` outcomes sharing
+  `K` CSes, `length(configs$susiex) == K`.
+- `method = "coloc_pairwise"`: standard H0/H1/H2/H3/H4 coloc
+  posteriors for every (outcome pair, CS pair) (one data.frame).
 
 `summary()` tidies either result into a colour-coded table:
 green for active / shared, yellow for ambiguous, dim for
@@ -190,38 +189,49 @@ Two arguments control preprocessing of the per-outcome wavelet
 matrix before the IBSS loop:
 
 - `wavelet_magnitude_cutoff` (default `0`): wavelet columns with
-  `median(|column|) <= wavelet_magnitude_cutoff` are masked, contributing
-  `(Bhat = 0, Shat = 1)` to the SER step. Use a small positive
-  value when the response has sparse non-zero entries (e.g.,
-  ATAC-seq read pileups).
-- `wavelet_qnorm` (default `TRUE`): applies a column-wise
-  rank-based normal quantile transform to the wavelet matrix.
-  Useful when the per-outcome residuals are heavy-tailed or
-  visibly non-Gaussian. Set to `FALSE` to skip the transform when
-  the wavelet coefficients are already approximately Gaussian.
+  `median(|column|) <= wavelet_magnitude_cutoff` are masked,
+  contributing `(Bhat = 0, Shat = 1)` to the SER step. Use a
+  small positive value when the response has sparse non-zero
+  entries (e.g., ATAC-seq read pileups).
+- `wavelet_standardize` (default `TRUE`): centers and scales each
+  packed wavelet coefficient column before IBSS. This is a linear,
+  invertible rescaling; fitted values and coefficients are mapped
+  back to the original response scale.
+- `wavelet_qnorm` (default `FALSE`): applies a column-wise
+  rank-normal transform to the wavelet matrix so each wavelet
+  position has marginal `N(0, 1)` across samples by construction.
+  This matches the SER step's Wakefield Normal approximation and
+  can keep PIPs and credible sets calibrated when the per-outcome
+  residuals are heavy-tailed (read counts, sparse pileups). Leave
+  it `FALSE` when the wavelet coefficients of `Y` are already
+  close to Gaussian and recovered effect amplitudes need to line
+  up with the raw `Y` scale; see the [covariate-adjustment
+  vignette](fsusie_covariates_adjustment.html) for the trade-off
+  in full.
 
-Both flags route through `mf_adjust_for_covariates()` as well.
+`wavelet_magnitude_cutoff` also routes through
+`mf_adjust_for_covariates()`. The qnorm and wavelet-standardize
+options are fine-mapping preprocessing choices.
 
-## When to reach for mfSuSiE over fSuSiE+COLOC
+## When to reach for mfSuSiE over fSuSiE plus colocalization
 
-Use `mfsusie()` when:
+Use `mfsusie()` when (i) a variable plausibly affects multiple
+distinct phenotypes (different tissues, different molecular
+layers); (ii) the phenotypes have heterogeneous shapes, since
+mfSuSiE does not require a shared `T` (some scalar, some
+functional, some at different sampling resolutions are fine in
+the same fit); (iii) a single credible-set list combining all
+the evidence is preferable to a post-hoc colocalization across
+separate fsusie fits.
 
-- A variable plausibly affects multiple distinct phenotypes (different
-  tissues, different molecular layers).
-- The phenotypes have heterogeneous shapes (some scalar, some
-  functional, some at different sampling resolutions). mfSuSiE does
-  not require a shared `T`.
-- You want a single credible set list combining all the evidence,
-  rather than ad-hoc colocalization across separate fsusie fits.
 ## Multi-trait data with missing samples
 
-In multi-tissue or multi-cell-type studies some samples are not profiled
-for every outcome. Set the corresponding rows of `Y[[m]]` to `NA` before
-calling `mfsusie()`; the package automatically restricts every
-regression and variance update to the observed rows for that trait.
-
-Both `wavelet_qnorm = TRUE` (the default) and `wavelet_qnorm = FALSE`
-handle missing rows correctly.
+Multi-tissue and multi-cell-type studies often leave some
+samples unprofiled for some outcomes. Set the corresponding rows
+of `Y[[m]]` to `NA` before calling `mfsusie()`; the package
+restricts every regression and variance update to the observed
+rows for that outcome. Both `wavelet_qnorm = FALSE` (default) and
+`wavelet_qnorm = TRUE` handle missing rows correctly.
 
 ```{r missing-data-setup}
 set.seed(42)
@@ -255,11 +265,12 @@ cat(sprintf("Runtime: %.1f s   niter: %d   CS: %d\n",
 fit_noq$pip[causal_j]                    # causal PIP
 ```
 
-### `wavelet_qnorm = TRUE` (default)
+### `wavelet_qnorm = TRUE`
 
 ```{r missing-qnorm}
 t_q <- system.time(
-  fit_q <- mfsusie(X_miss, Y_miss)
+  fit_q <- mfsusie(X_miss, Y_miss,
+                   wavelet_qnorm = TRUE)
 )
 cat(sprintf("Runtime: %.1f s   niter: %d   CS: %d\n",
             t_q["elapsed"], fit_q$niter, length(fit_q$sets$cs)))
