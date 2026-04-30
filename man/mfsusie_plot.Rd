@@ -12,6 +12,7 @@ mfsusie_plot(
   facet_cs = c("auto", "stack", "overlay"),
   show_grid_dots = FALSE,
   show_lfsr_curve = TRUE,
+  lfsr_source = c("smoother", "lfsr", "clfsr"),
   show_affected_region = TRUE,
   lfsr_threshold = 0.01,
   lwd = 2,
@@ -40,12 +41,30 @@ Layout of multiple credible sets within an effect panel.}
 \item{show_grid_dots}{logical, draw circles at each post-remap
 grid point on top of the curves. Default \code{FALSE}.}
 
-\item{show_lfsr_curve}{logical, overlay HMM lfsr curves on a
-secondary axis when \code{fit$lfsr_curves} is populated. Only
-honored in \code{effect_style = "band"}. Default \code{TRUE}. The
-solid line is the effect (left axis), the dashed line is
-the lfsr (right axis, 0 to 1). For a dedicated per-CS
+\item{show_lfsr_curve}{logical, overlay an lfsr curve on a
+secondary axis. Only honored in \code{effect_style = "band"}.
+Default \code{TRUE}. The solid line is the effect (left axis), the
+dashed line is the lfsr (right axis, 0 to 1). The lfsr source
+is selected by \code{lfsr_source} below. For a dedicated per-CS
 lfsr view see \code{mfsusie_plot_lfsr()}.}
+
+\item{lfsr_source}{which lfsr to overlay, one of
+\code{"smoother"}, \code{"lfsr"}, \code{"clfsr"}. Default \code{"smoother"}.
+\itemize{
+\item \code{"smoother"}: reads \code{fit$smoothed[[method]]$lfsr_curves[[m]][[l]]},
+a length-\code{T_m} per-position vector produced by the smoother
+kernel itself.
+\item \code{"lfsr"}: alpha-weighted aggregation of the per-variant
+conditional lfsr matrix, \code{alpha[l, ] \%*\% clfsr_matrix[l, m]},
+truncated to length \code{T_m}. Computed from \code{fit$mu} /
+\code{fit$mu2} so it is available even on a fit that has not been
+post-smoothed.
+\item \code{"clfsr"}: same alpha-weighted aggregation as \code{"lfsr"}. The
+unaggregated \verb{p x T_basis[m]} conditional matrix
+\verb{pnorm(-|mu[l, m, j, t]| / sd[l, m, j, t])} is exposed via
+\code{compute_clfsr_matrix(fit, l, m)} for code that needs the
+full per-variant view.
+}}
 
 \item{show_affected_region}{logical, mark contiguous segments
 where each CS's credible band excludes zero with thick bars

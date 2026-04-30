@@ -55,6 +55,25 @@ combine_outcome_lbfs.mf_prior_cross_outcome_independent <-
     Reduce(`+`, outcome_lbfs)
   }
 
+#' Default fall-through with a helpful error
+#'
+#' Fires when `combine_outcome_lbfs` dispatches on a class with no
+#' registered method. Lists the registered combiner classes so the
+#' user knows how to extend the seam.
+#' @exportS3Method combine_outcome_lbfs default
+#' @keywords internal
+#' @noRd
+combine_outcome_lbfs.default <- function(prior, outcome_lbfs, model_state) {
+  available <- setdiff(
+    sub("^combine_outcome_lbfs\\.", "",
+        as.character(utils::methods("combine_outcome_lbfs"))),
+    "default")
+  stop(sprintf(
+    "No `combine_outcome_lbfs` method for class %s. Registered combiner classes: %s.",
+    paste(sQuote(class(prior)), collapse = ", "),
+    paste(sQuote(available), collapse = ", ")))
+}
+
 #' Independent (outcome-product) cross-outcome prior
 #'
 #' Constructs the default cross-outcome prior used by
