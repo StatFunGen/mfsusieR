@@ -35,12 +35,20 @@ per-variant SuSiE posterior moments `mu` and `mu2`.
 
 `mf_post_smooth(fit, method = ...)` SHALL accept `"smash"` and
 `"ash"` as distinct method names instead of a `flavor` argument.
+Method-specific options SHALL flow through `...` to the
+underlying shrinkage tool: `ashr::ash` for `"ash"`,
+`smashr::smash.gaus` for `"smash"`.
 
 - `"smash"` SHALL invoke `smashr::smash.gaus` and gate on
   `requireNamespace("smashr")`.
 - `"ash"` SHALL invoke a cycle-spinning + per-coefficient
   `ashr::ash` kernel that uses the per-position OLS Shat as the
   noise level. This path SHALL NOT require the `smashr` package.
+
+The `mf_post_smooth(method = "ash", nullweight = K, ...)`
+spelling subsumes fsusieR's orphan `smash_lw` (default
+`nullweight = 300`) and `smash_2lw` (mild `nullweight`) helpers
+without exposing them as separate functions.
 
 #### Scenario: ash method on a smashr-less install
 

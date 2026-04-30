@@ -6,8 +6,11 @@
 #   "smashr" -- `smashr::smash.gaus` on the per-position OLS
 #               estimate. Requires the `smashr` Suggests package;
 #               the `requireNamespace` gate lives in `mf_post_smooth`.
+# `...` flows from `mf_post_smooth(...)` down into the chosen
+# tool: `ashr::ash` for "ash", `smashr::smash.gaus` for "smashr".
+# Lets users tune e.g. `nullweight` without per-method-specific args.
 
-.post_smooth_smash <- function(fit, level, flavor = "ash") {
+.post_smooth_smash <- function(fit, level, flavor = "ash", ...) {
   z_crit <- stats::qnorm((1 + level) / 2)
   alpha  <- 1 - level
   Y_pos_cache <- vector("list", length(fit$dwt_meta$T_basis))
@@ -16,7 +19,7 @@
       Y_pos_cache[[m]] <<- .iso_response_pos(fit, m)
     iso <- Y_pos_cache[[m]] - .other_effects_pos(fit, m, exclude = l)
     out <- univariate_smash_regression(iso, fit$X_eff[[l]], alpha,
-                                       flavor = flavor)
+                                       flavor = flavor, ...)
     # Recover sd from the credible-band half-width:
     # (upper - lower) / 2 = z_crit * sd.
     sd_pos <- (out$cred_band[1L, ] - out$cred_band[2L, ]) /
@@ -53,6 +56,10 @@
 #'   per-coefficient `ashr::ash`; `"smashr"` calls
 #'   `smashr::smash.gaus` and requires the `smashr` Suggests
 #'   package.
+#' @param ... extra arguments forwarded to the underlying
+#'   shrinkage tool. For `flavor = "ash"`, forwarded to
+#'   `ashr::ash` (e.g., `nullweight = 10`). For
+#'   `flavor = "smashr"`, forwarded to `smashr::smash.gaus`.
 #' @return A list with components `effect_estimate` (length `T`
 #'   numeric) and `cred_band` (`2 x T` matrix with rows
 #'   `c("up", "low")`).
@@ -67,7 +74,8 @@
 #' }
 #' @export
 univariate_smash_regression <- function(Y, X, alpha = 0.05,
-                                        flavor = c("ash", "smashr")) {
+                                        flavor = c("ash", "smashr"),
+                                        ...) {
   Y <- as.matrix(Y)
   X <- as.matrix(X)
   stopifnot(ncol(X) == 1L)
@@ -98,11 +106,13 @@ univariate_smash_regression <- function(Y, X, alpha = 0.05,
   }
 
   s <- if (flavor == "smashr") {
-    smashr::smash.gaus(x = est, sigma = sds,
-                       ashparam = list(optmethod = "mixVBEM"),
-                       post.var = TRUE)
+    do.call(smashr::smash.gaus,
+            utils::modifyList(list(x = est, sigma = sds,
+                                   ashparam = list(optmethod = "mixVBEM"),
+                                   post.var = TRUE),
+                              list(...)))
   } else {
-    mf_smash_ash(noisy_signal = est, noise_level = sds)
+    mf_smash_ash(noisy_signal = est, noise_level = sds, ...)
   }
 
   # Undo X scaling.
@@ -125,12 +135,14 @@ univariate_smash_regression <- function(Y, X, alpha = 0.05,
 mf_smash_ash <- function(noisy_signal, noise_level = 1,
                          n.shifts = 50L,
                          filter.number = 1L,
-                         family = "DaubExPhase") {
+                         family = "DaubExPhase",
+                         ...) {
   x <- as.numeric(noisy_signal)
   n <- length(x)
   sds <- if (length(noise_level) == 1L) rep(noise_level, n) else noise_level
   if (length(sds) != n)
     stop("`noise_level` must be length 1 or length(noisy_signal).")
+  ash_extras <- utils::modifyList(list(nullweight = 300), list(...))
 
   # Pad to next power-of-2 by reflection.
   if ((log2(n) %% 1) != 0) {
@@ -169,9 +181,10 @@ mf_smash_ash <- function(noisy_signal, noise_level = 1,
     d2 <- rep(0, length(wd_shifted$D) + 1L)  # extra slot for the C coef
     for (s_idx in seq_len(length(idx_wave) - 1L)) {
       ix <- idx_wave[[s_idx]]
-      t_ash <- ashr::ash(wd_shifted$D[ix],
-                         sqrt(wavelet_var[ix]),
-                         nullweight = 300)
+      t_ash <- do.call(ashr::ash,
+                       c(list(wd_shifted$D[ix],
+                              sqrt(wavelet_var[ix])),
+                         ash_extras))
       d[ix]  <- t_ash$result$PosteriorMean
       d2[ix] <- t_ash$result$PosteriorSD^2
     }
