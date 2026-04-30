@@ -213,6 +213,35 @@ Findings classified into:
 collates the three reports plus the triage table plus the
 list of follow-up OpenSpec changes opened.
 
+### 4. Follow-up OpenSpec changes (linked from this proposal)
+
+- `address-effective-V-consumer-coherence` —
+  V-semantics cluster (findings A-1, B-2, C-4, C-5).
+  Documents the V-filter on the public API, refreshes
+  `trim_null_effects.mf_individual` for coherence with
+  `susie_get_pip`'s prior_tol filter, adds a null-fixture
+  regression test, and pins the pre-hook V_init-discard note.
+- `audit-2026-04-30-followups` — small unrelated polish
+  (findings A-2, A-3, B-5, C-7, C-8). Five independent items
+  bundled under one change; each task is a standalone PR.
+
+### 5. Inline fixes applied this session (no separate OpenSpec)
+
+- C-3 (cleanup scratchpad strip + further simplification):
+  the `ser_cache` scratchpad was deleted entirely (its `betahat`
+  is one division off the already-cached `model$residuals` and
+  its `shat2` was redundant with `iter_cache$shat2`).
+  `iter_cache` is stripped by
+  `cleanup_extra_fields.mf_individual`. Affects
+  `R/individual_data_methods.R` and
+  `tests/testthat/test_per_scale_normal_degeneracy.R`
+  (cache-gate tests rewritten to exercise `refresh_iter_cache`
+  directly).
+- C-1 (ledger drift): the M-fold-scaling refactor-exceptions
+  entry now reflects the shipped parameter name and default
+  (`mixture_null_weight = 0.05` vs the stale
+  `mixsqp_null_penalty = 0.7`).
+
 ## Impact
 
 - **Severity**: HIGH. Halt feature work until Phase B

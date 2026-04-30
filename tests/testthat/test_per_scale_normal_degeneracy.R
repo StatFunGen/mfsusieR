@@ -306,21 +306,29 @@ test_that("5e: g_init warm-starts across consecutive M-step calls", {
 # Section 6. Cache gate (`refresh_iter_cache`)
 # ============================================================
 
+# The iter_cache slot is IBSS hot-path scratch only and is
+# stripped by `cleanup_extra_fields.mf_individual` before the fit
+# is returned, so these tests exercise
+# `refresh_iter_cache.mf_individual` directly on a freshly-built
+# model object rather than the cleaned-up fit.
+
 test_that("6: iter_cache skips sdmat / log_sdmat on the ebnm path", {
-  fx  <- make_sparse_fixture()
-  fit <- fit_sparse("per_scale_normal", fx = fx)
-  expect_true(!is.null(fit$iter_cache$shat2[[1L]]))
-  # shat2 is `p x T_basis` per outcome.
-  expect_equal(nrow(fit$iter_cache$shat2[[1L]]), ncol(fx$X))
-  expect_null(fit$iter_cache$sdmat)
-  expect_null(fit$iter_cache$log_sdmat)
+  ds <- make_sparse_data()
+  fit <- fit_sparse("per_scale_normal", fx = ds$fx)
+  cached <- mfsusieR:::refresh_iter_cache.mf_individual(ds$data, fit)
+  expect_true(!is.null(cached$iter_cache$shat2[[1L]]))
+  expect_equal(nrow(cached$iter_cache$shat2[[1L]]), ncol(ds$fx$X))
+  expect_null(cached$iter_cache$sdmat)
+  expect_null(cached$iter_cache$log_sdmat)
 })
 
 test_that("6: iter_cache keeps sdmat / log_sdmat on the mixsqp path", {
-  fit <- fit_sparse("per_outcome")
-  expect_false(is.null(fit$iter_cache$shat2[[1L]]))
-  expect_false(is.null(fit$iter_cache$sdmat[[1L]][[1L]]))
-  expect_false(is.null(fit$iter_cache$log_sdmat[[1L]][[1L]]))
+  ds  <- make_sparse_data()
+  fit <- fit_sparse("per_outcome", fx = ds$fx)
+  cached <- mfsusieR:::refresh_iter_cache.mf_individual(ds$data, fit)
+  expect_false(is.null(cached$iter_cache$shat2[[1L]]))
+  expect_false(is.null(cached$iter_cache$sdmat[[1L]][[1L]]))
+  expect_false(is.null(cached$iter_cache$log_sdmat[[1L]][[1L]]))
 })
 
 # ============================================================

@@ -226,17 +226,6 @@ loglik.mf_individual <- function(data, params, model, V, ser_stats, l = NULL,
     model$lbf[l]            <- lbf_model
     model$lbf_variable[l, ] <- lbf_combined
 
-    # Stash ser_stats so the next call in susieR's SER orchestrator
-    # -- calculate_posterior_moments, which does not receive
-    # ser_stats -- can reuse it. Keyed by `l` to avoid stale reads.
-    # refresh_lbf_kl calls with update_alpha = FALSE and never hits
-    # CPM, so we skip the stash there.
-    if (update_alpha) {
-      model$ser_cache <- list(l = l,
-                              betahat = ser_stats$betahat,
-                              shat2   = ser_stats$shat2)
-    }
-
     # Persist per-outcome BFs. The slot is pre-allocated in
     # `initialize_susie_model.mf_individual`. Each `outcome_lbfs[[m]]`
     # is a length-p vector of log BFs for outcome m, summed across
@@ -268,20 +257,11 @@ loglik.mf_individual <- function(data, params, model, V, ser_stats, l = NULL,
 #' @noRd
 calculate_posterior_moments.mf_individual <- function(data, params, model, V, l, ...) {
   p <- data$p
-  # Reuse the (bhat, shat2) stashed by the prior loglik.mf_individual
-  # call (same SER orchestrator step) instead of recomputing.
-  use_cache <- !is.null(model$ser_cache) &&
-                identical(model$ser_cache$l, l)
   for (m in seq_len(data$M)) {
-    if (use_cache) {
-      bhat_m  <- model$ser_cache$betahat[[m]]
-      shat2_m <- model$ser_cache$shat2[[m]]
-    } else {
-      bs      <- mf_per_outcome_bhat_shat(data, model, m)
-      bhat_m  <- bs$bhat
-      shat2_m <- bs$shat2
-    }
-    shat_m <- sqrt(shat2_m)
+    bs      <- mf_per_outcome_bhat_shat(data, model, m)
+    bhat_m  <- bs$bhat
+    shat2_m <- bs$shat2
+    shat_m  <- sqrt(shat2_m)
 
     G_m    <- model$G_prior[[m]]
     mu_lm  <- matrix(0, nrow = p, ncol = data$T_basis[m])
@@ -988,6 +968,12 @@ get_objective.mfsusie <- function(data, params, model) {
 #' downstream consumers (`susie_get_pip`'s prior_tol filter,
 #' verbose diagnostics).
 #'
+#' `iter_cache` (per-modality `shat2` plus per-(m, s) `sdmat` and
+#' `log_sdmat`) is stripped because it is IBSS hot-path scratch
+#' only, not consumed by any post-fit accessor (`predict`, `coef`,
+#' `summary`, `fitted`). On heavy fixtures this can run to tens
+#' of MB.
+#'
 #' `model$fitted` (the wavelet-domain running fit, list of length
 #' M) is intentionally NOT stripped: it is consumed by
 #' `ibss_initialize.mf_individual` via `params$model_init$fitted`
@@ -999,7 +985,7 @@ get_objective.mfsusie <- function(data, params, model) {
 #' @keywords internal
 #' @noRd
 cleanup_extra_fields.mf_individual <- function(data) {
-  character(0L)
+  "iter_cache"
 }
 
 #' Aggregate expected log-likelihood across outcomes

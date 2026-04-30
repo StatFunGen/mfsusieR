@@ -227,3 +227,55 @@ implementation methodology: the diff, the tests, the commit message. The
 only added artifact is the reviewer's findings list, which is in the
 session's chat log (or attached to the PR as a comment block) so you
 can see the review trail without reading every line of code.
+
+## SER hot-path PR gate (binding from 2026-04-30)
+
+Every PR that touches any of the following files SHALL trigger a
+cross-package audit-style review before merge:
+
+- `R/individual_data_methods.R`
+- `R/model_class.R`
+- `R/ibss_methods.R`
+- `R/em_helpers.R`
+
+These four files form the SER scaffolding, prior storage, M-step
+dispatch, and convergence path. Drift in any of them silently
+breaks the equivalence contracts with `susieR` / `fsusieR` /
+`mvf.susie.alpha`, which is exactly the failure mode that
+motivated the 2026-04-26 and 2026-04-30 audit rounds (multiple
+production regressions surfaced AT THE USER, not in CI).
+
+### Gate mechanics
+
+A PR touching any of these files MUST satisfy one of the
+following before merge:
+
+1. **Linked OpenSpec audit change.** The PR description names an
+   open or recently-archived OpenSpec change of the form
+   `audit-cross-package-*` and the audit's Phase B triage
+   classifies the changed lines as `accept-known` or
+   `add-to-ledger`.
+2. **Audit-deferred flag.** The PR description includes the
+   marker `audit-deferred:` followed by a one-paragraph
+   justification (typical scenario: a hotfix where deferring the
+   audit to the next round is safer than blocking the fix).
+3. **Inline audit pass.** A fresh-context Agent (Explore
+   subagent) review on the changed lines under the cross-package
+   audit prompt template (see
+   `inst/openspec/changes/audit-cross-package-post-hooks/proposal.md`
+   for the prompt structure), with the resulting findings filed
+   into the PR description.
+
+The reviewer pass under §3 above is a strict subset of the full
+multi-agent audit: only the changed lines are in scope, and the
+reviewer reads the latest `inst/notes/refactor-exceptions.md` and
+the current divergence ledger to suppress already-documented
+findings.
+
+### Trigger artifact
+
+The `audit-cross-package-post-hooks` change spec (Requirement
+"post-hook cross-package audit cycle") encodes this gate
+formally. After substantial refactor of the SER scaffolding,
+prior storage, M-step dispatch, or convergence path, a fresh
+multi-agent audit SHALL run before the next release.
