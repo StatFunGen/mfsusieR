@@ -1,15 +1,17 @@
 # Reference tests for `mf_post_smooth(method = "smash")`.
 #
-# 1. Per-effect, per-outcome the mfsusieR smash kernel agrees
-#    with `fsusieR::univariate_smash_regression` on the same
-#    isolated response and lead variable. Tolerance <= 1e-12.
-# 2. End-to-end smoke: a fit with M = 1, T_m = 64 runs the
-#    smash post-smoother to completion and produces effect
-#    curves and credible bands of the right shape.
-# 3. Argument validation: dispatch errors when smashr is not
-#    available (synthetic skip of `requireNamespace`).
+# 1. Per-effect, per-outcome the mfsusieR `flavor = "smashr"`
+#    kernel agrees with `fsusieR::univariate_smash_regression` on
+#    the same isolated response and lead variable. Tolerance
+#    <= 1e-12.
+# 2. End-to-end smoke under the default `flavor = "ash"` path:
+#    a fit with M = 1, T_m = 64 runs the smash post-smoother to
+#    completion and produces effect curves and credible bands of
+#    the right shape.
+# 3. Argument validation: `flavor = "smashr"` errors when smashr
+#    is not available.
 
-test_that("mfsusieR smash kernel matches fsusieR::univariate_smash_regression at machine precision", {
+test_that("method = 'smash' kernel matches fsusieR::univariate_smash_regression at machine precision", {
   testthat::skip_if_not_installed("smashr")
   testthat::skip_if_not_installed("fsusieR")
 
@@ -21,7 +23,8 @@ test_that("mfsusieR smash kernel matches fsusieR::univariate_smash_regression at
                       1, T_m) +
          matrix(rnorm(n * T_m, sd = 0.5), n, T_m)
 
-  ours <- mfsusieR:::univariate_smash_regression(Y, X, alpha = 0.05)
+  ours <- mfsusieR:::univariate_smash_regression(Y, X, alpha = 0.05,
+                                                  flavor = "smashr")
   ref  <- fsusieR:::univariate_smash_regression(Y, X, alpha = 0.05)
 
   expect_equal(as.numeric(ours$effect_estimate),
@@ -33,7 +36,6 @@ test_that("mfsusieR smash kernel matches fsusieR::univariate_smash_regression at
 })
 
 test_that("mf_post_smooth(method = 'smash') populates effect_curves and credible_bands", {
-  testthat::skip_if_not_installed("smashr")
   set.seed(13L)
   n <- 60L; p <- 20L; T_m <- 64L
   X    <- matrix(rnorm(n * p), n)

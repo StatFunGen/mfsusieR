@@ -535,6 +535,11 @@ lfsr_from_gaussian <- function(mean, sd) {
 #'   stationary-wavelet transform. Default `"DaubExPhase"`.
 #' @param halfK integer, half-grid size for the HMM `fit_hmm`
 #'   helper. Default 20.
+#' @param flavor for `method = "smash"`, the smoother kernel.
+#'   `"ash"` (default) runs cycle-spinning + per-coefficient
+#'   `ashr::ash` and requires no extra packages. `"smashr"` calls
+#'   `smashr::smash.gaus` and gates on the `smashr` Suggests
+#'   dependency. Ignored by other methods.
 #' @param X optional numeric matrix `n x p`, the original genotype
 #'   matrix. Required when the fit was built with
 #'   `attach_smoothing_inputs = FALSE`; ignored otherwise.
@@ -549,7 +554,7 @@ lfsr_from_gaussian <- function(mean, sd) {
 #' @export
 mf_post_smooth <- function(fit,
                            method           = c("TI", "scalewise",
-                                                "HMM", "smash"),
+                                                "HMM", "smash", "ash"),
                            level            = 0.95,
                            threshold_factor = 1,
                            wavelet_filter   = 1L,
@@ -581,11 +586,10 @@ mf_post_smooth <- function(fit,
     }
     fit <- .attach_smoothing_inputs(fit, X = X, Y = Y)
   }
-  if (method == "smash" &&
-      !requireNamespace("smashr", quietly = TRUE)) {
+  if (method == "smash" && !requireNamespace("smashr", quietly = TRUE)) {
     stop("method = 'smash' requires the `smashr` package. ",
          "Install via remotes::install_github(\"stephenslab/smashr\") ",
-         "or pick another method.")
+         "or pass `method = \"ash\"` for the smashr-free alternative.")
   }
 
   if (!isTRUE(overwrite_previous) &&
@@ -601,7 +605,8 @@ mf_post_smooth <- function(fit,
     "TI"        = .post_smooth_ti(fit, level, wavelet_filter,
                                   wavelet_family),
     "HMM"       = .post_smooth_hmm(fit, level, halfK),
-    "smash"     = .post_smooth_smash(fit, level))
+    "smash"     = .post_smooth_smash(fit, level, flavor = "smashr"),
+    "ash"       = .post_smooth_smash(fit, level, flavor = "ash"))
 
   if (is.null(fit$smoothed)) fit$smoothed <- list()
   fit$smoothed[[method]] <- payload
@@ -611,7 +616,7 @@ mf_post_smooth <- function(fit,
 # Priority order used by `mfsusie_plot()` and friends when the
 # fit carries multiple smoothings and the user has not named
 # one explicitly.
-.smoother_priority <- c("TI", "smash", "HMM", "scalewise")
+.smoother_priority <- c("TI", "smash", "ash", "HMM", "scalewise")
 
 # Pick the highest-priority smoothing on `fit$smoothed` and emit
 # a hint listing the others. Returns NULL when no smoothing is

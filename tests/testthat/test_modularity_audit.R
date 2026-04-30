@@ -60,8 +60,9 @@ test_that("R/ does not hand-roll routines provided by susieR / mixsqp / ashr / w
   rule_table <- list(
     list(pattern = "wavethresh::w[dr]\\(",
          allowed = c("R/dwt.R", "R/utils_wavelet.R",
-                     "R/mfsusie_methods.R", "R/simulation.R"),
-         hint    = "wavethresh::wd / wr should only be called from the wavelet pipeline files (R/dwt.R, R/utils_wavelet.R), the post-smoother (R/mfsusie_methods.R), or the wavelet-prior sampler (R/simulation.R)"),
+                     "R/mfsusie_methods.R", "R/post_smooth_smash.R",
+                     "R/simulation.R"),
+         hint    = "wavethresh::wd / wr should only be called from the wavelet pipeline files (R/dwt.R, R/utils_wavelet.R), the post-smoothers (R/mfsusie_methods.R, R/post_smooth_smash.R), or the wavelet-prior sampler (R/simulation.R)"),
     list(pattern = "mixsqp::mixsqp\\(",
          allowed = c("R/em_helpers.R"),
          hint    = "mixsqp::mixsqp should only be called from R/em_helpers.R")
