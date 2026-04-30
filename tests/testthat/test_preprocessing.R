@@ -68,14 +68,15 @@ build_fixture <- function(seed = 11L, n = 100L, T_m = 64L,
 
 test_that("implicit defaults match explicitly-passed defaults", {
   # `fsusie()` with implicit defaults must match the same call with
-  # `wavelet_magnitude_cutoff = 0, wavelet_qnorm = TRUE` passed
-  # explicitly: the defaulting layer adds no surprise.
+  # the implicit defaults passed explicitly: the defaulting layer
+  # adds no surprise.
   sim <- build_fixture()
   fit_default <- fsusie(sim$Y, sim$X, L = 5,
                         verbose = FALSE)
   fit_explicit <- fsusie(sim$Y, sim$X, L = 5,
                          wavelet_magnitude_cutoff = 0,
-                         wavelet_qnorm            = TRUE,
+                         wavelet_standardize       = TRUE,
+                         wavelet_qnorm            = FALSE,
                          verbose = FALSE)
   expect_equal(fit_default$alpha, fit_explicit$alpha, tolerance = 0)
   expect_equal(fit_default$pip,   fit_explicit$pip,   tolerance = 0)

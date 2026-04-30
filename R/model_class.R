@@ -55,14 +55,28 @@ initialize_susie_model.mf_individual <- function(data, params, var_y, ...) {
     }
   }
 
-  # Prior structure. V_grid: list[M] of length-K vectors (or list[M]
-  # of S_m x K matrices for `per_scale`). pi_V: list[M] of
-  # S_m x K mixture-weight matrices. null_prior_init: scalar.
+  # Prior structure. G_prior is the SHARED scratchpad; the BF
+  # computation reads it and the M-step writes it. The per-effect
+  # persistent state lives on two sidecars:
+  #   pi_V[[l]][[m]]                   -- S_m x K pi matrix per (l, m)
+  #   fitted_g_per_effect[[l]][[m]][[s]] -- the full fitted_g per
+  #                                      (l, m, s); needed because
+  #                                      the ebnm slab sd also
+  #                                      changes per fit.
+  # The pre-loglik hook copies fitted_g_per_effect[[l]] back into
+  # G_prior$fitted_g before the BF call so each effect's prior is
+  # not poisoned by a different effect's M-step.
   prior <- params$prior
   V_grid             <- if (is.null(prior)) NULL else prior$V_grid
-  pi_V               <- if (is.null(prior)) NULL else prior$pi
-  null_prior_init  <- if (is.null(prior)) 0   else prior$null_prior_init
+  null_prior_init    <- if (is.null(prior)) 0   else prior$null_prior_init
   G_prior            <- if (is.null(prior)) NULL else prior$G_prior
+  pi_V <- if (is.null(prior)) NULL else
+    lapply(seq_len(L), function(.) prior$pi)
+  fitted_g_per_effect <- if (is.null(prior)) NULL else
+    lapply(seq_len(L), function(.) {
+      lapply(prior$G_prior, function(G_m)
+        lapply(G_m, function(g_s) g_s$fitted_g))
+    })
 
   # Cross-outcome combiner. Defaults to the trivial independence
   # combiner.
@@ -112,6 +126,7 @@ initialize_susie_model.mf_individual <- function(data, params, var_y, ...) {
     pi_V              = pi_V,
     null_prior_init = null_prior_init,
     G_prior           = G_prior,
+    fitted_g_per_effect = fitted_g_per_effect,
     cross_outcome_combiner = cross_outcome_combiner,
     KL                = rep(NA_real_, L),
     lbf               = rep(NA_real_, L),
@@ -164,9 +179,9 @@ get_posterior_moments_l.mfsusie <- function(model, l) {
 #' @noRd
 format_extra_diag.mfsusie <- function(model) {
   if (is.null(model$pi_V)) return("")
-  null_mass <- unlist(
-    lapply(model$pi_V, function(piVm) piVm[, 1L]),
-    use.names = FALSE)
+  # pi_V is per-effect: list[L] of list[M] of S_m x K matrix.
+  null_mass <- unlist(lapply(model$pi_V, function(pi_l)
+    lapply(pi_l, function(piVm) piVm[, 1L])), use.names = FALSE)
   if (length(null_mass) == 0L) return("")
   sprintf("pi_null=[%.2f, %.2f]", min(null_mass), max(null_mass))
 }

@@ -143,7 +143,7 @@ test_that("update_model_variance returns valid pi vectors per (m, s) for one eff
       pi_ms <- out$G_prior[[m]][[s]]$fitted_g$pi
       expect_equal(sum(pi_ms), 1, tolerance = 1e-8)
       expect_true(all(pi_ms >= 0))
-      expect_equal(out$pi_V[[m]][s, ], pi_ms, tolerance = 0)
+      expect_equal(out$pi_V[[1L]][[m]][s, ], pi_ms, tolerance = 0)
     }
   }
 })

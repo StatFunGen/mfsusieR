@@ -596,9 +596,9 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
     mixture_point_laplace_per_scale = ebnm::ebnm_point_laplace,
     NULL)
   if (!is.null(ebnm_fn)) {
-    model <- .opv_ebnm_point(data, params, model, ser_stats, keep_idx, ebnm_fn)
+    model <- .opv_ebnm_point(data, params, model, ser_stats, keep_idx, ebnm_fn, l = l)
   } else if (inherits(G1, c("mixture_normal", "mixture_normal_per_scale"))) {
-    model <- .opv_mixsqp(data, params, model, ser_stats, keep_idx, zeta_keep)
+    model <- .opv_mixsqp(data, params, model, ser_stats, keep_idx, zeta_keep, l = l)
   } else {
     stop("Unknown prior class on G_prior[[1]]: ",
          paste(class(G1), collapse = ", "))
@@ -612,7 +612,25 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
 #' @export
 pre_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
                                                 l, V_init) {
-  list(V = V_init %||% 1, model = model)
+  # Restore effect l's persistent fitted_g into the shared G_prior
+  # scratchpad before the BF call. The post-loglik hook writes to
+  # both the scratchpad (current) and the per-effect sidecar
+  # (persistent), so this round-trip keeps each effect's prior
+  # state from being poisoned by other effects' M-steps.
+  if (!is.null(model$fitted_g_per_effect)) {
+    fge_l <- model$fitted_g_per_effect[[l]]
+    for (m in seq_len(data$M)) {
+      G_m <- model$G_prior[[m]]
+      for (s in seq_along(G_m)) {
+        model$G_prior[[m]][[s]]$fitted_g <- fge_l[[m]][[s]]
+      }
+    }
+  }
+  # mfsusie's V[l] scalar is meaningless (the per-effect adaptation
+  # lives in the mixture pi); force it to 1 so loglik downstream
+  # always sees a numeric scalar V_scale, regardless of any stale
+  # value carried on model$V from warm-starts.
+  list(V = 1, model = model)
 }
 
 # Post-loglik slot: dispatch to optimize_prior_variance.mf_individual.
@@ -621,14 +639,15 @@ pre_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
 post_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
                                                  l, V_init) {
   if (!isTRUE(params$estimate_prior_variance)) {
-    return(list(V = V_init %||% 1, model = model))
+    return(list(V = 1, model = model))
   }
-  optimize_prior_variance.mf_individual(
+  out <- optimize_prior_variance.mf_individual(
     data, params, model, ser_stats,
     l       = l,
     alpha   = getFromNamespace("get_alpha_l", "susieR")(model, l),
     moments = getFromNamespace("get_posterior_moments_l", "susieR")(model, l),
     V_init  = V_init)
+  list(V = 1, model = out$model)   # V scalar, always 1
 }
 
 #' mixsqp M-step on `pi_V` per (outcome, scale)
@@ -643,7 +662,7 @@ post_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
 #' @keywords internal
 #' @noRd
 .opv_mixsqp <- function(data, params, model, ser_stats,
-                        keep_idx, zeta_keep) {
+                        keep_idx, zeta_keep, l = 1L) {
   # The joint per-effect variable posterior `model$alpha[l, ]` is
   # the softmax of the joint log-Bayes-factor across all M outcomes
   # and S_m scales. Adding M outcomes increases the variance of
@@ -705,7 +724,9 @@ post_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
         control_mixsqp = control,
         pi_warm_start  = pi_prev)
       model$G_prior[[m]][[s]]$fitted_g$pi <- new_pi
-      model$pi_V[[m]][s, ]                 <- new_pi
+      model$pi_V[[l]][[m]][s, ]            <- new_pi
+      model$fitted_g_per_effect[[l]][[m]][[s]] <-
+        model$G_prior[[m]][[s]]$fitted_g
     }
   }
   model
@@ -724,7 +745,7 @@ post_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
 #' @keywords internal
 #' @noRd
 .opv_ebnm_point <- function(data, params, model, ser_stats,
-                            keep_idx, ebnm_fn) {
+                            keep_idx, ebnm_fn, l = 1L) {
   fix_g <- !isTRUE(params$estimate_prior_variance)
   for (m in seq_len(data$M)) {
     bhat_m <- ser_stats$betahat[[m]][keep_idx, , drop = FALSE]
@@ -742,7 +763,8 @@ post_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
       if (!fix_g) args$mode <- 0
       fit <- do.call(ebnm_fn, args)
       model$G_prior[[m]][[s]]$fitted_g <- fit$fitted_g
-      model$pi_V[[m]][s, ]              <- fit$fitted_g$pi
+      model$pi_V[[l]][[m]][s, ]         <- fit$fitted_g$pi
+      model$fitted_g_per_effect[[l]][[m]][[s]] <- fit$fitted_g
     }
   }
   model
