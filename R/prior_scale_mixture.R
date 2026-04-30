@@ -1,15 +1,21 @@
 # Scale-mixture-of-normals prior class for mfsusieR.
 #
-# Two paths "per-outcome init via susieR
-# helper + ash fit":
+# Two construction paths for the per-outcome G_prior:
 #
-#   1. User supplies `prior_variance_grid` -- use it directly,
-#      distribute mixture weights with `null_prior_init`. No ash
-#      fit. Setting `length(grid) == 1` reproduces the
-#      single-Gaussian semantics of `susieR::susie()`.
-#   2. `prior_variance_grid = NULL` -- per outcome, call
-#      `compute_marginal_bhat_shat(X, data$D[[m]])` and
-#      `ash` to fit the K-vector grid, then assemble.
+#   1. User supplies `prior_variance_grid`: use it directly and
+#      distribute mixture weights with `null_prior_init`. Setting
+#      `length(grid) == 1` reproduces the single-Gaussian
+#      semantics of `susieR::susie()`.
+#   2. `prior_variance_grid = NULL`: per outcome, call
+#      `compute_marginal_bhat_shat(X, data$D[[m]])` to obtain
+#      `(Bhat, Shat)` for every (variant, wavelet-position) cell,
+#      then build a doubling sd-grid from those moments (see
+#      `init_scale_mixture_prior_default`). The grid spacing
+#      `gridmult = sqrt(2)` and the lower-end construction follow
+#      Stephens (2017) "False discovery rates: a new deal"; the
+#      lower bound here uses `quantile(Shat, 0.1) / 10` instead
+#      of `min(Shat) / 10` so a single near-zero column does not
+#      pull the smallest grid component below the noise scale.
 #
 # Same control-flow for any `T_m`. NO `T_m == 1` branch. Public
 # `mfsusie()` warns when any `T_m <= 3`.
@@ -39,8 +45,22 @@ distribute_mixture_weights <- function(K, null_prior_init) {
 #' Per-outcome data-driven prior init
 #'
 #' Calls `compute_marginal_bhat_shat(X, Y_m)` to obtain
-#' Bhat / Shat and builds a deterministic K-vector grid of
-#' mixture variances.
+#' `(Bhat, Shat)` for every (variant, wavelet-position) cell in
+#' outcome `m`, then builds a deterministic K-vector grid of
+#' non-null mixture standard deviations covering the range of the
+#' marginal effect estimates.
+#'
+#' Grid construction:
+#' - `sd_min = quantile(Shat, 0.1) / 10`
+#' - `sd_max = 2 * sqrt(max(Bhat^2 - Shat^2))`
+#' - `sd_grid = c(0, sd_min * gridmult^seq(0, K_nonnull))`
+#'   with `K_nonnull = ceiling(log(sd_max / sd_min) / log(gridmult))`.
+#'
+#' Spacing `gridmult = sqrt(2)` and the lower-end formula follow
+#' Stephens (2017) "False discovery rates: a new deal" (Biostatistics
+#' 18:275-294), where ash uses `min(Shat) / 10`. mfsusieR substitutes
+#' the 10th percentile so a single low-noise column cannot pull the
+#' smallest grid component arbitrarily close to zero.
 #'
 #' @param Y_m numeric matrix `n x T_basis[m]` of wavelet
 #'   coefficients for outcome m.
@@ -49,15 +69,15 @@ distribute_mixture_weights <- function(K, null_prior_init) {
 #'   `"mixture_normal_per_scale"`.
 #' @param scale_index list of integer vectors from
 #'   `gen_wavelet_indx`. Required for `mixture_normal_per_scale`.
-#' @param grid_multiplier numeric, forwarded to `ash` as
-#'   `gridmult`.
+#' @param grid_multiplier numeric, ratio between consecutive
+#'   non-null standard deviations.
 #' @param lowc_idx integer vector of column indices in `Y_m`
 #'   masked by `wavelet_magnitude_cutoff`. When non-empty, those
-#'   columns are excluded from the ash sampling pool so
-#'   masked-zero coefficients do not pull the prior toward a
-#'   degenerate spike.
-#' @return list with `G_prior` (the grid prior, possibly replicated)
-#'   and `tt` (the marginal Bhat / Shat from the susieR helper).
+#'   columns are excluded from the marginal pool so masked-zero
+#'   coefficients do not pull the prior toward a degenerate spike.
+#' @return list with `G_prior` (one mixture-prior entry per group,
+#'   replicated as needed) and `tt` (the marginal Bhat / Shat from
+#'   the susieR helper).
 #' @keywords internal
 #' @noRd
 init_scale_mixture_prior_default <- function(Y_m,
@@ -84,6 +104,10 @@ init_scale_mixture_prior_default <- function(Y_m,
   pool_Bhat <- bs$Bhat[, keep_cols, drop = FALSE]
   pool_Shat <- bs$Shat[, keep_cols, drop = FALSE]
 
+  # Grid spacing follows Stephens (2017) ash with two changes:
+  # the lower end uses the 10th percentile of Shat instead of the
+  # min, and the construction is deterministic (no sampling, no
+  # ash fit). See file-header comment for the formula.
   sd_min <- as.numeric(stats::quantile(pool_Shat, 0.1, na.rm = TRUE)) / 10
   sd_max <- 2 * sqrt(max(pmax(pool_Bhat^2 - pool_Shat^2, 0), na.rm = TRUE))
   K_nonnull <- if (is.finite(sd_min) && sd_min > 0 &&
@@ -100,12 +124,12 @@ init_scale_mixture_prior_default <- function(Y_m,
                                      rep(0, length(sd_grid)),
                                      sd_grid))
 
-  # Use the robust ash-like sd-grid but discard its fitted pi: under LD
-  # the iid assumption ash makes is violated. Set the init pi
-  # directly from `null_prior_init` (a probability in `[0, 1]`);
-  # the EM M-step washes this out within a few iterations, so this
-  # is only the cold-start point. The same parameter drives both
-  # the automatic-grid path and the user-supplied-grid path
+  # Set the init pi directly from `null_prior_init` (a probability
+  # in `[0, 1]`). Under LD the iid assumption that an ash MLE on
+  # the marginal pool would assume is violated, so we keep the
+  # cold-start uninformative across the non-null grid; the EM
+  # M-step washes this out within a few iterations. The same
+  # parameter drives the user-supplied-grid path
   # (`distribute_mixture_weights`).
   K <- length(t_ash$fitted_g$pi)
   pi_null <- null_prior_init
@@ -341,8 +365,8 @@ mf_prior_scale_mixture <- function(data,
       attr(G_prior_per_outcome[[m]], "class") <- prior_class
       pi_weights[[m]] <- fill_pi_weights(pi_kvec, length(groups_m))
     } else {
-      # Data-driven path: susieR helper -> deterministic grid. Helper
-      # returns one G_prior entry per group, with `$idx` attached.
+      # Data-driven path: susieR helper plus deterministic grid.
+      # Returns one G_prior entry per group, with `$idx` attached.
       out <- init_scale_mixture_prior_default(
         Y_m               = data$D[[m]],
         X                 = X,
