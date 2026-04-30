@@ -606,17 +606,26 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
   list(V = 1, model = model)
 }
 
-# Pre-loglik slot is a no-op; the mixture-prior M-step needs the
-# just-updated alpha so all work runs in the post-loglik slot.
+# Pre-loglik slot: restore effect l's persistent fitted_g into the
+# shared G_prior scratchpad before the BF call. The post-loglik hook
+# writes to both the scratchpad (current) and the per-effect sidecar
+# (persistent), so this round-trip keeps each effect's prior state
+# from being poisoned by other effects' M-steps.
+#
+# The M-step CANNOT run in the pre slot at iter 1: alpha[l, ] is
+# uniform 1/p, mixsqp on uniform-weighted data collapses pi to
+# all-null per effect, and lbf=0 cascades through every effect
+# (verified by direct test: pre-only fast but returns nCS=0 on
+# the cascade-prone fixture). A hybrid (post for iter 1, pre for
+# iter 2+) was tried and gives only marginal speedup (50 -> 41
+# iter on the slow-convergence case) because the iter 2+ M-step
+# ordering is mathematically equivalent to always-post for fixed-
+# point convergence. Slow convergence on spurious-effect drift is
+# better addressed by mid-loop effect pruning, not hook ordering.
 #' @keywords internal
 #' @export
 pre_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
                                                 l, V_init) {
-  # Restore effect l's persistent fitted_g into the shared G_prior
-  # scratchpad before the BF call. The post-loglik hook writes to
-  # both the scratchpad (current) and the per-effect sidecar
-  # (persistent), so this round-trip keeps each effect's prior
-  # state from being poisoned by other effects' M-steps.
   if (!is.null(model$fitted_g_per_effect)) {
     fge_l <- model$fitted_g_per_effect[[l]]
     for (m in seq_len(data$M)) {
@@ -626,14 +635,12 @@ pre_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
       }
     }
   }
-  # mfsusie's V[l] scalar is meaningless (the per-effect adaptation
-  # lives in the mixture pi); force it to 1 so loglik downstream
-  # always sees a numeric scalar V_scale, regardless of any stale
-  # value carried on model$V from warm-starts.
   list(V = 1, model = model)
 }
 
 # Post-loglik slot: dispatch to optimize_prior_variance.mf_individual.
+# That helper writes the M-step result to BOTH the shared G_prior
+# scratchpad AND the per-effect fitted_g_per_effect[[l]] sidecar.
 #' @keywords internal
 #' @export
 post_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
@@ -647,7 +654,7 @@ post_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
     alpha   = getFromNamespace("get_alpha_l", "susieR")(model, l),
     moments = getFromNamespace("get_posterior_moments_l", "susieR")(model, l),
     V_init  = V_init)
-  list(V = 1, model = out$model)   # V scalar, always 1
+  list(V = 1, model = out$model)
 }
 
 #' mixsqp M-step on `pi_V` per (outcome, scale)
