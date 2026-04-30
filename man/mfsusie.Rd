@@ -191,17 +191,18 @@ high-frequency wavelet coefficients are dominated by zeros.
 Default \code{0}; only columns with a strictly-zero absolute-value
 median are masked.}
 
+\item{wavelet_standardize}{logical. When \code{TRUE}, centers and
+scales each packed wavelet coefficient column before the IBSS
+loop, after the position-space DWT and before optional
+\code{wavelet_qnorm}. This mirrors the established functional
+fine-mapping preprocessing while preserving invertible
+coefficient back-transforms. Default \code{TRUE}.}
+
 \item{wavelet_qnorm}{logical. When \code{TRUE}, applies a
 column-wise rank-based normal quantile transform to the
 wavelet-domain response before the IBSS loop. Useful for
 non-Gaussian wavelet coefficients arising from heavy-tailed
 assays. Default \code{FALSE}.}
-
-\item{wavelet_standardize}{logical. When \code{TRUE}, centers and
-scales each packed wavelet coefficient column before the IBSS
-loop, after the position-space DWT and before optional
-\code{wavelet_qnorm}. This preserves invertible coefficient
-back-transforms. Default \code{TRUE}.}
 
 \item{control_mixsqp}{optional named list of \code{mixsqp} control
 arguments forwarded to the per-(outcome, scale) M-step.}

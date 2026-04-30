@@ -8,6 +8,6 @@
 #' @importFrom mixsqp mixsqp
 #' @importFrom ashr ash calc_loglik calc_vloglik set_data
 #' @importFrom LaplacesDemon dstp
-#' @importFrom susieR susie_workhorse susie_get_cs susie_get_pip compute_marginal_bhat_shat susie_plot
+#' @importFrom susieR susie_workhorse susie_get_cs susie_get_pip compute_marginal_bhat_shat susie_plot pre_loglik_prior_hook post_loglik_prior_hook
 #' @export susie_plot
 "_PACKAGE"

@@ -606,6 +606,31 @@ optimize_prior_variance.mf_individual <- function(data, params, model, ser_stats
   list(V = 1, model = model)
 }
 
+# Pre-loglik slot is a no-op; the mixture-prior M-step needs the
+# just-updated alpha so all work runs in the post-loglik slot.
+#' @keywords internal
+#' @export
+pre_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
+                                                l, V_init) {
+  list(V = V_init %||% 1, model = model)
+}
+
+# Post-loglik slot: dispatch to optimize_prior_variance.mf_individual.
+#' @keywords internal
+#' @export
+post_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
+                                                 l, V_init) {
+  if (!isTRUE(params$estimate_prior_variance)) {
+    return(list(V = V_init %||% 1, model = model))
+  }
+  optimize_prior_variance.mf_individual(
+    data, params, model, ser_stats,
+    l       = l,
+    alpha   = getFromNamespace("get_alpha_l", "susieR")(model, l),
+    moments = getFromNamespace("get_posterior_moments_l", "susieR")(model, l),
+    V_init  = V_init)
+}
+
 #' mixsqp M-step on `pi_V` per (outcome, scale)
 #'
 #' Per (outcome, scale), builds the mixsqp likelihood matrix
