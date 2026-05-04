@@ -68,23 +68,97 @@ build_dataset <- function(rep_seed) {
 }
 
 # ---- Per-cell metrics ------------------------------------------------
+#
+# Three metrics, all reported per (cell, rep):
+#
+#   SNP-level loose (PIP > pip_thresh, default 0.05)
+#     Every SNP with pip above threshold is one judgment regardless
+#     of CS membership. Sensitive to spurious low-PIP leakage.
+#       n_disc / n_tp / n_fp / fdr / power
+#
+#   SNP-level hybrid (CS purity > purity_thresh) OR (no CS AND PIP > pip_high_thresh)
+#     A SNP counts as a discovery if it sits in any credible set whose
+#     min.abs.corr >= purity_thresh (default 0.8), OR if it is outside
+#     every CS but has PIP above pip_high_thresh (default 0.5). This
+#     is the fine-mapping practice view: trust high-purity CSes,
+#     and only accept stand-alone SNPs at high PIP.
+#       hyb_n_disc / hyb_n_tp / hyb_n_fp / fdr_hyb / power_hyb
+#
+#   CS-level (vignette / per_scale_normal_vignette_sweep view)
+#     For each fit$sets$cs, take the lead = SNP within the CS with
+#     max pip. Classify TP if lead is a causal SNP OR
+#     |cor(X[, lead], X[, causal])| >= ld_thresh for some causal.
+#       cs_tp / cs_fp / fdr_cs / power_cs
 
-eval_fit <- function(fit, true_idx, pip_thresh) {
-  pip <- fit$pip
+eval_fit <- function(fit, X, true_idx, pip_thresh,
+                     ld_thresh         = 0.5,
+                     purity_thresh     = 0.8,
+                     pip_high_thresh   = 0.5) {
+  pip      <- fit$pip
+  cs_count <- if (!is.null(fit$sets$cs)) length(fit$sets$cs) else 0L
+  cs_purities <- if (!is.null(fit$sets$purity))
+    fit$sets$purity[, "min.abs.corr"] else rep(NA_real_, cs_count)
+  cs_purity <- if (cs_count > 0L) mean(cs_purities, na.rm = TRUE) else NA_real_
+
+  # ---- SNP-level (loose, PIP threshold)
   selected <- which(pip > pip_thresh)
   n_disc   <- length(selected)
   n_true   <- length(true_idx)
   n_tp     <- sum(selected %in% true_idx)
   n_fp     <- n_disc - n_tp
   fdr      <- if (n_disc > 0L) n_fp / n_disc else 0
-  power    <- n_tp / n_true
-  cs_count <- if (!is.null(fit$sets$cs)) length(fit$sets$cs) else 0L
-  cs_purity <- if (!is.null(fit$sets$purity))
-    mean(fit$sets$purity[, "min.abs.corr"]) else NA_real_
+  power    <- if (n_true > 0L) n_tp / n_true else NA_real_
+
+  # ---- CS-level
+  cs_tp <- 0L; cs_fp <- 0L
+  causal_covered <- integer(0L)
+  high_purity_cs_members <- integer(0L)
+  in_any_cs <- integer(0L)
+  if (cs_count > 0L) {
+    for (i in seq_along(fit$sets$cs)) {
+      members <- fit$sets$cs[[i]]
+      in_any_cs <- union(in_any_cs, members)
+      if (!is.na(cs_purities[i]) && cs_purities[i] >= purity_thresh) {
+        high_purity_cs_members <- union(high_purity_cs_members, members)
+      }
+      lead <- members[which.max(pip[members])]
+      hit_causal <- lead %in% true_idx
+      if (!hit_causal && length(true_idx) > 0L) {
+        cors <- abs(suppressWarnings(stats::cor(X[, lead], X[, true_idx])))
+        if (any(cors >= ld_thresh, na.rm = TRUE)) {
+          hit_causal <- TRUE
+          covered <- true_idx[which.max(cors)]
+          causal_covered <- union(causal_covered, covered)
+        }
+      } else if (hit_causal) {
+        causal_covered <- union(causal_covered, lead)
+      }
+      if (hit_causal) cs_tp <- cs_tp + 1L else cs_fp <- cs_fp + 1L
+    }
+  }
+  fdr_cs   <- if (cs_count > 0L) cs_fp / cs_count else 0
+  power_cs <- if (length(true_idx) > 0L)
+    length(causal_covered) / length(true_idx) else NA_real_
+
+  # ---- SNP-level hybrid: high-purity CS members OR not-in-CS high PIP
+  not_in_cs_high_pip <- which(pip > pip_high_thresh &
+                              !(seq_along(pip) %in% in_any_cs))
+  hyb_disc   <- union(high_purity_cs_members, not_in_cs_high_pip)
+  hyb_n_disc <- length(hyb_disc)
+  hyb_n_tp   <- sum(hyb_disc %in% true_idx)
+  hyb_n_fp   <- hyb_n_disc - hyb_n_tp
+  fdr_hyb    <- if (hyb_n_disc > 0L) hyb_n_fp / hyb_n_disc else 0
+  power_hyb  <- if (length(true_idx) > 0L)
+    sum(true_idx %in% hyb_disc) / length(true_idx) else NA_real_
+
   list(n_disc = n_disc, n_tp = n_tp, n_fp = n_fp,
-       fdr = fdr, power = power, cs_count = cs_count,
-       cs_purity = cs_purity, niter = fit$niter,
-       converged = isTRUE(fit$converged))
+       fdr = fdr, power = power,
+       cs_count = cs_count, cs_purity = cs_purity,
+       cs_tp = cs_tp, cs_fp = cs_fp,
+       fdr_cs = fdr_cs, power_cs = power_cs,
+       hyb_n_disc = hyb_n_disc, hyb_n_tp = hyb_n_tp, hyb_n_fp = hyb_n_fp,
+       fdr_hyb = fdr_hyb, power_hyb = power_hyb,
+       niter = fit$niter, converged = isTRUE(fit$converged))
 }
 
 # ---- Driver ---------------------------------------------------------
@@ -122,9 +196,13 @@ for (rep_i in seq_len(n_rep)) {
     t_elapsed <- as.numeric(difftime(Sys.time(), t_start, units = "secs"))
     mem_after <- gc(verbose = FALSE)[2L, 6L]
     if (is.null(fit)) next
-    metrics <- eval_fit(fit, true_indices, pip_thresh)
+    metrics <- eval_fit(fit, d$X, true_indices, pip_thresh)
     fit_size_mb <- as.numeric(object.size(fit)) / (1024 * 1024)
     row_idx <- row_idx + 1L
+    # Save the minimal fit shape needed to recompute any future metric
+    # (pip + sets$cs + sets$purity + true_idx + rep_seed). Stored as
+    # list-columns so the resulting data.frame still aggregates on the
+    # numeric columns; aggregation formulas just skip these fields.
     results[[row_idx]] <- data.frame(
       rep                   = rep_i,
       cell                  = g,
@@ -138,19 +216,37 @@ for (rep_i in seq_len(n_rep)) {
       power     = metrics$power,
       cs_count  = metrics$cs_count,
       cs_purity = metrics$cs_purity,
+      cs_tp     = metrics$cs_tp,
+      cs_fp     = metrics$cs_fp,
+      fdr_cs    = metrics$fdr_cs,
+      power_cs  = metrics$power_cs,
+      hyb_n_disc = metrics$hyb_n_disc,
+      hyb_n_tp   = metrics$hyb_n_tp,
+      hyb_n_fp   = metrics$hyb_n_fp,
+      fdr_hyb    = metrics$fdr_hyb,
+      power_hyb  = metrics$power_hyb,
       niter     = metrics$niter,
       converged = metrics$converged,
       runtime_s = t_elapsed,
       fit_size_mb = fit_size_mb,
       mem_used_mb = mem_after - mem_before,
+      rep_seed  = 100L + rep_i,
+      fit_pip    = I(list(fit$pip)),
+      fit_cs     = I(list(fit$sets$cs)),
+      fit_purity = I(list(fit$sets$purity)),
+      fit_true_idx = I(list(true_indices)),
       stringsAsFactors = FALSE
     )
-    cat(sprintf("rep=%d cell=%d (%s, qnorm=%s, mnw=%s)  fdr=%.3f power=%.3f t=%.1fs\n",
+    cat(sprintf("rep=%d cell=%d (%s, qnorm=%s, mnw=%s)  fdr=%.3f power=%.3f  fdr_cs=%.3f power_cs=%.3f  fdr_hyb=%.3f power_hyb=%.3f  cs_tp=%d cs_fp=%d  t=%.1fs\n",
                 rep_i, g, cell$prior_variance_scope,
                 cell$wavelet_qnorm,
                 if (is.na(cell$mixture_null_weight)) "NA"
                 else format(cell$mixture_null_weight),
-                metrics$fdr, metrics$power, t_elapsed))
+                metrics$fdr, metrics$power,
+                metrics$fdr_cs, metrics$power_cs,
+                metrics$fdr_hyb, metrics$power_hyb,
+                metrics$cs_tp, metrics$cs_fp,
+                t_elapsed))
   }
 }
 t_total <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
@@ -169,10 +265,21 @@ out_csv <- file.path(out_dir,
 saveRDS(results_df, out_rds)
 cat(sprintf("Saved per-replicate results to %s\n", out_rds))
 
+# Aggregate by cell directly (cell uniquely identifies a row of the
+# bench grid, including the per_scale_normal cells whose mnw is NA).
+# The list-columns (fit_pip / fit_cs / fit_purity / fit_true_idx) are
+# dropped from the formula so aggregate stays on the numeric columns.
 summary_df <- aggregate(
-  cbind(fdr, power, n_disc, cs_count, cs_purity, niter, runtime_s, fit_size_mb)
-    ~ wavelet_qnorm + prior_variance_scope + mixture_null_weight,
-  data = results_df, FUN = mean, na.action = na.pass)
+  cbind(fdr, power, n_disc, cs_count, cs_purity,
+        cs_tp, cs_fp, fdr_cs, power_cs,
+        hyb_n_disc, hyb_n_tp, hyb_n_fp, fdr_hyb, power_hyb,
+        niter, runtime_s, fit_size_mb)
+    ~ cell + prior_variance_scope + wavelet_qnorm,
+  data = transform(results_df, mixture_null_weight = NULL,
+                   fit_pip = NULL, fit_cs = NULL,
+                   fit_purity = NULL, fit_true_idx = NULL),
+  FUN = mean, na.action = na.pass)
+summary_df <- summary_df[order(summary_df$cell), ]
 write.csv(summary_df, out_csv, row.names = FALSE)
 cat(sprintf("Saved per-cell summary to %s\n", out_csv))
-print(summary_df)
+print(summary_df, digits = 3)

@@ -94,21 +94,79 @@ build_dataset <- function(scenario, rep_seed) {
 }
 
 # ---- Per-cell metrics ------------------------------------------------
+#
+# Two metrics, both reported per (scenario, cell, rep). See
+# benchmark_per_scale_normal_6grid.R::eval_fit for the SNP-level vs
+# CS-level definitions; this version adds the null-scenario branch
+# where FDR / power are undefined and per-CS judgments are all FP
+# by construction.
 
-eval_fit <- function(fit, true_idx, pip_thresh, scenario) {
+eval_fit <- function(fit, X, true_idx, pip_thresh, scenario,
+                     ld_thresh       = 0.5,
+                     purity_thresh   = 0.8,
+                     pip_high_thresh = 0.5) {
   pip      <- fit$pip
   selected <- which(pip > pip_thresh)
   n_disc   <- length(selected)
   n_true   <- length(true_idx)
+  cs_count <- if (!is.null(fit$sets$cs)) length(fit$sets$cs) else 0L
+  cs_purities <- if (!is.null(fit$sets$purity))
+    fit$sets$purity[, "min.abs.corr"] else rep(NA_real_, cs_count)
+  cs_purity <- if (cs_count > 0L) mean(cs_purities, na.rm = TRUE) else NA_real_
+
+  # ---- CS-level + collect high-purity CS members for hybrid SNP-level
+  cs_tp <- 0L; cs_fp <- 0L
+  causal_covered <- integer(0L)
+  high_purity_cs_members <- integer(0L)
+  in_any_cs <- integer(0L)
+  if (cs_count > 0L) {
+    for (i in seq_along(fit$sets$cs)) {
+      members <- fit$sets$cs[[i]]
+      in_any_cs <- union(in_any_cs, members)
+      if (!is.na(cs_purities[i]) && cs_purities[i] >= purity_thresh) {
+        high_purity_cs_members <- union(high_purity_cs_members, members)
+      }
+      lead <- members[which.max(pip[members])]
+      hit_causal <- lead %in% true_idx
+      if (!hit_causal && length(true_idx) > 0L) {
+        cors <- abs(suppressWarnings(stats::cor(X[, lead], X[, true_idx])))
+        if (any(cors >= ld_thresh, na.rm = TRUE)) {
+          hit_causal <- TRUE
+          covered <- true_idx[which.max(cors)]
+          causal_covered <- union(causal_covered, covered)
+        }
+      } else if (hit_causal) {
+        causal_covered <- union(causal_covered, lead)
+      }
+      if (hit_causal) cs_tp <- cs_tp + 1L else cs_fp <- cs_fp + 1L
+    }
+  }
+
+  # ---- Hybrid SNP-level: high-purity CS members OR not-in-CS PIP > pip_high_thresh
+  not_in_cs_high_pip <- which(pip > pip_high_thresh &
+                              !(seq_along(pip) %in% in_any_cs))
+  hyb_disc   <- union(high_purity_cs_members, not_in_cs_high_pip)
+  hyb_n_disc <- length(hyb_disc)
+  hyb_n_tp   <- sum(hyb_disc %in% true_idx)
+  hyb_n_fp   <- hyb_n_disc - hyb_n_tp
+  fdr_hyb    <- if (hyb_n_disc > 0L) hyb_n_fp / hyb_n_disc else 0
+  power_hyb  <- if (length(true_idx) > 0L)
+    sum(true_idx %in% hyb_disc) / length(true_idx) else NA_real_
 
   if (scenario == "null_no_signal") {
-    # FDR / power are undefined; record n_disc and a binary type-I flag.
+    # SNP-level FDR / power undefined under no signal; every CS and
+    # every hybrid discovery is a false positive by construction.
     return(list(n_disc = n_disc, n_tp = NA_integer_, n_fp = n_disc,
                 fdr = NA_real_, power = NA_real_,
                 has_disc = (n_disc > 0L),
-                cs_count = if (!is.null(fit$sets$cs)) length(fit$sets$cs) else 0L,
-                cs_purity = if (!is.null(fit$sets$purity))
-                              mean(fit$sets$purity[, "min.abs.corr"]) else NA_real_,
+                cs_count = cs_count, cs_purity = cs_purity,
+                cs_tp = 0L, cs_fp = cs_fp,
+                fdr_cs = if (cs_count > 0L) 1 else 0,
+                power_cs = NA_real_,
+                hyb_n_disc = hyb_n_disc,
+                hyb_n_tp = 0L, hyb_n_fp = hyb_n_disc,
+                fdr_hyb = if (hyb_n_disc > 0L) 1 else 0,
+                power_hyb = NA_real_,
                 niter = fit$niter, converged = isTRUE(fit$converged)))
   }
 
@@ -116,11 +174,15 @@ eval_fit <- function(fit, true_idx, pip_thresh, scenario) {
   n_fp  <- n_disc - n_tp
   fdr   <- if (n_disc > 0L) n_fp / n_disc else 0
   power <- n_tp / n_true
+  fdr_cs   <- if (cs_count > 0L) cs_fp / cs_count else 0
+  power_cs <- length(causal_covered) / length(true_idx)
   list(n_disc = n_disc, n_tp = n_tp, n_fp = n_fp, fdr = fdr, power = power,
        has_disc = (n_disc > 0L),
-       cs_count = if (!is.null(fit$sets$cs)) length(fit$sets$cs) else 0L,
-       cs_purity = if (!is.null(fit$sets$purity))
-                     mean(fit$sets$purity[, "min.abs.corr"]) else NA_real_,
+       cs_count = cs_count, cs_purity = cs_purity,
+       cs_tp = cs_tp, cs_fp = cs_fp,
+       fdr_cs = fdr_cs, power_cs = power_cs,
+       hyb_n_disc = hyb_n_disc, hyb_n_tp = hyb_n_tp, hyb_n_fp = hyb_n_fp,
+       fdr_hyb = fdr_hyb, power_hyb = power_hyb,
        niter = fit$niter, converged = isTRUE(fit$converged))
 }
 
@@ -160,7 +222,7 @@ for (sc in scenarios) {
       t_elapsed <- as.numeric(difftime(Sys.time(), t_start, units = "secs"))
       mem_after <- gc(verbose = FALSE)[2L, 6L]
       if (is.null(fit)) next
-      m <- eval_fit(fit, d$true_idx, pip_thresh, sc)
+      m <- eval_fit(fit, d$X, d$true_idx, pip_thresh, sc)
       fit_size_mb <- as.numeric(object.size(fit)) / (1024 * 1024)
       row_idx <- row_idx + 1L
       results[[row_idx]] <- data.frame(
@@ -173,18 +235,31 @@ for (sc in scenarios) {
         n_disc    = m$n_disc, n_tp = m$n_tp, n_fp = m$n_fp,
         fdr = m$fdr, power = m$power, has_disc = m$has_disc,
         cs_count = m$cs_count, cs_purity = m$cs_purity,
+        cs_tp = m$cs_tp, cs_fp = m$cs_fp,
+        fdr_cs = m$fdr_cs, power_cs = m$power_cs,
+        hyb_n_disc = m$hyb_n_disc, hyb_n_tp = m$hyb_n_tp, hyb_n_fp = m$hyb_n_fp,
+        fdr_hyb = m$fdr_hyb, power_hyb = m$power_hyb,
         niter = m$niter, converged = m$converged,
         runtime_s = t_elapsed, fit_size_mb = fit_size_mb,
         mem_used_mb = mem_after - mem_before,
+        rep_seed   = 200L + rep_i,
+        fit_pip    = I(list(fit$pip)),
+        fit_cs     = I(list(fit$sets$cs)),
+        fit_purity = I(list(fit$sets$purity)),
+        fit_true_idx = I(list(d$true_idx)),
         stringsAsFactors = FALSE
       )
-      cat(sprintf("scn=%s rep=%d cell=%d (%s, qnorm=%s, mnw=%s)  fdr=%s power=%s n_disc=%d cs=%d t=%.1fs\n",
+      cat(sprintf("scn=%s rep=%d cell=%d (%s, qnorm=%s, mnw=%s)  fdr=%s power=%s  fdr_cs=%s power_cs=%s  fdr_hyb=%s power_hyb=%s  cs_tp=%d cs_fp=%d  t=%.1fs\n",
                   sc, rep_i, g, cell$prior_variance_scope, cell$wavelet_qnorm,
                   if (is.na(cell$mixture_null_weight)) "NA"
                   else format(cell$mixture_null_weight),
                   if (is.na(m$fdr)) "NA" else sprintf("%.3f", m$fdr),
                   if (is.na(m$power)) "NA" else sprintf("%.3f", m$power),
-                  m$n_disc, m$cs_count, t_elapsed))
+                  if (is.na(m$fdr_cs)) "NA" else sprintf("%.3f", m$fdr_cs),
+                  if (is.na(m$power_cs)) "NA" else sprintf("%.3f", m$power_cs),
+                  if (is.na(m$fdr_hyb)) "NA" else sprintf("%.3f", m$fdr_hyb),
+                  if (is.na(m$power_hyb)) "NA" else sprintf("%.3f", m$power_hyb),
+                  m$cs_tp, m$cs_fp, t_elapsed))
     }
   }
 }
@@ -206,12 +281,18 @@ saveRDS(results_df, out_rds)
 cat(sprintf("Saved per-replicate results to %s\n", out_rds))
 
 # Aggregate per (scenario, cell). Drop mixture_null_weight from the formula
-# so per_scale_normal rows (NA mnw) are not silently dropped.
+# so per_scale_normal rows (NA mnw) are not silently dropped. Drop the
+# fit_* list-columns since aggregate cannot reduce them.
 agg_df <- aggregate(
-  cbind(fdr, power, n_disc, has_disc, cs_count, cs_purity, niter,
-        runtime_s, fit_size_mb)
+  cbind(fdr, power, n_disc, has_disc, cs_count, cs_purity,
+        cs_tp, cs_fp, fdr_cs, power_cs,
+        hyb_n_disc, hyb_n_tp, hyb_n_fp, fdr_hyb, power_hyb,
+        niter, runtime_s, fit_size_mb)
     ~ scenario + cell + prior_variance_scope + wavelet_qnorm,
-  data = results_df, FUN = mean, na.action = na.pass)
+  data = transform(results_df, fit_pip = NULL, fit_cs = NULL,
+                   fit_purity = NULL, fit_true_idx = NULL),
+  FUN = mean, na.action = na.pass)
+agg_df <- agg_df[order(agg_df$scenario, agg_df$cell), ]
 write.csv(agg_df, out_csv, row.names = FALSE)
 cat(sprintf("Saved per-cell summary to %s\n", out_csv))
-print(agg_df)
+print(agg_df, digits = 3)
