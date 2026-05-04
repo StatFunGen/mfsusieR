@@ -2,8 +2,7 @@
 
 SLURM job `31970954`, partition `cpu`, host `cpu-b-2`, 2 cpus / 8 GB,
 total wall-clock **36 m 22 s**, peak memory **454 928 K** (~445 MiB),
-exit 0. Driver: `inst/bench/profiling/benchmark_per_scale_normal_6grid.R`
-under sbatch wrapper `inst/bench/slurm/run_per_scale_normal_6grid.sbatch`.
+exit 0. Driver: `inst/bench/profiling/benchmark_per_scale_normal_6grid.R`.
 
 Per-replicate raw data: `inst/bench/profiling/results/per_scale_normal_6grid_20260503_2314.rds`
 (30 rows = 6 cells × 5 replicates; per-cell summary CSV is a partial view —
@@ -119,8 +118,7 @@ Convergence:
 
 SLURM job `31977248`, partition `cpu`, 2 cpus / 8 GB, total wall-clock
 **1 h 0 m 59 s**, peak memory **0.43 GB**, exit 0:0. Driver:
-`inst/bench/profiling/benchmark_heavy_tailed_null_6grid.R` under
-sbatch wrapper `inst/bench/slurm/run_heavy_tailed_null_6grid.sbatch`.
+`inst/bench/profiling/benchmark_heavy_tailed_null_6grid.R`.
 Per-replicate rds: `inst/bench/profiling/results/heavy_tailed_null_6grid_<TS>.rds`.
 
 Two new scenarios on the same 6-cell prior grid, 5 reps each
@@ -162,6 +160,16 @@ per-rep mean of "any PIP > 0.05 fired"):
 | **6** | `per_scale_normal` | T | (n/a) | **0.0** | **0.0** | **0.0** | 3.2 | 7.0 | 5/5 |
 
 ### Findings (combined across all three scenarios)
+
+0. **Power is at ceiling in both signal scenarios.** All six cells in
+   the Gaussian baseline and all six cells in the heavy-tailed
+   scenario report power = 1.000 across every rep — every cell
+   recovered all three causal SNPs at the 0.05 PIP threshold in
+   every rep. Power is therefore not a discriminating axis in this
+   benchmark; FDR / `cs_count` / runtime / convergence carry the
+   between-cell signal. In `null_no_signal` power is undefined
+   (no causal SNPs) and `has_disc` (binary "any PIP > 0.05 fired")
+   replaces it as the type-I rate axis.
 
 1. **`per_scale_normal` is well-calibrated under heavy-tailed and null
    Y in this benchmark.** On heavy-tailed (5 reps per cell), mean FDR
@@ -251,9 +259,9 @@ per-rep mean of "any PIP > 0.05 fired"):
 
 ### Open follow-ups (not in PR-1)
 
-- **PR-2**: emit hint when `mixture_null_weight = 0` is passed; harden
-  sbatch + R driver against silent errors (surfaced in 2026-05-03
-  perm grid debugging).
+- **PR-2**: emit hint when `mixture_null_weight = 0` is passed
+  (followed by silent-error defense in the multfsusie-paper R
+  driver, surfaced during 2026-05-03 perm grid debugging).
 - **PR-4**: SSC math verification (issue #8) + an SSC = {F, T} sweep on
   the same 6-cell grid to test Gao's hypothesis that historical SSC
   value was a fudge factor for prior-side math errors that have
@@ -267,10 +275,6 @@ per-rep mean of "any PIP > 0.05 fired"):
 
 - Baseline benchmark driver: `inst/bench/profiling/benchmark_per_scale_normal_6grid.R`
 - Heavy-tailed + null driver: `inst/bench/profiling/benchmark_heavy_tailed_null_6grid.R`
-- sbatch wrappers: `inst/bench/slurm/run_per_scale_normal_6grid.sbatch`,
-  `inst/bench/slurm/run_heavy_tailed_null_6grid.sbatch`
-- SLURM logs: `inst/bench/slurm/logs/per_scale_normal_6grid_31970954.{out,err}`,
-  `inst/bench/slurm/logs/heavy_tailed_null_6grid_31977248.{out,err}`
 - Per-replicate rds: `inst/bench/profiling/results/per_scale_normal_6grid_20260503_2314.rds`
   (baseline) and `heavy_tailed_null_6grid_<TS>.rds` (follow-up)
 - Per-cell summary CSV (baseline 4-row partial view): `inst/bench/profiling/results/per_scale_normal_6grid_20260503_2314_summary.csv`

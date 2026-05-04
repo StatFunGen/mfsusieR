@@ -1,211 +1,151 @@
-# 2026-05-03 mfsusieR PR plan: per_scale_normal benchmark + mu/mu2 storage
+# 2026-05-03 PR plan: mu/mu2 storage + per_scale_normal benchmark
 
-Source documents
-- Slack + meeting digest at `/home/anjing.liu/mydata/anjing.liu/project/mfsusie/notes` (consolidated 4-29 conversation, 5-03 update).
-- Latest binding directive (5-03): build PR around `per_scale_normal`; run 6-combination benchmark; pull v0.0.2; install ebnm via pixi; update susieR from GitHub.
+Date: 2026-05-03
+Scope: design and PR plan for the `save_mu_method` storage policy
+on `mfsusie()` (closes issue #7) and the surrounding 6-grid
+benchmark over `prior_variance_scope` x `wavelet_qnorm` x
+`mixture_null_weight`.
 
-## Decisions confirmed with user
+## Design
 
-| Item | Decision |
-|---|---|
-| `save_mu_method` default | `"complete"` (no surprise breakage of existing fits / warm-start) |
-| `save_mu_method` modes | three-way: `"complete"` (default, p×T, can warm-start), `"alpha_collapsed"` (1D = α %*% μ, lossless for coef/predict/post_smooth, no warm-start), `"lead"` (1D = μ_l,j*, biased cheap-coef, no warm-start). Plus `mf_thin(fit, method)` post-fit helper for users who want both a complete checkpoint and a thinned distribution copy. |
-| Benchmark fixture | reuse `data-raw/make_practical_dataset.R` |
-| Top-level priority | PR around `per_scale_normal` (Gao 5-03), 6-grid benchmark first |
+`save_mu_method = c("complete", "alpha_collapsed", "lead")` on
+`mfsusie()` and the `fsusie()` wrapper, default `"complete"`.
 
-## Fact-finding results
+| Mode | `mu[[l]][[m]]` shape | coef / mf_post_smooth numerics | predict(newx) | per-variant lfsr | model_init |
+|---|---|---|---|---|---|
+| complete           | p x T_basis[m] | exact | works | works | works |
+| alpha_collapsed    | 1 x T_basis[m]  (= alpha %*% mu_full)         | numerically equivalent to complete (1e-12) | errors | errors | errors |
+| lead               | 1 x T_basis[m]  (= mu_full[j*, ], j* = which.max(alpha[l, ])) | cheap lead-variable summary, biased toward j* | errors | errors | errors |
 
-1. **`mixsqp_null_penalty` does not exist in current main.** `grep -rn mixsqp_null_penalty R/ man/` returns zero hits. All current usages are `mixture_null_weight` (`R/mfsusie.R:278/292/296/368`, `R/em_helpers.R:90/109/123/136`, `R/individual_data_methods.R:749/752/799`, `man/mfsusie.Rd:41/211`). The rename Gao mentioned in chat has not landed. Two possibilities:
-   - (a) Gao plans the rename but it is not yet in code. Action: open a renaming PR with `lifecycle::deprecate_warn` alias.
-   - (b) Gao's "penalty" refers to mixsqp's internal `weight` argument, not the public mfsusie() arg. Action: confirm with Gao.
-2. **William's "top"-like storage is α-weighted, not lead-SNP only.** `mvf.susie.alpha/R/operation_on_multfsusie_obj.R:2080-2096` (`update_cal_fit_func`) builds `multfsusie.obj$fitted_func[[l]][[k]] = wr( α_l %*% fitted_wc[[l]][[k]] )`. That is the correct posterior mean, collapsed to a single 1D curve per (effect, outcome). William keeps both `fitted_wc` (full p×T) and `fitted_func` (1D). He does NOT trim to lead SNP.
-   - Gao's Slack said "save only top per CS (refer to williams code) ... wrong but useful: mu_top".
-   - Two possible readings: (A) lead-SNP `μ_l,j*` (user's instruction, "wrong but useful" = biased toward lead); (B) α-collapsed 1D (William's actual pattern, correct posterior mean).
-   - Per user instruction, proceed with (A) lead-SNP. Flag this as Open Question OQ-1 below.
+To recover raw-X coef under `alpha_collapsed` the fit also carries
+`fit$coef_wavelet[[l]][[m]] = alpha %*% (mu_full / csd_X)` (1 x T)
+because per-j csd_X scaling cannot be recovered after the
+alpha-collapse. Under `lead` the fit carries `fit$top_index[l]`.
 
-## Priority order (binding, user-confirmed 2026-05-03)
+A post-fit helper `mf_thin(fit, method)` performs the same trim,
+so a caller can keep a `complete` checkpoint for warm-start and a
+thinned distribution copy.
 
-P0: pull latest packages (susieR github + ebnm via pixi).
-P1: fix the mu/mu2 storage issue (the `save_mu_method` PR — was PR-2, now PR-1).
-P2: `per_scale_normal` validation + 6-grid benchmark (was PR-1, now PR-2).
-P3: `mixture_null_weight` → `mixsqp_null_penalty` rename (blocked on OQ-2).
+## Benchmark grid
 
-The benchmark in P2 produces interpretable FDR/power numbers ONLY after P1 lands, because object-size and downstream coef/predict/post_smooth behavior depend on `save_mu_method`. Running benchmarks before P1 would just have to be redone.
+Six cells, intended to exercise `prior_variance_scope` x
+`wavelet_qnorm` x `mixture_null_weight`:
 
-## PR scope
+```r
+bench_grid <- rbind(
+  expand.grid(wavelet_qnorm        = c(FALSE, TRUE),
+              prior_variance_scope = "per_scale",
+              mixture_null_weight  = c(0.05, 0)),
+  data.frame  (wavelet_qnorm        = c(FALSE, TRUE),
+               prior_variance_scope = "per_scale_normal",
+               mixture_null_weight  = NA_real_)
+)
+```
 
-**PR-1 (P1): `save_mu_method = c("complete", "top")` + downstream compat**
+Driver: `inst/bench/profiling/benchmark_per_scale_normal_6grid.R`
+(Gaussian baseline, 30 fits) and
+`inst/bench/profiling/benchmark_heavy_tailed_null_6grid.R`
+(heavy-tailed signal + null no signal, 60 fits). Per-cell metrics:
+empirical FDR, power, n_disc, cs_count, cs_purity, niter,
+runtime, fit_size_mb. The benchmark fits use
+`save_mu_method = "alpha_collapsed"` so each saved fit is small.
 
-- (P0 prerequisite, done before this PR) susieR pulled from GitHub master, ebnm available in pixi env.
-- New arg `save_mu_method` on `mfsusie()` and `fsusie()`, default `"complete"` (no behavior change for existing callers).
-- `top` mode trims `fit$mu[[l]][[m]]` and `fit$mu2[[l]][[m]]` to the lead SNP `j* = argmax_j fit$alpha[l, ]`; store `fit$top_index[l]` and `attr(fit, "save_mu_method")`.
-- Helper `get_effect_curve(fit, l, m)` unifies coef/predict/post_smooth read paths (auto-dispatch on stored shape).
-- `coef.mfsusie`: complete → `Σ_j α_lj μ_lj`; top → `μ_l,j*` (mark cheap-coef in attribute, not the strict posterior mean).
-- `predict.mfsusie`, `fitted.mfsusie`: route through helper.
-- `mf_post_smooth`: dispatch on mu dimension (p-dim → α-weight; 1-dim → use directly).
-- `model_init` guard: if `attr(model_init, "save_mu_method") == "top"`, stop with a clear message (warm-start checkpoint requires complete state).
-- Tests: `tests/testthat/test_save_mu_method.R` covering coef shape/value, predict, post_smooth, object size reduction, model_init error path, complete-mode numerical equivalence with old fits at tolerance `1e-12`.
-- Docs: roxygen for new arg in `R/mfsusie.R`, regenerated `man/mfsusie.Rd`, vignette section in `vignettes/post_processing.Rmd` on storage modes, NEWS.md entry.
-- Block on OQ-1 only if Gao prefers α-collapsed 1D over lead-SNP; current direction is lead-SNP per user instruction.
+Results memo:
+`inst/notes/sessions/2026-05-03-2314-per-scale-normal-baseline-results.md`.
 
-**PR-2 (P2): `per_scale_normal` validation + 6-grid benchmark**
+## Default-value table
 
-- Confirm `per_scale_normal` semantics match Gao's vignette claim: faster, ignores `mixture_null_weight`, π_0 fit by `ebnm::ebnm_point_normal`. Add a sanity test if missing.
-- Benchmark script: `inst/bench/profiling/benchmark_per_scale_normal_6grid.R` (declare estimated runtime in header per CLAUDE.md hard rule 3).
-- Grid:
-  ```r
-  bench_grid <- rbind(
-    expand.grid(wavelet_qnorm        = c(FALSE, TRUE),
-                prior_variance_scope = "per_scale",
-                mixture_null_weight  = c(0.05, 0)),
-    data.frame   (wavelet_qnorm        = c(FALSE, TRUE),
-                  prior_variance_scope = "per_scale_normal",
-                  mixture_null_weight  = NA_real_)
-  )
-  # 6 rows total
-  ```
-- Metrics per cell: empirical FDR @ 0.05 PIP threshold, power, #CS, CS purity, CS coverage, runtime, memory, niter, warnings.
-- Fixture source: `data-raw/make_practical_dataset.R`. If wall-clock projects > 30 min, ask user before running.
-- Output: results table + summary memo at `inst/notes/sessions/2026-05-XX-per-scale-normal-benchmark-results.md`.
+Defaults are unchanged in PR-1 (the storage policy is opt-in;
+behaviour for users who do not pass `save_mu_method` is identical
+to before).
 
-**PR-3 (P3, blocked on OQ-2): `mixture_null_weight` → `mixsqp_null_penalty` rename**
+| Arg | Default (mfsusieR 0.0.2) | Notes |
+|---|---|---|
+| `save_mu_method`         | `"complete"` (new arg) | opt-in to the 1D modes |
+| `prior_variance_scope`   | `"per_outcome"`        | benchmark covers per_scale and per_scale_normal but does not motivate a switch |
+| `wavelet_qnorm`          | `FALSE`                | rebenchmark with `TRUE` per scenario; results memo discusses |
+| `mixture_null_weight`    | `NULL` (resolves to 0.05) | per_scale + 0.05 is the only well-calibrated `per_scale` cell across scenarios |
+| `null_prior_init`        | `0`                    | only an init; the EM M-step overwrites within a few iterations |
+| `small_sample_correction`| `FALSE`                | sensitivity only; see issue #8 |
+| `L`, `L_greedy`, `greedy_lbf_cutoff` | `20`, `5`, `0.1` | unchanged |
 
-- Add new arg `mixsqp_null_penalty`; if user passes `mixture_null_weight`, `lifecycle::deprecate_warn("0.0.3", ...)` and forward.
-- Replace internal usages.
-- Update man, vignettes, NEWS.md, tests.
-- Hold until OQ-2 resolved.
+## Three-layer warm start (terminology pin)
 
-## Default-value table (current vs. proposed)
+1. mixsqp internal warm start: on by default
+   (`be2722e perf(ibss): mixsqp warm start + ser_cache`).
+2. `L_greedy` ramp 5 -> L = 20: on by default.
+3. operational warm start via `model_init` (cheap fit -> expensive
+   refit): works only with `save_mu_method = "complete"`. Both 1D
+   modes drop the per-variant axis the SER step needs at iter 0;
+   the guard in `R/save_mu_method.R::mf_apply_save_mu_method`
+   stop()s when a thinned fit is supplied as `model_init`.
 
-| Arg | Current default (`R/mfsusie.R`) | Proposed | Notes |
-|---|---|---|---|
-| `prior_variance_scope` | `"per_outcome"` | unchanged for now | benchmark may motivate switching to `"per_scale_normal"` post-PR-1 |
-| `wavelet_qnorm` | `FALSE` | unchanged | Gao 5-03 confirmed FALSE pending rebenchmark |
-| `mixture_null_weight` | `NULL` (→ 0.05 internally) | unchanged | rename pending OQ-2 |
-| `null_prior_init` | `0` | unchanged | only init; EM overrides |
-| `small_sample_correction` | `FALSE` | unchanged | issue #8, sensitivity only |
-| `L`, `L_greedy`, `greedy_lbf_cutoff` | `20`, `5`, `0.1` | unchanged | per issue #11 |
-| `save_mu_method` | (not present) | add as `"complete"` in PR-1 | |
+## susieR 0.16.1 compat (PR-1 commit fix(track))
 
-## Open questions for Gao (OQ-N)
+susieR 0.16.1 added `is_compact_track_snapshots(fit$trace)` inside
+`ibss_finalize -> make_susie_track_history`. The validator
+requires each tracking list element to be
+`list(alpha = data.frame, effect = data.frame, iteration = data.frame)`.
+The old `track_ibss_fit.mf_individual` wrote
+`list(alpha = matrix, sigma2 = list, pi_V = list, elbo = scalar)`,
+which the new validator rejects. Symptom on `track_fit = TRUE`:
+"fit$trace is not a compact SuSiE track" against susieR >= 0.16.1.
 
-- ~~**OQ-1** (resolved 2026-05-03)~~: support both via three-way `save_mu_method = c("complete", "alpha_collapsed", "lead")` plus `mf_thin()` helper. `alpha_collapsed` is the William-style 1D summary that smoothers already consume (`α %*% μ`), lossless for downstream consumers. `lead` is the biased lead-SNP cheap-coef. Neither 1D mode supports `model_init` warm-start; users who want both warm-start and storage savings keep a complete checkpoint and a thinned copy via `mf_thin()`.
-- ~~**OQ-2** (resolved 2026-05-03)~~: `mixsqp_null_penalty` is a deprecated former name; current name is `mixture_null_weight`. No rename PR needed.
-- **OQ-3**: Where should the benchmark fixtures live — `inst/bench/profiling/` (current convention) or `tests/testthat/fixtures/`? PR-1 will use `inst/bench/profiling/` unless told otherwise.
+Fix: `track_ibss_fit.mf_individual` delegates to
+`susieR:::make_track_snapshot(model, iteration)` (cached as a
+package-level binding via `R/zzz.R::.onLoad`). `model$sigma2` is
+sanitised to `NA_real_` for the snapshot copy because mfsusieR's
+`sigma2` is `list[M]` whereas `susieR:::track_scalar` assumes a
+length-1 numeric. The real per-iteration `sigma2` stays on the
+fit; only the trace records `NA`. `fit$elbo` is unaffected.
 
-## Three-layer warm start (terminology pin, do not conflate)
-
-1. mixsqp internal warm start — already on by default (commit `be2722e perf(ibss): mixsqp warm start + ser_cache`).
-2. `L_greedy` ramp 5 → L=20 — already default.
-3. operational warm start via `model_init` (cheap fit → expensive refit) — works only with `save_mu_method = "complete"` (PR-1 will guard against top).
-
-## Process discipline
-
-- Every code change ships docs (roxygen + man) and tests in the same commit, per CLAUDE.md.
-- Default-value changes go through this memo first; do not edit `R/mfsusie.R` defaults silently.
-- Track open work in TaskList; mark each item completed only when its docs + tests are in.
-- This memo lives at `inst/notes/sessions/2026-05-03-2048-mu-storage-and-benchmark-plan.md` and is the canonical handoff for next session.
-
-## Issue #8 SSC: Gao's private hypothesis (off-GitHub, captured here)
-
-GitHub issue #8 ("Check the math for tBF") publicly asks Anjing to verify
-the t-Bayes-factor formula used in `small_sample_correction = TRUE`.
-Off-GitHub, Gao added this hypothesis on 2026-05-03 Slack, asking that
-it be captured in private notes:
-
-> "You [Anjing] reported that SSC does not help in the new simulations.
-> My guess is that we previously found SSC useful because it was
-> *absorbing some of our math errors* in the prior implementation.
-> Now that those errors are fixed, SSC's apparent value drops; it may
-> not be that SSC is useless, but that SSC was a fudge factor masking
-> bugs that have since been fixed. Still need more simulation, and
-> still need to check the tBF math."
-
-Practical implications:
-- **`small_sample_correction = FALSE` as the package default is
-  consistent with this view.** No code change.
-- The 6-cell baseline benchmark holds SSC = FALSE; the heavy-tailed +
-  null follow-up does the same. To revisit the SSC question we would
-  need a separate grid that varies SSC = {FALSE, TRUE} across the
-  same scenarios. This is what PR-4 (issue #8) addresses, not PR-1.
-- If the math check confirms tBF is wrong (or the regime matters),
-  SSC will need a fix or a deprecation. Until then, the conservative
-  default holds.
-
-## PR plan (consolidated)
-
-For tracking against open issues, the PRs split as follows:
-
-| PR  | Scope                                                                                | Status                              | Closes issue |
-|-----|--------------------------------------------------------------------------------------|-------------------------------------|--------------|
-| 1   | `save_mu_method` + `mf_thin` + susieR 0.16.1 compat + bench scaffolding + plan/memo | 4 commits on `fix-mu-storage`, ready to push | #7 (Slim / trim mu, mu2) |
-| 2   | Silent-error defense in sbatch wrapper + R driver (Rscript exit non-zero on tryCatch'd mfsusie / mf_post_smooth errors; sbatch wrapper grep `^Done:`) + `mfsusie()` warning when `mixture_null_weight == 0` is passed | TaskList #22, blocked on PR-1 land | (no GH issue; surfaced 2026-05-03 perm grid debugging) |
-| 3   | `analyse_region_mfsusieR.R::slim_fit` retains 1×T `mu` / `mu2` / `coef_wavelet` when `save_mu_method = "alpha_collapsed"`, so saved `region_<i>.RData` supports `coef()` / `mf_post_smooth()` without re-fit | TaskList #23, blocked on PR-1 land | (no GH issue; perm-side enhancement leveraging PR-1) |
-| 4   | SSC math verification (tBF formula) + a SSC = {FALSE, TRUE} sweep on the same 6-cell grid to test Gao's "SSC was absorbing math errors" hypothesis | (to be added)                       | #8 (Check the math for tBF) |
-
-Issues not yet planned:
-- **#3 ("Inclusion of T=1 trait")** is labelled `bug + enhancement`,
-  but **deprioritised** per Anjing on 2026-05-04.
-  Issue thread:
-  - Gao (last week): "T=1 is implemented in mfsusie() but we should
-    make it use susie() implementation to enable estimate prior
-    variance not via ash."
-  - Gao (4 days ago): "Our alpha package [mvf.susie.alpha] currently
-    has this feature; so am labeling this a bug although **not that
-    important for now**."
-  - Gao closed then reopened the issue (still open).
-  - Anjing 2026-05-04: "可以暂时不优先这个."
-  Mechanically: T = 1 currently runs through `mfsusie()`'s wavelet
-  path (degenerate), which works but uses ash for the prior variance
-  update instead of susie's native scalar V update. Architectural
-  refactor; separate PR scope; not in PR-1 / 2 / 3 / 4. Revisit when
-  the more urgent benchmarking and bug work clears.
-- **#5 ("Generalized multi-task IBSS")** is `enhancement`,
-  multi-package roadmap, far out of scope.
-- **#11 ("Default parameters")** is `documentation`. PR-1 partially
-  addresses it via the new `save_mu_method` documentation in
-  `vignettes/post_processing.Rmd` and the ash-`nullweight`
-  disambiguation. Full default-parameter doc cleanup remains open.
+Pre-fix `tests/testthat/test_ibss_methods_branches.R:35:3` failed
+on both `main` and `fix-mu-storage` against susieR 0.16.1. Post-fix
+the test passes and the full suite is green.
 
 ## Vignette / test parameter audit (2026-05-03)
 
-Audit driver: confirm all vignette and test code uses current public-API parameter names (`mixture_null_weight`, `prior_variance_scope`, `wavelet_qnorm`, `wavelet_magnitude_cutoff`, `null_prior_init`, `alpha_thin_eps`, ...), not legacy names from `mvf.susie.alpha` / `fsusieR` (`nullweight` as null prior, `null_weight`, `null_prior_weight`, `max_SNP_EM`, `low_count_filter`, `cor_small`, `maxit`, `cov_lev`, `min_purity`, `init_pi0_w`, `posthoc`).
+Confirmed all vignette and test code uses current public-API
+parameter names (`mixture_null_weight`, `prior_variance_scope`,
+`wavelet_qnorm`, `wavelet_magnitude_cutoff`, `null_prior_init`,
+`alpha_thin_eps`), not legacy names from `mvf.susie.alpha` /
+`fsusieR` (`null_weight`, `null_prior_weight`, `max_SNP_EM`,
+`low_count_filter`, `cor_small`, `maxit`, `cov_lev`, `min_purity`,
+`init_pi0_w`, `posthoc`).
 
 Findings:
-- Vignettes: the only legacy-name-looking string is `nullweight = 300` at `vignettes/post_processing.Rmd:269-276`. This is **not** a mfsusieR null-prior knob; it is `ashr::ash()`'s own `nullweight` argument forwarded through `mf_post_smooth(..., method = "ash", nullweight = ...)`'s `...`. Action: keep the name (ash's own), but tighten the surrounding prose to disambiguate from `mfsusie()`'s `mixture_null_weight`.
-- `vignettes/fsusie_intro.Rmd:256`: uses `mixture_null_weight` correctly (current name).
-- Tests: legacy names in `test_fsusier_degeneracy.R`, `test_mvf_alpha_degeneracy.R`, `test_cs_parity_fsusier.R` (`backfit`, `maxit`) are arguments of the apple-to-apple comparison targets (`mvf.susie.alpha::multfsusie`, `fsusieR::susiF`). These must NOT be renamed; they are the upstream packages' parameter names and the equivalence contract requires calling those signatures literally.
-- `test_public_api_naming.R:15-25` already lists legacy names (`max_SNP_EM`, `max_scale`, `init_pi0_w`, `min_purity`, ...) as **forbidden** on the mfsusieR public API. No change needed.
-- `test_per_scale_normal_degeneracy.R:684-706` uses `mixture_null_weight` correctly and validates the warning emitted when it is passed under `prior_variance_scope = "per_scale_normal"` (where it is ignored).
-- `test_ti_uniform.R`, `test_smash_lw.R`: `nullweight = 300` again forwarded to `ashr::ash` via the smoother kernel, not a mfsusie() param. Keep.
+- `vignettes/post_processing.Rmd:269-276` uses `nullweight = 300`.
+  This is `ashr::ash()`'s own `nullweight` argument forwarded
+  through `mf_post_smooth(..., method = "ash", nullweight = ...)`'s
+  `...`, not a mfsusieR null-prior knob. Action: tighten the
+  surrounding prose to disambiguate from `mfsusie()`'s
+  `mixture_null_weight` (PR-1 ships this prose).
+- Legacy names in `test_fsusier_degeneracy.R`,
+  `test_mvf_alpha_degeneracy.R`, `test_cs_parity_fsusier.R`
+  (`backfit`, `maxit`) are arguments of the apple-to-apple
+  comparison targets (`mvf.susie.alpha::multfsusie`,
+  `fsusieR::susiF`). These must NOT be renamed; the equivalence
+  contract requires calling the upstream signatures literally.
+- `test_public_api_naming.R:15-25` already lists
+  `max_SNP_EM`, `max_scale`, `init_pi0_w`, `min_purity` etc as
+  forbidden on the mfsusieR public API.
+- `test_per_scale_normal_degeneracy.R:684-706` exercises
+  `mixture_null_weight` correctly and validates the warning
+  emitted under `prior_variance_scope = "per_scale_normal"`.
 
-Conclusion: only `vignettes/post_processing.Rmd:269-276` needs a small prose tightening. No code changes to vignettes or tests for parameter names. PR-1 will land that prose tightening alongside the `save_mu_method` documentation block.
+No code changes to vignettes or tests for parameter names beyond
+the PR-1 prose tightening.
 
-## Status (will be updated as work progresses)
+## Status
 
 - [x] Pull latest mfsusieR main (at `fa53ad2`)
-- [x] Read Slack + meeting digest, write this plan memo
-- [x] Verify `mixsqp_null_penalty` absence
-- [x] Verify William's `fitted_func` storage pattern
-- [x] Update susieR from GitHub master in local R lib (0.16.1, commit 220a191)
-- [x] Confirm `r-ebnm` is in pixi env (1.0.55)
-- [x] PR-1 branch `fix-mu-storage`, full implementation, full test suite green (0 fail / 0 regression)
-- [ ] Notify Gao on issue #11: three-way `save_mu_method` design + `mf_thin()` helper
-- [ ] PR-1 6-grid run + results memo
-- [ ] PR-2 branch (after PR-1 merges)
-
-## susieR 0.16.1 trace-format compat (2026-05-03, surfaced during PR-1 P0)
-
-Symptom: with susieR upgraded from the previously-installed older version to GitHub master 0.16.1 (commit `220a191`), `tests/testthat/test_ibss_methods_branches.R:35:3` ("`track_ibss_fit.mf_individual` exercises the recording branch when `track_fit = TRUE`") errors with:
-
-```
-Error in `make_susie_track_history(model)`: fit$trace is not a compact SuSiE track
-```
-
-Root cause: susieR 0.16.1 added `is_compact_track_snapshots(fit$trace)` to `ibss_finalize -> make_susie_track_history`. The validator requires each tracking list element to be a `list(alpha = data.frame, effect = data.frame, iteration = data.frame)`. The old `track_ibss_fit.mf_individual` wrote `list(alpha = matrix, sigma2 = list, pi_V = list, elbo = scalar)`, which the new validator rejects.
-
-Fix: delegate to susieR's own `make_track_snapshot(model, iteration)` helper (cached as a package-level binding via `R/zzz.R::.onLoad`'s internal-cache list), and pre-sanitise `model$sigma2 <- NA_real_` for the snapshot copy because mfsusieR's `sigma2` is `list[M]` whereas susieR's `track_scalar` assumes a length-1 numeric. Real per-iteration sigma2 stays on the fit; only the trace records NA. ELBO trace is unaffected (lives on `fit$elbo`).
-
-Verified: pre-fix, `test_ibss_methods_branches.R` is FAIL on both `main` and `fix-mu-storage` (the failure pre-dates the PR; surfaced because P0 upgraded susieR). Post-fix on `fix-mu-storage`, the test is PASS and the full suite is PASS (0 fail).
-
-Scope: this is a susieR upstream tracking compat fix, not part of the original `save_mu_method` design. Landed in the same PR because P0 upgraded susieR and surfaced it; documented separately in `NEWS.md` and `R/ibss_methods.R::track_ibss_fit.mf_individual` roxygen.
+- [x] Verify `mixsqp_null_penalty` is not in current main
+- [x] Verify William's `fitted_func` storage pattern in
+      `mvf.susie.alpha`
+- [x] Update susieR from GitHub master in local R lib
+      (0.16.1, commit `220a191`)
+- [x] Confirm `r-ebnm` in pixi env (1.0.55)
+- [x] PR-1 branch `fix-mu-storage`, full implementation, full test
+      suite green (0 fail / 0 regression)
+- [x] PR-1 6-cell baseline benchmark + heavy-tailed + null
+      follow-up benchmarks complete (results memo separate)
