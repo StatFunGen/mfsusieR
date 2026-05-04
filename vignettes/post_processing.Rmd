@@ -311,6 +311,40 @@ return the same numbers as `coef(fit_full)` and
 `"alpha_collapsed"`, and the cheap lead-variable summary under
 `"lead"`.
 
+### Inspecting the structure
+
+To see the three storage shapes side by side, fit the same data
+under each mode and `str()` the per-(effect, outcome) slot. The
+example below uses the small `(p, T_m)` of the running fit so the
+output is short; the same pattern holds at any scale.
+
+```{r save-mu-method-str, eval = FALSE}
+fit_complete <- mfsusie(X, Y, save_mu_method = "complete")
+fit_alpha    <- mfsusie(X, Y, save_mu_method = "alpha_collapsed")
+fit_lead     <- mfsusie(X, Y, save_mu_method = "lead")
+
+# "complete": fit$mu[[l]][[m]] is p x T_basis[m]. fit$top_index
+# and fit$coef_wavelet are absent.
+str(fit_complete$mu[[1]][[1]])
+#  num [1:p, 1:T_basis[m]] ...
+
+# "alpha_collapsed": fit$mu[[l]][[m]] and fit$mu2[[l]][[m]] are
+# 1 x T_basis[m] (= alpha %*% mu_full / mu2_full). fit$coef_wavelet
+# carries the raw-X coef summary 1 x T_basis[m].
+str(fit_alpha$mu[[1]][[1]])             # num [1, 1:T_basis[m]] ...
+str(fit_alpha$coef_wavelet[[1]][[1]])   # num [1, 1:T_basis[m]] ...
+
+# "lead": fit$mu[[l]][[m]] is the lead row mu_full[j*, ];
+# fit$top_index[l] = j* = which.max(alpha[l, ]).
+str(fit_lead$mu[[1]][[1]])              # num [1, 1:T_basis[m]] ...
+fit_lead$top_index                      # int [1:L]
+```
+
+The `attr(fit, "save_mu_method")` attribute records which mode
+generated the object so downstream code (`coef.mfsusie`,
+`mf_post_smooth`, the `model_init` guard, `mf_thin`) can dispatch
+without re-inferring from shape.
+
 ### Per-CS lfsr bubble grid
 
 `mfsusie_plot_lfsr(fit)` draws a per-CS-by-position bubble
