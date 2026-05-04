@@ -1,14 +1,11 @@
-# 2026-05-03 PR-1 baseline benchmark: per_scale_normal 6-grid
+# 2026-05-03 PR-1 prior-grid benchmark results
 
-SLURM job `31970954`, partition `cpu`, host `cpu-b-2`, 2 cpus / 8 GB,
-total wall-clock **36 m 22 s**, peak memory **454 928 K** (~445 MiB),
-exit 0. Driver: `inst/bench/profiling/benchmark_per_scale_normal_6grid.R`.
-
-Per-replicate raw data: `inst/bench/profiling/results/per_scale_normal_6grid_20260503_2314.rds`
-(30 rows = 6 cells × 5 replicates; per-cell summary CSV is a partial view —
-the `aggregate(..., FUN = mean)` formula in the script drops the
-`mixture_null_weight = NA` rows for `per_scale_normal`, so the CSV only has
-4 rows; recompute from the .rds for the full picture, as below).
+Date: 2026-05-03 / 2026-05-04
+Scope: per-cell FDR / power / runtime / convergence for the six prior
+configurations Gao listed on 2026-05-03 Slack
+(`prior_variance_scope` x `wavelet_qnorm` x `mixture_null_weight`),
+across three Y scenarios (Gaussian baseline, heavy-tailed signal,
+null no signal). Three discovery metrics are reported in parallel.
 
 ## Setup
 
@@ -17,282 +14,229 @@ the `aggregate(..., FUN = mean)` formula in the script drops the
 | `n` (samples) | 84 |
 | `p` (variants) | 500 |
 | `M` (outcomes) | 2 |
-| `T_basis[m]` | 64 (single dyadic length) |
+| `T_basis[m]` | 64 |
 | `L` | 10 |
 | `save_mu_method` | `"alpha_collapsed"` (PR-1 feature) |
 | true causal indices | 50, 220, 380 |
 | effect curve | box function on positions 20-40 |
-| noise | iid Gaussian, sd = 1.0 |
+| Gaussian-noise sd | 1.0 |
+| heavy-tail outlier rate / sd | 18% per entry, sd = 4 |
 | n_rep per cell | 5 |
-| PIP threshold | 0.05 |
+| PIP loose threshold | 0.05 |
+| PIP high (hybrid) threshold | 0.5 |
+| CS purity threshold (hybrid) | min.abs.corr >= 0.8 |
+| LD threshold (CS-level TP rule) | abs cor >= 0.5 |
 
-mfsusieR built from branch `fix-mu-storage` @ `fa53ad2`. susieR 0.16.1 from
-GitHub master (ebnm 1.0.55).
+mfsusieR built from branch `fix-mu-storage`. susieR 0.16.1 from
+GitHub master, ebnm 1.0.55.
 
-## Full 6-cell summary (means over 5 replicates)
+Drivers:
+- `inst/bench/profiling/benchmark_per_scale_normal_6grid.R`
+  (Gaussian baseline, 30 fits)
+- `inst/bench/profiling/benchmark_heavy_tailed_null_6grid.R`
+  (heavy-tailed + null follow-up, 60 fits)
 
-| cell | `prior_variance_scope` | `wavelet_qnorm` | `mixture_null_weight` | FDR  | power | `#disc` | `#cs` | `niter` | runtime (s) | `fit_size` (MB) |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | `per_scale`        | F | 0.05 | **0.050** | 1.00 | 3.2  | 3.2 | 3.0  | **11.4** | 0.44 |
-| 2 | `per_scale`        | T | 0.05 | **0.050** | 1.00 | 3.2  | 3.2 | 2.8  | **10.5** | 0.44 |
-| 3 | `per_scale`        | F | 0    | 0.766     | 1.00 | 14.6 | 5.8 | 28.2 | 190.7    | 0.64 |
-| 4 | `per_scale`        | T | 0    | 0.775     | 1.00 | 14.0 | 6.0 | 31.6 | 192.4    | 0.64 |
-| 5 | `per_scale_normal` | F | (n/a) | 0.409    | 1.00 | 5.6  | 3.0 | 3.8  | 14.6     | 0.58 |
-| 6 | `per_scale_normal` | T | (n/a) | 0.479    | 1.00 | 6.0  | 3.0 | 4.0  | 14.8     | 0.58 |
+SLURM accounting:
+- Baseline job `31993466`, 33 min 41 s wall-clock, peak 0.43 GB,
+  exit 0.
+- Heavy-tailed + null job `31993467`, 1 h 0 m 20 s wall-clock,
+  peak 0.43 GB, exit 0.
 
-Runtime range per cell (min / median / max):
+Per-replicate raw data (untracked, machine-local):
+- `inst/bench/profiling/results/per_scale_normal_6grid_20260504_0713.rds`
+- `inst/bench/profiling/results/heavy_tailed_null_6grid_20260504_0740.rds`
 
-| cell | min | median | max |
+Each rds row carries the metric columns plus four list-columns
+(`fit_pip`, `fit_cs`, `fit_purity`, `fit_true_idx`) + `rep_seed`
+so future metrics can be computed retroactively without re-fitting.
+
+## Metric definitions
+
+Three discovery metrics are computed per (scenario, cell, rep) and
+reported in parallel. They differ in what counts as one "discovery"
+and which discoveries are deemed correct.
+
+| Metric | Discovery rule (what counts as one) | TP rule | Use case |
 |---|---|---|---|
-| 1 | 9.0 s | 11.2 s | 13.4 s |
-| 2 | 7.6 s | 11.0 s | 13.3 s |
-| 3 | 108.8 s | 159.1 s | 334.9 s |
-| 4 | 91.9 s | 225.2 s | 285.8 s |
-| 5 | 13.1 s | 14.7 s | 16.0 s |
-| 6 | 13.6 s | 14.8 s | 16.2 s |
+| **SNP loose** (`fdr` / `power`) | Every SNP with `pip > 0.05` is one discovery, regardless of CS membership. | `j` is a TP iff `j` is in the causal index set. | A sensitive type-I-error proxy. Fires on any low-PIP leakage that crosses 0.05. |
+| **CS-level** (`fdr_cs` / `power_cs`) | Every credible set is one discovery, taking the CS lead = SNP within the CS with max PIP. | Lead is TP iff `lead` is causal OR `abs(cor(X[, lead], X[, causal])) >= 0.5` for any causal. Power is fraction of unique causals covered by some TP CS. | The fine-mapping practice view, matching `inst/bench/profiling/per_scale_normal_vignette_sweep.R` and `vignettes/fsusie_intro.Rmd:299-303`. |
+| **SNP hybrid** (`fdr_hyb` / `power_hyb`) | A SNP `j` is one discovery iff (`j` is in some CS with `min.abs.corr >= 0.8`) OR (`j` is not in any CS AND `pip[j] > 0.5`). | `j` is a TP iff `j` is in the causal index set. | A SuSiE-conventional fine-mapping output: trust high-purity CSes (every member of a high-purity CS counts), and outside CSes only credit standalone SNPs at high PIP. |
 
-Convergence:
+The three metrics answer different questions on the same fits, so
+their FDR / power numbers can disagree. Where they agree, the cell
+is robust. Where they disagree, the difference itself is a finding.
 
-| cell | converged / 5 | comment |
-|---|---|---|
-| 1 | 5 / 5 | fast, clean |
-| 2 | 5 / 5 | fast, clean |
-| 3 | 4 / 5 | one rep hit `max_iter = 50` |
-| 4 | 3 / 5 | two reps hit `max_iter = 50` |
-| 5 | 5 / 5 | fast, clean |
-| 6 | 5 / 5 | fast, clean |
+In `null_no_signal` the causal set is empty: SNP-loose FDR / power
+are undefined (`NaN`), CS-level and hybrid FDR equal 1 whenever
+their respective discovery sets are non-empty (every discovery is
+false), and `cs_count` directly counts spurious credible sets.
+
+## Per-cell results (means over 5 replicates)
+
+### Gaussian baseline
+
+| cell | scope | qnorm | mnw | FDR loose | FDR cs | FDR hyb | cs_count | runtime (s) | conv. |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | per_scale        | F | 0.05  | 0.050 | 0.050 | 0.050 | 3.2 | 10.6 | 5/5 |
+| 2 | per_scale        | T | 0.05  | 0.050 | 0.050 | 0.050 | 3.2 |  9.6 | 5/5 |
+| 3 | per_scale        | F | 0     | 0.766 | 0.408 | 0.628 | 5.8 | 176.7 | 4/5 |
+| 4 | per_scale        | T | 0     | 0.775 | 0.479 | 0.613 | 6.0 | 178.4 | 3/5 |
+| 5 | per_scale_normal | F | (n/a) | 0.409 | **0.000** | **0.000** | 3.0 | 13.4 | 5/5 |
+| 6 | per_scale_normal | T | (n/a) | 0.479 | **0.000** | **0.000** | 3.0 | 13.7 | 5/5 |
+
+Power = 1.000 in every cell across every rep (all three causal
+SNPs are recovered every time).
+
+### Heavy-tailed signal
+
+| cell | scope | qnorm | mnw | FDR loose | FDR cs | FDR hyb | cs_count | runtime (s) |
+|---|---|---|---|---|---|---|---|---|
+| 1 | per_scale        | F | 0.05  | 0.150 | 0.050 | 0.100 | 3.2 |  15.5 |
+| 2 | per_scale        | T | 0.05  | 0.100 | 0.000 | 0.100 | 3.0 |  12.5 |
+| 3 | per_scale        | F | 0     | 0.709 | 0.553 | 0.654 | 7.0 | 168.2 |
+| 4 | per_scale        | T | 0     | 0.817 | 0.409 | 0.498 | 5.4 | 238.3 |
+| 5 | per_scale_normal | F | (n/a) | 0.080 | **0.000** | **0.000** | 3.0 |  10.8 |
+| 6 | per_scale_normal | T | (n/a) | **0.000** | **0.000** | **0.000** | 3.0 |   8.9 |
+
+Power = 1.000 in every cell. Convergence: cells 3-4 fail to
+converge in 1-2 of 5 reps each.
+
+### Null no signal (SNP-loose / power undefined; cs_count is the
+type-I count of spurious CSes)
+
+| cell | scope | qnorm | mnw | FDR cs | FDR hyb | cs_count | runtime (s) |
+|---|---|---|---|---|---|---|---|
+| 1 | per_scale        | F | 0.05  | 0.200 | 0.200 | 0.2 |  20.3 |
+| 2 | per_scale        | T | 0.05  | 0.400 | 0.400 | 0.4 |  15.5 |
+| 3 | per_scale        | F | 0     | 1.000 | 1.000 | **4.2** | 93.9 |
+| 4 | per_scale        | T | 0     | 1.000 | 1.000 | **4.2** | 123.9 |
+| 5 | per_scale_normal | F | (n/a) | **0.000** | **0.000** | **0.0** |  6.7 |
+| 6 | per_scale_normal | T | (n/a) | **0.000** | **0.000** | **0.0** |  6.9 |
 
 ## Findings
 
-1. **`mixture_null_weight = 0.05` (the package default) is well-calibrated.**
-   FDR matches the nominal 0.05 threshold (0.05 ± 0 across reps), power is
-   1.0, the fit converges in ~3 IBSS iterations, and one fit takes ~11 s.
-   This is a 17× speedup and 10× fewer iterations versus `mnw = 0`.
+0. **Power is at the ceiling in both signal scenarios.** All twelve
+   signal cells (Gaussian + heavy-tailed) report `power = 1.000`
+   on every rep under all three metrics; every cell recovers all
+   three causal SNPs. Power is therefore not a discriminating
+   axis in this benchmark; FDR / cs_count / runtime / convergence
+   carry the between-cell signal. In `null_no_signal` power is
+   undefined (no causal); the substitute axes are CS-level / hybrid
+   FDR (= 1 whenever any spurious discovery fires) and `cs_count`.
 
-2. **`mixture_null_weight = 0` is broken on this fixture.** Without the
-   null pseudo-weight, the M-step `mixsqp` solver does not push enough
-   mass onto the null spike: the alpha-aggregated PIP for many off-target
-   variants stays well above 0.05, FDR climbs to ~0.77 (15× the nominal
-   target), and `niter` saturates at the 50-iter cap on 3/10 reps. This
-   confirms the design rationale for keeping `0.05` as the default and
-   should NOT be a user-facing choice without a strong warning.
+1. **`per_scale_normal` is the only cell that is FDR = 0 under both
+   CS-level and hybrid metrics across all three scenarios.** Across
+   the 30 reps spanning Gaussian / heavy-tailed / null, the
+   CS-level and hybrid FDR are exactly 0.000 in every cell;
+   `cs_count` is exactly 3 (matching the truth) in every signal
+   rep and exactly 0 in every null rep. The SNP-loose metric
+   inflates to 0.41-0.48 on Gaussian baseline because the cell
+   leaves a few non-causal SNPs at PIP just above 0.05 (outside
+   any credible set), but those leaks are not picked up by either
+   the CS-level or hybrid view.
 
-3. **`per_scale_normal` is fast and recovers the correct credible
-   sets on this Gaussian fixture, but its raw PIP curve is looser
-   than `per_scale + mnw = 0.05`.** FDR at the 0.05 PIP threshold
-   sits at 0.41-0.48 (8-10× the nominal 0.05). Power is 1.0 and
-   `cs_count` is exactly 3 in every rep (matching the truth) with
-   every CS lead landing on a true causal; the false positives are
-   3-4 extra SNPs whose PIP barely clears 0.05 but that lie outside
-   any credible set. Runtime is competitive (~15 s, 1.4× the
-   `mnw = 0.05` fit).
+2. **`per_scale + mixture_null_weight = 0.05` is well-calibrated
+   under all three metrics across all three scenarios but with
+   small slippage on heavy-tailed and null.** Gaussian: FDR loose
+   / cs / hyb all 0.050. Heavy-tailed: FDR loose 0.10-0.15,
+   FDR cs 0.00-0.05, FDR hyb 0.10. Null: spurious CSes fire on
+   ~20-40% of reps (`cs_count` mean 0.2-0.4); FDR_cs / FDR_hyb
+   inflate to 0.20-0.40 on those reps. A safe second choice when
+   ebnm's distributional assumptions are uncertain.
 
-   This is consistent with the vignette assessment in
-   `vignettes/fsusie_intro.Rmd:299-303` ("The three priors put the
-   causal mass on the same variants; PIPs sit on the diagonal for
-   the lead variants in each credible set"): under a CS-level
-   metric (`inst/bench/profiling/per_scale_normal_vignette_sweep.R`
-   classifies one CS at a time, TP if the lead is or LD-correlates
-   with a causal), `per_scale_normal` and `per_scale` agree.
-   The gap shows up only under a SNP-level PIP > 0.05 metric, which
-   is what this benchmark reports. Both views are correct; they
-   answer different questions.
-
-   For PR-1 the conservative read is: do not switch the package
-   default to `per_scale_normal` on the Gaussian fixture alone, and
-   document the metric distinction in the vignette so users on the
-   PIP-threshold path know what to expect.
-
-4. **`wavelet_qnorm` has no measurable effect on this Gaussian fixture.**
-   FDR / power / `cs_count` differences between (qnorm=F, qnorm=T)
-   within each scope-mnw pair are within sampling noise (cells 1↔2,
-   3↔4, 5↔6 each pair). qnorm's value-add lives in heavy-tailed Y, which
-   this fixture does not exercise; the follow-up benchmark (#21,
-   heavy_tailed + null scenarios) is needed to isolate that axis.
-
-## Open questions raised by these results
-
-- **Does `per_scale_normal` improve on heavy-tailed Y?** The 0.4 FDR on a
-  clean Gaussian fixture suggests `ebnm_point_normal`'s data-driven π₀
-  is more permissive than `mixsqp + null pseudo-weight 0.05`. Heavy-tailed
-  Y might tilt this differently because `ebnm_point_normal` is more
-  flexible at picking up structured signal. The `#21` follow-up will
-  tell.
-- **Is the `cs_count = 3` exact-recovery in `per_scale_normal` enough to
-  recommend it over `per_scale + mnw = 0.05` for downstream use?** If
-  the false positives at PIP > 0.05 always sit outside any credible set
-  (as observed here), the user-facing answer is "use the credible sets,
-  not raw PIP > 0.05". This is consistent with how SuSiE outputs are
-  used in fine-mapping practice.
-- **Why does `per_scale + mnw = 0` fit in 109-335 s with high variance,
-  while the `mnw = 0.05` cells finish uniformly in ~10 s?** mixsqp
-  without the null pseudo-weight has multiple near-degenerate local
-  optima — convergence path is data-driven and high-variance. Adding
-  `0.05` regularises the M-step into a single basin.
-
-## Heavy-tailed + null follow-up (SLURM 31977248, 2026-05-04)
-
-SLURM job `31977248`, partition `cpu`, 2 cpus / 8 GB, total wall-clock
-**1 h 0 m 59 s**, peak memory **0.43 GB**, exit 0:0. Driver:
-`inst/bench/profiling/benchmark_heavy_tailed_null_6grid.R`.
-Per-replicate rds: `inst/bench/profiling/results/heavy_tailed_null_6grid_<TS>.rds`.
-
-Two new scenarios on the same 6-cell prior grid, 5 reps each
-(60 fits total, plus the 30-fit Gaussian baseline above for context):
-
-- `heavy_tailed_signal`: same X / β as baseline, but each Y entry has
-  18% iid Bernoulli(0.18) outlier contamination at sd = 4 added on
-  top of the sd = 1 Gaussian noise. Tests whether `wavelet_qnorm = TRUE`
-  recovers calibration that `wavelet_qnorm = FALSE` would lose, and
-  whether `per_scale_normal` 's ebnm fit handles non-Gaussian wavelet
-  coefficients better than `per_scale + mixture_null_weight = 0.05`.
-- `null_no_signal`: pure Gaussian noise, no causal SNPs. FDR / power
-  are undefined; we report `n_disc` (any PIP > 0.05) and `has_disc`
-  (binary "any false discovery this rep") as the type-I rate per cell.
-
-### Per-cell aggregates (means over 5 replicates)
-
-`heavy_tailed_signal`:
-
-| cell | scope | qnorm | mnw | FDR | power | `#disc` | `#cs` | niter | runtime (s) | conv. |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | `per_scale`        | F | 0.05 | 0.150 | 1.00 | 3.6  | 3.2 | 4.0  | 15.5 | 5/5 |
-| 2 | `per_scale`        | T | 0.05 | 0.100 | 1.00 | 3.4  | 3.0 | 3.2  | 12.4 | 5/5 |
-| 3 | `per_scale`        | F | 0    | 0.709 | 1.00 | 10.4 | 7.0 | 27.6 | 167.3 | 4/5 |
-| 4 | `per_scale`        | T | 0    | 0.817 | 1.00 | 17.2 | 5.4 | 40.2 | 239.9 | 3/5 |
-| **5** | `per_scale_normal` | F | (n/a) | **0.080** | 1.00 | 3.4 | **3.0** | 4.0 | **11.0** | 5/5 |
-| **6** | `per_scale_normal` | T | (n/a) | **0.000** | 1.00 | 3.0 | **3.0** | 3.6 | **9.1**  | 5/5 |
-
-`null_no_signal` (FDR / power undefined; `has_disc` ∈ [0, 1] is the
-per-rep mean of "any PIP > 0.05 fired"):
-
-| cell | scope | qnorm | mnw | `#disc` | `has_disc` | `#cs` | niter | runtime (s) | conv. |
-|---|---|---|---|---|---|---|---|---|---|
-| 1 | `per_scale`        | F | 0.05 | 0.6 | 0.4 | 0.2 | 4.0  | 20.9  | 5/5 |
-| 2 | `per_scale`        | T | 0.05 | 0.4 | 0.4 | 0.4 | 2.8  | 15.9  | 5/5 |
-| 3 | `per_scale`        | F | 0    | 7.0 | **1.0** | **4.2** | 12.2 | 96.1  | 5/5 |
-| 4 | `per_scale`        | T | 0    | 7.0 | **1.0** | **4.2** | 22.2 | 126.9 | 4/5 |
-| **5** | `per_scale_normal` | F | (n/a) | **0.0** | **0.0** | **0.0** | 3.4 | 6.8 | 5/5 |
-| **6** | `per_scale_normal` | T | (n/a) | **0.0** | **0.0** | **0.0** | 3.2 | 7.0 | 5/5 |
-
-### Findings (combined across all three scenarios)
-
-0. **Power is at ceiling in both signal scenarios.** All six cells in
-   the Gaussian baseline and all six cells in the heavy-tailed
-   scenario report power = 1.000 across every rep — every cell
-   recovered all three causal SNPs at the 0.05 PIP threshold in
-   every rep. Power is therefore not a discriminating axis in this
-   benchmark; FDR / `cs_count` / runtime / convergence carry the
-   between-cell signal. In `null_no_signal` power is undefined
-   (no causal SNPs) and `has_disc` (binary "any PIP > 0.05 fired")
-   replaces it as the type-I rate axis.
-
-1. **`per_scale_normal` is well-calibrated under heavy-tailed and null
-   Y in this benchmark.** On heavy-tailed (5 reps per cell), mean FDR
-   is 0.080 (qnorm = F) and 0.000 (qnorm = T) and `cs_count` matches
-   the truth (3) in every rep. On null (5 reps per cell), no false
-   discovery fires across the 10 reps; with 5 reps per cell the
-   per-cell type-I rate is bounded above by roughly 10-20% but cannot
-   be distinguished from zero. The Gaussian baseline placed the same
-   cells at FDR 0.41-0.48, so the relative ordering shifts with
-   scenario. A plausible mechanism: `ebnm_point_normal`'s data-driven
-   π₀ is conservative when wavelet coefficients have heavy tails or
-   no structure and only moves mass to the slab when the data force
-   it, whereas under idealised Gaussian Y the noise tail itself looks
-   like weak signal more often.
-
-2. **`per_scale + mixture_null_weight = 0.05` is the only cell that is
-   reasonably calibrated in all three scenarios.** FDR 0.05 / 0.10-0.15
-   / `cs_count` 0.2-0.4 on null. Heavy-tailed FDR drifts up from
-   nominal 0.05 to 0.10-0.15 but no rep diverges. Stays a safe
-   default when ebnm's assumptions on the noise distribution are
-   uncertain.
-
-3. **`per_scale + mixture_null_weight = 0` performs poorly across all
-   three scenarios.** Heavy-tailed FDR 0.71-0.82, null `cs_count`
-   averages 4.2 (false credible sets on pure noise), runtime 17-30×
-   the mnw = 0.05 cells, and 1-3 of 5 reps fail to converge in
-   three of the four such cells. Argues for a hint at the API
-   surface (PR-2) when a user passes mnw = 0 explicitly.
+3. **`per_scale + mixture_null_weight = 0` is broken under every
+   metric in every scenario.** SNP-loose FDR 0.71-0.82, CS-level
+   0.41-0.55, hybrid 0.50-0.65. `cs_count` averages 4.2 spurious
+   CSes on pure null. Runtime 17-30x the mnw = 0.05 cells. 1-2 of
+   5 reps fail to converge in three of the four cells. Justifies
+   the warning-hint planned for PR-2 when mnw = 0 is passed
+   explicitly.
 
 4. **`wavelet_qnorm = TRUE` adds modest improvement on heavy-tailed
-   Y.** Within `per_scale + mnw = 0.05`, mean FDR goes from 0.150
-   to 0.100. Within `per_scale_normal`, FDR goes from 0.080 to 0.000.
-   On Gaussian baseline and null no-signal, the qnorm = F vs T
-   difference sits within rep-to-rep variance.
+   Y under both SNP metrics.** Within `per_scale + mnw = 0.05`,
+   FDR loose drops 0.150 -> 0.100, FDR cs 0.050 -> 0.000.
+   Within `per_scale_normal`, FDR loose drops 0.080 -> 0.000.
+   Effect on Gaussian baseline and on null is within rep-to-rep
+   variance.
 
-### Implications for PR-1 / defaults
+## Implications for PR-1 / defaults
 
 - **Keep `mixture_null_weight = NULL` (resolves to 0.05) as the
-  default of `per_scale`.** Across three scenarios it is the only
-  `per_scale` setting that is well-calibrated end-to-end.
-- **Consider `prior_variance_scope = "per_scale_normal"` for
-  non-Gaussian or real-data fits**, but DO NOT change the package
-  default in PR-1. Reason: the Gaussian baseline places
-  per_scale_normal at FDR 0.41-0.48 (poor on the idealised case),
-  so a user who runs Gaussian simulation experiments would be
-  surprised by the looser calibration. A doc-only update is the
-  right move for now: the vignette / `?mfsusie` should note that
-  per_scale_normal looked better calibrated under the heavy-tailed
-  and null scenarios in this benchmark, while per_scale +
-  mixture_null_weight = 0.05 was tighter on Gaussian. The
-  real-data perm grid (`submit_perm_mfsusieR.sh` cells 5-6 of each
-  bin size) is what should drive any later default change.
-  Currently `prior_variance_scope = "per_outcome"` remains the
-  package default; this benchmark did not include `per_outcome` in
-  any cell and so cannot argue for or against it.
-- **Document the `mixture_null_weight = 0` runtime / FDR cliff.**
-  Setting `mixture_null_weight = 0` explicitly should emit a
-  `warning_message(style = "hint")` in `mfsusie()` pointing out the
-  17-30× runtime hit, the FDR collapse, and the 4-5 false credible
-  sets observed on pure null. Tracked as PR-2 (silent-error /
-  hint-emission defense).
-- **`save_mu_method = "alpha_collapsed"` works in all three scenarios.**
-  All 90 fits across baseline + heavy-tailed + null saved cleanly;
-  `fit_size_mb` 0.40-0.65 MB, no anomaly.
+  default of `per_scale`.** Across all three scenarios this is
+  the only `per_scale` setting that does not collapse under any
+  metric. The slight slippage on heavy-tailed / null is small
+  enough that switching defaults is not justified by this benchmark.
 
-### Caveats
+- **`prior_variance_scope = "per_scale_normal"` is the
+  best-calibrated cell in this benchmark under CS-level and
+  hybrid metrics.** Gaussian / heavy-tailed / null all give
+  FDR_cs = FDR_hyb = 0 with `cs_count` matching the truth.
+  The SNP-loose 0.41-0.48 on Gaussian is the only blemish, and
+  it reflects sub-CS PIP leakage that conventional fine-mapping
+  output does not act on.
 
-- **5 replicates is light** for FDR estimation. The mnw = 0.05
-  columns are tight (3-4 false discoveries / 60 = 0.05-0.07); the
-  mnw = 0 and per_scale_normal columns have rep-to-rep variance of
-  ±0.05-0.10 on FDR. 20-50 reps would tighten the per-cell point
-  estimates; 5 was chosen to keep the SLURM run under 1 h. For an
-  FDR-claim figure in a paper, escalate to ≥ 20 reps and rerun. The
-  `inst/bench/profiling/results/heavy_tailed_null_6grid_<TS>.rds`
-  carries all 60 raw rows so the rerun script can resume seeds
-  101-105 (used here) and add seeds 106-125 etc.
+  PR-1 does not change the package default
+  `prior_variance_scope = "per_outcome"`. Switching the default
+  is deferred to a later PR after the real-data perm grid
+  finishes; the change there will be informed by both the
+  CS / hybrid view (fine-mapping practice) and the SNP-loose
+  view (sensitive type-I proxy). The `?mfsusie` and
+  `vignettes/fsusie_intro.Rmd` text should describe
+  per_scale_normal as the recommended choice for non-Gaussian /
+  real-data fits, with the caveat that SNP-loose PIP curves are
+  looser than the per_scale + mnw = 0.05 baseline.
+
+- **Document the `mixture_null_weight = 0` cliff.** Setting
+  `mixture_null_weight = 0` should emit a `warning_message(style
+  = "hint")` in `mfsusie()` referencing the 17-30x runtime,
+  the FDR collapse under all three metrics, and the 4.2 false
+  credible sets observed on pure null. Tracked as PR-2.
+
+- **`save_mu_method = "alpha_collapsed"` works in all three
+  scenarios.** All 90 fits across baseline + heavy-tailed + null
+  saved cleanly; `fit_size_mb` 0.40-0.65 MB, no anomaly.
+
+## Caveats
+
+- **5 replicates per cell is light** for FDR estimation. The
+  mnw = 0.05 columns are tight (3-4 false discoveries / 60
+  reps = 0.05-0.07); the mnw = 0 and per_scale_normal columns
+  have rep-to-rep variance of +/- 0.05-0.10 on FDR. 20-50 reps
+  would tighten the per-cell point estimates. The list-column
+  layout in the rds means a 20-rep rerun can resume seeds 101-105
+  / 201-205 (used here) and add seeds 106-125 / 206-225 etc
+  without recomputing the existing 5 reps.
 - **Sims are all `p = 500`, `n = 84`, `M = 2`, `T = 64`, `L = 10`.**
   Translation to real ATAC perm regions (`p = 1-4k`, `T = 1024-10240`,
   `M = 6`, `L = 20`) is not literal; the real-data perm grid
-  (`mfsusieR_20260503_*` under `output/new_package/perm/`) is the
-  proper-scale validation.
-- **`per_scale_normal` cs_count = 0 on null is observed across only
-  10 reps total** (5 per qnorm state). At 20+ reps a single false
-  CS would still leave the rate at <= 5%, but the benchmark as run
-  cannot distinguish "exactly zero" from "rare". A 20-rep rerun
-  closes that confidence gap.
+  (`output/new_package/perm/mfsusieR_20260503_*` directories)
+  is the proper-scale validation.
+- **Hybrid SNP-level counts every SNP in a high-purity CS as a
+  separate judgment.** A 5-member CS containing one causal
+  contributes 1 TP + 4 FP under this rule; CS-level instead
+  treats the CS as a single judgment. A reader who interprets
+  CS membership as "the causal is in this set" rather than
+  "every member is causal" should weight the CS-level numbers
+  more than the hybrid numbers.
 
-### Open follow-ups (not in PR-1)
+## Open follow-ups (not in PR-1)
 
-- **PR-2**: emit hint when `mixture_null_weight = 0` is passed
-  (followed by silent-error defense in the multfsusie-paper R
-  driver, surfaced during 2026-05-03 perm grid debugging).
-- **PR-4**: SSC math verification (issue #8) + an SSC = {F, T} sweep on
-  the same 6-cell grid to test Gao's hypothesis that historical SSC
-  value was a fudge factor for prior-side math errors that have
-  since been fixed. Results memo will be appended here when those
-  data land.
-- **Rerun at 20 reps once PR-1 lands and the perm grid frees the
-  cluster.** Document the full grid (`per_outcome` axis included)
-  before committing to a default switch.
+- **PR-2**: emit hint when `mixture_null_weight = 0` is passed,
+  plus silent-error defense in the multfsusie-paper R driver
+  (surfaced during 2026-05-03 perm grid debugging).
+- **PR-4**: SSC math verification (issue #8) and a SSC =
+  {FALSE, TRUE} sweep on the same six-cell grid.
+- **20-rep rerun once PR-1 lands and the perm grid frees the
+  cluster.** Documenting the full grid (`per_outcome` axis
+  included) before any default switch.
 
 ## Files / references
 
 - Baseline benchmark driver: `inst/bench/profiling/benchmark_per_scale_normal_6grid.R`
 - Heavy-tailed + null driver: `inst/bench/profiling/benchmark_heavy_tailed_null_6grid.R`
-- Per-replicate rds: `inst/bench/profiling/results/per_scale_normal_6grid_20260503_2314.rds`
-  (baseline) and `heavy_tailed_null_6grid_<TS>.rds` (follow-up)
-- Per-cell summary CSV (baseline 4-row partial view): `inst/bench/profiling/results/per_scale_normal_6grid_20260503_2314_summary.csv`
+- Per-replicate rds (untracked, local):
+  - `inst/bench/profiling/results/per_scale_normal_6grid_20260504_0713.rds`
+  - `inst/bench/profiling/results/heavy_tailed_null_6grid_20260504_0740.rds`
 - Plan memo: `inst/notes/sessions/2026-05-03-2048-mu-storage-and-benchmark-plan.md`
-- Real-data perm grid README: `/home/anjing.liu/mydata/anjing.liu/project/mfsusie/multfsusie-paper/output/new_package/perm/README_20260503_perm_grid.md`
+- Real-data perm grid README:
+  `/home/anjing.liu/mydata/anjing.liu/project/mfsusie/multfsusie-paper/output/new_package/perm/README_20260503_perm_grid.md`
