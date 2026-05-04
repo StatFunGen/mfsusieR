@@ -45,13 +45,17 @@ mf_invert_per_outcome <- function(coef_wavelet, m, dwt_meta,
 }
 
 # Per-effect coefficient matrix (p x T_basis) for effect l, outcome m,
-# on the standardized X scale: alpha_lj * mu_lj_t.
+# on the standardized X scale: alpha_lj * mu_lj_t. Only meaningful when
+# the fit carries per-variant mu (save_mu_method = "complete"); the only
+# caller (mf_total_wavelet, used by predict.mfsusie(newx)) is gated by
+# predict's save_mu_method guard, so this need not branch.
 mf_effect_wavelet <- function(fit, l, m) {
   fit$alpha[l, ] * fit$mu[[l]][[m]]
 }
 
 # Coefficient sum across all L effects per outcome, on standardized
-# X scale, in the wavelet domain.
+# X scale, in the wavelet domain. Only callable for fits with
+# save_mu_method = "complete"; predict.mfsusie enforces this upstream.
 mf_total_wavelet <- function(fit, m) {
   p     <- ncol(fit$alpha)
   T_pad <- fit$dwt_meta$T_basis[m]
@@ -91,6 +95,10 @@ predict.mfsusie <- function(object, newx = NULL, ...) {
     stop(sprintf(
       "`newx` has %d columns but the fit was trained on X with %d columns.",
       ncol(newx), ncol(object$alpha)))
+  }
+  mode <- mf_save_mu_method(object)
+  if (mode != "complete") {
+    stop_save_mu_method_combo("predict.mfsusie(newx)", mode)
   }
 
   meta <- object$dwt_meta
@@ -162,18 +170,17 @@ coef.mfsusie <- function(object, smooth_method = NULL, ...) {
   meta <- object$dwt_meta
   L    <- nrow(object$alpha)
   M    <- meta$M
-  X_scale <- meta$X_scale
   out  <- vector("list", M)
   for (m in seq_len(M)) {
     coef_l_wavelet <- matrix(0, nrow = L, ncol = meta$T_basis[m])
     for (l in seq_len(L)) {
-      # Per-variable unscale of mu: mu lives in (X-standardized,
-      # Y-standardized-then-DWT'd) units; dividing by `X_scale[j]`
-      # converts it to (X-raw, Y-standardized-then-DWT'd) units so
-      # the alpha-weighted sum is the per-effect coefficient on the
-      # raw X scale.
-      mu_raw_X <- sweep(object$mu[[l]][[m]], 1L, X_scale, "/")
-      coef_l_wavelet[l, ] <- colSums(object$alpha[l, ] * mu_raw_X)
+      # Per-effect raw-X wavelet coefficient curve. Helper dispatches
+      # on save_mu_method: "complete" runs sum_j alpha_lj mu_lj /
+      # csd_X[j]; "alpha_collapsed" reads the precomputed
+      # fit$coef_wavelet[[l]][[m]] (the per-j scaling cannot be
+      # recovered after alpha-collapse); "lead" returns mu[j*, ] /
+      # csd_X[j*].
+      coef_l_wavelet[l, ] <- get_coef_wavelet_curve(object, l, m)
     }
     # Inverse DWT with `column_center = 0` so the Y intercept
     # `cm_Y` is NOT added back to a per-effect estimate. The `csd_Y`
@@ -698,14 +705,23 @@ mf_post_smooth <- function(fit,
       next
     }
 
+    has_per_variant_mu <- mf_has_per_variant_mu(fit)
     for (l in seq_len(L)) {
       out <- kernel(fit, l, m, T_m, level)
       effect_curves[[m]][[l]]  <- out$effect_estimate
       credible_bands[[m]][[l]] <- out$credible_band
       lfsr_curves[[m]][[l]]    <- out$lfsr
-      clfsr_curves[[m]][[l]]   <- lfsr_from_gaussian(
-        fit$mu[[l]][[m]],
-        sqrt(pmax(fit$mu2[[l]][[m]] - fit$mu[[l]][[m]]^2, 0)))
+      # Per-variant clfsr requires the full p x T mu / mu2. Under
+      # save_mu_method = "alpha_collapsed" or "lead" we only have a
+      # 1 x T summary, which would degenerate to the alpha-aggregated
+      # lfsr already in lfsr_curves; leave clfsr_curves NULL so the
+      # plot per-variant toggle errors instead of silently displaying
+      # the wrong shape.
+      clfsr_curves[[m]][[l]] <- if (has_per_variant_mu)
+        lfsr_from_gaussian(
+          fit$mu[[l]][[m]],
+          sqrt(pmax(fit$mu2[[l]][[m]] - fit$mu[[l]][[m]]^2, 0)))
+      else NULL
     }
   }
 
@@ -722,12 +738,10 @@ mf_post_smooth <- function(fit,
   meta   <- fit$dwt_meta
   kernel <- function(fit, l, m, T_m, level) {
     # Alpha-weighted aggregate across variables (no lead-variant
-    # tie-break). Mean: sum_j alpha[l, j] * mu[l, j, t]; second
-    # moment: sum_j alpha[l, j] * mu2[l, j, t]. Variance via the
-    # law of total variance.
-    mean_w <- as.numeric(fit$alpha[l, ] %*% fit$mu[[l]][[m]])
-    mu2_w  <- as.numeric(fit$alpha[l, ] %*% fit$mu2[[l]][[m]])
-    var_w  <- pmax(mu2_w - mean_w^2, 0)
+    # tie-break). Helper handles all three save_mu_method modes.
+    mom    <- get_effect_wavelet_moments(fit, l, m)
+    mean_w <- mom$mean_w
+    var_w  <- mom$var_w
 
     shrunk_w <- if (T_m == 1L) mean_w else
       scalewise_soft_threshold(mean_w, sd = sqrt(var_w),
@@ -804,8 +818,9 @@ mf_post_smooth <- function(fit,
   for (l in seq_len(L)) {
     if (l == exclude) next
     # Alpha-weighted aggregate per-position wavelet coefficient
-    # across variables. `mu[[l]][[m]]` is p x T_basis.
-    mu_w_agg <- as.numeric(fit$alpha[l, ] %*% fit$mu[[l]][[m]])
+    # across variables. Helper handles complete (p x T_basis) and
+    # the 1D save_mu_method modes uniformly.
+    mu_w_agg <- get_effect_wavelet_moments(fit, l, m)$mean_w
     eff_pos  <- dwt_invert_packed(matrix(mu_w_agg, nrow = 1L),
                                       meta, m)
     if (length(eff_pos) > T_pos) eff_pos <- eff_pos[seq_len(T_pos)]

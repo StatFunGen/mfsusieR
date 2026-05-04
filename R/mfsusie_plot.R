@@ -89,6 +89,11 @@ compute_clfsr_matrix <- function(fit, l, m, smoothed = NULL) {
       !is.null(smoothed$clfsr_curves[[m]][[l]])) {
     return(smoothed$clfsr_curves[[m]][[l]])
   }
+  mode <- mf_save_mu_method(fit)
+  if (mode != "complete") {
+    stop_save_mu_method_combo(
+      "Per-variant clfsr (compute_clfsr_matrix)", mode)
+  }
   mu <- fit$mu[[l]][[m]]
   sd <- sqrt(pmax(fit$mu2[[l]][[m]] - mu^2, 0))
   lfsr_from_gaussian(mu, sd)
