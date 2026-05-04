@@ -77,15 +77,31 @@ Convergence:
    confirms the design rationale for keeping `0.05` as the default and
    should NOT be a user-facing choice without a strong warning.
 
-3. **`per_scale_normal` is fast but not as well-calibrated as
-   `per_scale + mnw = 0.05` on this Gaussian fixture.** FDR sits at
-   ~0.4-0.5 (8-10× the nominal 0.05) — markedly better than `mnw = 0`'s
-   0.77 but markedly worse than `mnw = 0.05`'s 0.05. Power is 1.0 and
-   `cs_count` is exactly 3 (matching the truth), so the false positives
-   are SNPs with PIP just above 0.05 that fall outside the credible sets.
-   Runtime is competitive (~15 s, ~1.4× the `mnw = 0.05` per_scale fit).
-   This argues against switching the package default to
-   `per_scale_normal` based on this single Gaussian scenario.
+3. **`per_scale_normal` is fast and recovers the correct credible
+   sets on this Gaussian fixture, but its raw PIP curve is looser
+   than `per_scale + mnw = 0.05`.** FDR at the 0.05 PIP threshold
+   sits at 0.41-0.48 (8-10× the nominal 0.05). Power is 1.0 and
+   `cs_count` is exactly 3 in every rep (matching the truth) with
+   every CS lead landing on a true causal; the false positives are
+   3-4 extra SNPs whose PIP barely clears 0.05 but that lie outside
+   any credible set. Runtime is competitive (~15 s, 1.4× the
+   `mnw = 0.05` fit).
+
+   This is consistent with the vignette assessment in
+   `vignettes/fsusie_intro.Rmd:299-303` ("The three priors put the
+   causal mass on the same variants; PIPs sit on the diagonal for
+   the lead variants in each credible set"): under a CS-level
+   metric (`inst/bench/profiling/per_scale_normal_vignette_sweep.R`
+   classifies one CS at a time, TP if the lead is or LD-correlates
+   with a causal), `per_scale_normal` and `per_scale` agree.
+   The gap shows up only under a SNP-level PIP > 0.05 metric, which
+   is what this benchmark reports. Both views are correct; they
+   answer different questions.
+
+   For PR-1 the conservative read is: do not switch the package
+   default to `per_scale_normal` on the Gaussian fixture alone, and
+   document the metric distinction in the vignette so users on the
+   PIP-threshold path know what to expect.
 
 4. **`wavelet_qnorm` has no measurable effect on this Gaussian fixture.**
    FDR / power / `cs_count` differences between (qnorm=F, qnorm=T)
