@@ -231,21 +231,41 @@ ibss_initialize.mf_individual <- function(data, params) {
 #' IBSS iteration tracking (no-op by default)
 #'
 #' Tracking adds runtime overhead and large-state copies. mfsusieR
-#' Tracking is supported only when `params$track_fit` is `TRUE`,
+#' supports tracking only when `params$track_fit` is `TRUE`,
 #' otherwise this is a no-op (matches the susieR pattern but with
 #' a smaller default footprint, since per-effect curves are
 #' large).
+#'
+#' Snapshot format: each element of `tracking` is built by
+#' `susieR:::make_track_snapshot(model, iteration)` so the list
+#' satisfies the `is_compact_track_snapshots` validator that
+#' `ibss_finalize -> make_susie_track_history` runs at finalize
+#' (introduced in susieR 0.16.1). `model$sigma2` is sanitised to
+#' `NA_real_` for the snapshot because mfsusieR's `sigma2` is a
+#' `list[M]` whereas susieR's helper assumes a scalar; the real
+#' per-iteration values remain on `fit$sigma2` after finalize.
 #'
 #' @keywords internal
 #' @noRd
 track_ibss_fit.mf_individual <- function(data, params, model, tracking, iter, elbo, ...) {
   if (!isTRUE(params$track_fit)) return(tracking)
-  tracking[[iter]] <- list(
-    alpha  = model$alpha,
-    sigma2 = model$sigma2,
-    pi_V   = model$pi_V,
-    elbo   = elbo[iter]
-  )
+  # Delegate to susieR's `make_track_snapshot` so the snapshot list
+  # passes the `is_compact_track_snapshots` validator that
+  # `ibss_finalize -> make_susie_track_history` runs at finalize.
+  # The helper's three data.frames (`alpha`, `effect`, `iteration`)
+  # are populated from `model$alpha`, `model$V`, `model$lbf`,
+  # `model$lbf_variable`, all of which mfsusieR carries with
+  # the same shape as susieR.
+  #
+  # mfsusieR's `model$sigma2` is `list[M]` (one entry per outcome,
+  # each a scalar or length-S vector) whereas `make_track_snapshot ->
+  # track_scalar` expects a length-1 numeric. Pass a sanitised copy
+  # with `sigma2 = NA_real_` so the snapshot records NA rather than
+  # crashing on `as.numeric(list)`. The per-iteration ELBO is still
+  # available on `fit$elbo`.
+  m_compact <- model
+  m_compact$sigma2 <- NA_real_
+  tracking[[iter]] <- make_track_snapshot(m_compact, iter - 1L)
   tracking
 }
 

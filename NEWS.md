@@ -1,5 +1,15 @@
 # mfsusieR (development version)
 
+- susieR 0.16.1 compat: `track_ibss_fit.mf_individual` now delegates
+  to `susieR:::make_track_snapshot` so the per-iteration snapshots
+  satisfy the new `is_compact_track_snapshots` validator that
+  `ibss_finalize -> make_susie_track_history` runs at finalize.
+  Without this, `mfsusie(..., track_fit = TRUE)` errored with
+  "fit$trace is not a compact SuSiE track" against susieR >= 0.16.1.
+  The snapshot records mfsusieR's `sigma2` (a `list[M]`) as
+  `NA_real_` because susieR's helper assumes a scalar; the real
+  per-iteration values remain available on `fit$elbo` and
+  `fit$sigma2`.
 - `pip` now incorporates the `V[l] > prior_tol` filter. The
   per-effect effective slab variance (mean over (m, s) of
   `sum_k pi[l, m, s, k] * var_k`) populates `model$V[l]` after
