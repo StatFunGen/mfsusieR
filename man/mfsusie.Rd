@@ -43,7 +43,8 @@ mfsusie(
   model_init = NULL,
   small_sample_correction = FALSE,
   max_inner_em_steps = 5L,
-  attach_smoothing_inputs = TRUE
+  attach_smoothing_inputs = TRUE,
+  save_mu_method = c("complete", "alpha_collapsed", "lead")
 )
 }
 \arguments{
@@ -262,6 +263,38 @@ Set \code{FALSE} to drop these and call
 \code{mf_post_smooth(fit, X = X, Y = Y, ...)} instead; useful
 when sharing fits where the per-individual data should
 not travel with the fit.}
+
+\item{save_mu_method}{one of \code{"complete"} (default),
+\code{"alpha_collapsed"}, or \code{"lead"}. Controls the storage shape
+of the per-effect posterior moments \code{fit$mu} and \code{fit$mu2}
+after the IBSS loop finishes.
+
+\code{"complete"} keeps the full \verb{p x T_basis[m]} per-(effect,
+outcome) moments; this is the only mode that supports
+\code{model_init} warm-starts, \code{predict.mfsusie(newx)}, and the
+per-variant lfsr toggle in plots.
+
+\code{"alpha_collapsed"} replaces each \verb{p x T} matrix by the
+alpha-weighted 1 x T summary
+\verb{mu[[l]][[m]] = sum_j alpha[l, j] * mu_full[l, j, ]} (and
+the analogous second-moment summary). Storage shrinks by
+roughly factor \code{p}. The post-fit consumers \code{coef.mfsusie},
+\code{mf_post_smooth}, \code{summary}, \code{print}, and the alpha-aggregated
+plot views are numerically equivalent to \code{"complete"}. To
+keep \code{coef} lossless on the raw-X scale, the fit also
+carries \verb{coef_wavelet[[l]][[m]] = sum_j alpha[l, j] * mu_full[l, j, ] / csd_X[j]} as a separate 1 x T summary.
+
+\code{"lead"} keeps only the lead variable per effect:
+\verb{mu[[l]][[m]] = mu_full[l, j*, ]} where
+\verb{j* = which.max(alpha[l, ])}, plus \verb{fit$top_index[l] = j*}.
+This is a cheap single-variable coefficient summary, biased
+toward the lead. \code{coef.mfsusie} and \code{mf_post_smooth} work but
+are not the alpha-weighted posterior mean; document accordingly.
+
+Both 1D modes (\code{"alpha_collapsed"}, \code{"lead"}) error on
+\code{predict.mfsusie(newx)}, the plot per-variant lfsr toggle,
+and \code{model_init}. Use \code{mf_thin()} to thin a complete fit
+after the fact while keeping the original for warm-starts.}
 }
 \value{
 A list of class \code{c("mfsusie", "susie")} carrying:
