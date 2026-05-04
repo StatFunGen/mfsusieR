@@ -202,6 +202,38 @@
 #'   `mf_post_smooth(fit, X = X, Y = Y, ...)` instead; useful
 #'   when sharing fits where the per-individual data should
 #'   not travel with the fit.
+#' @param save_mu_method one of `"complete"` (default),
+#'   `"alpha_collapsed"`, or `"lead"`. Controls the storage shape
+#'   of the per-effect posterior moments `fit$mu` and `fit$mu2`
+#'   after the IBSS loop finishes.
+#'
+#'   `"complete"` keeps the full `p x T_basis[m]` per-(effect,
+#'   outcome) moments; this is the only mode that supports
+#'   `model_init` warm-starts, `predict.mfsusie(newx)`, and the
+#'   per-variant lfsr toggle in plots.
+#'
+#'   `"alpha_collapsed"` replaces each `p x T` matrix by the
+#'   alpha-weighted 1 x T summary
+#'   `mu[[l]][[m]] = sum_j alpha[l, j] * mu_full[l, j, ]` (and
+#'   the analogous second-moment summary). Storage shrinks by
+#'   roughly factor `p`. The post-fit consumers `coef.mfsusie`,
+#'   `mf_post_smooth`, `summary`, `print`, and the alpha-aggregated
+#'   plot views are numerically equivalent to `"complete"`. To
+#'   keep `coef` lossless on the raw-X scale, the fit also
+#'   carries `coef_wavelet[[l]][[m]] = sum_j alpha[l, j] *
+#'   mu_full[l, j, ] / csd_X[j]` as a separate 1 x T summary.
+#'
+#'   `"lead"` keeps only the lead variable per effect:
+#'   `mu[[l]][[m]] = mu_full[l, j*, ]` where
+#'   `j* = which.max(alpha[l, ])`, plus `fit$top_index[l] = j*`.
+#'   This is a cheap single-variable coefficient summary, biased
+#'   toward the lead. `coef.mfsusie` and `mf_post_smooth` work but
+#'   are not the alpha-weighted posterior mean; document accordingly.
+#'
+#'   Both 1D modes (`"alpha_collapsed"`, `"lead"`) error on
+#'   `predict.mfsusie(newx)`, the plot per-variant lfsr toggle,
+#'   and `model_init`. Use `mf_thin()` to thin a complete fit
+#'   after the fact while keeping the original for warm-starts.
 #'
 #' @return A list of class `c("mfsusie", "susie")` carrying:
 #' \describe{
@@ -280,7 +312,10 @@ mfsusie <- function(X, Y,
                     model_init                = NULL,
                     small_sample_correction   = FALSE,
                     max_inner_em_steps            = 5L,
-                    attach_smoothing_inputs   = TRUE) {
+                    attach_smoothing_inputs   = TRUE,
+                    save_mu_method            = c("complete",
+                                                  "alpha_collapsed",
+                                                  "lead")) {
   if (!is.logical(small_sample_correction) ||
       length(small_sample_correction) != 1L ||
       is.na(small_sample_correction)) {
@@ -288,6 +323,18 @@ mfsusie <- function(X, Y,
   }
   prior_variance_scope    <- match.arg(prior_variance_scope)
   residual_variance_scope <- match.arg(residual_variance_scope)
+  save_mu_method          <- match.arg(save_mu_method)
+
+  # Reject thinned fits as model_init: the IBSS warm-start needs the
+  # full p x T_basis[m] mu / mu2, and 1D modes have already discarded
+  # the per-variant axis. The error references the storage mode of
+  # the supplied fit, not the new call's requested mode.
+  if (!is.null(model_init)) {
+    init_mode <- attr(model_init, "save_mu_method") %||% "complete"
+    if (init_mode != "complete") {
+      stop_save_mu_method_combo("model_init", init_mode)
+    }
+  }
 
   if (!is.null(mixture_null_weight) &&
       prior_variance_scope %in% c("per_scale_normal",
@@ -447,6 +494,11 @@ mfsusie <- function(X, Y,
     wavelet_family  = data$wavelet_meta$family,
     outcome_names   = names(data$D) %||% names(Y)
   )
+
+  # 7. Apply save_mu_method storage policy. Default "complete" leaves
+  #    fit unchanged. Non-complete modes shrink mu/mu2 by factor p
+  #    and disable predict(newx), per-variant lfsr, and model_init.
+  fit <- mf_apply_save_mu_method(fit, save_mu_method)
 
   fit
 }

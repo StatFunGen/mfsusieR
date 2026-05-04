@@ -266,16 +266,50 @@ str(fit_ash$smoothed$ash$effect_curves[[1]][[1]])
 
 `mf_post_smooth(method = "TI" | "HMM" | "ash", ...)` forwards
 extra arguments to `ashr::ash`; `method = "smash"` forwards to
-`smashr::smash.gaus`. The most useful knob is `nullweight`,
-which controls how aggressively the null component is preferred:
+`smashr::smash.gaus`. The most useful knob is ash's own
+`nullweight` (not to be confused with `mfsusie()`'s
+`mixture_null_weight`, which controls the IBSS prior fit):
 
 ```{r nullweight-passthrough}
 fit_strong <- mf_post_smooth(fit, method = "ash", nullweight = 300)
 ```
 
-Higher `nullweight` shrinks effects toward zero more
-aggressively and is the right choice on noisy fixtures with
-weak signal.
+Higher `nullweight` (the post-smoother knob) shrinks the
+smoothed effect curves toward zero more aggressively and is the
+right choice on noisy fixtures with weak signal.
+
+## Storage modes: `save_mu_method`
+
+`mfsusie()` stores per-effect, per-outcome posterior moments in
+`fit$mu` and `fit$mu2`. Under the default `save_mu_method =
+"complete"` these are `p x T_basis[m]` matrices, which can
+dominate the fit's footprint when `p` is large. Two thinning
+modes shrink them by roughly factor `p`, with different
+trade-offs:
+
+| Mode | `mu[[l]][[m]]` shape | `coef` / `mf_post_smooth` numerics | `predict(newx)` | per-variant lfsr | warm-start (`model_init`) |
+|---|---|---|---|---|---|
+| `"complete"` (default) | `p x T_basis[m]` | exact | works | works | works |
+| `"alpha_collapsed"` | `1 x T_basis[m]` (= `alpha %*% mu_full`) | numerically equivalent to `"complete"` (1e-12) | errors | errors | errors |
+| `"lead"` | `1 x T_basis[m]` (= `mu_full[j*, ]`, `j* = which.max(alpha[l, ])`) | cheap lead-variable summary, biased toward the lead | errors | errors | errors |
+
+The two 1D modes drop the per-variant axis the SER step needs,
+so they are not valid as `model_init` checkpoints. To get both
+a small distribution copy and a warm-start checkpoint, fit
+once in `"complete"` and use `mf_thin()`:
+
+```{r save-mu-method-thin, eval = FALSE}
+fit_full <- mfsusie(X, Y)                          # complete, warm-start ready
+fit_thin <- mf_thin(fit_full, method = "alpha_collapsed")
+saveRDS(fit_full, "checkpoint.rds")                 # for resuming a fit
+saveRDS(fit_thin, "for_distribution.rds")           # ~factor p smaller
+```
+
+`coef(fit_thin)` and `mf_post_smooth(fit_thin, method = ...)`
+return the same numbers as `coef(fit_full)` and
+`mf_post_smooth(fit_full, ...)` to numerical precision under
+`"alpha_collapsed"`, and the cheap lead-variable summary under
+`"lead"`.
 
 ### Per-CS lfsr bubble grid
 
