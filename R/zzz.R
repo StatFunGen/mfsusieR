@@ -18,6 +18,7 @@ get_var_y                  <- NULL
 initialize_susie_model     <- NULL
 initialize_fitted          <- NULL
 get_cs                     <- NULL
+make_track_snapshot        <- NULL
 vloglik_point_laplace      <- NULL
 
 #' @keywords internal
@@ -35,7 +36,8 @@ vloglik_point_laplace      <- NULL
                "get_var_y",
                "initialize_susie_model",
                "initialize_fitted",
-               "get_cs")) {
+               "get_cs",
+               "make_track_snapshot")) {
     assign(fn, get(fn, envir = susie_ns), envir = pkg_ns)
   }
   assign("vloglik_point_laplace",
