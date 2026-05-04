@@ -36,6 +36,7 @@ test_that("method = 'smash' kernel matches fsusieR::univariate_smash_regression 
 })
 
 test_that("mf_post_smooth(method = 'smash') populates effect_curves and credible_bands", {
+  testthat::skip_if_not_installed("smashr")
   set.seed(13L)
   n <- 60L; p <- 20L; T_m <- 64L
   X    <- matrix(rnorm(n * p), n)
