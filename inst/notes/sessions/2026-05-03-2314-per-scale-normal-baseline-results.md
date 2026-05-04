@@ -163,59 +163,60 @@ per-rep mean of "any PIP > 0.05 fired"):
 
 ### Findings (combined across all three scenarios)
 
-1. **`per_scale_normal` is the strongest mode under heavy-tailed and
-   null Y.** On heavy-tailed, FDR drops to 0.00-0.08 with `cs_count`
-   exactly equal to the truth (3); on null, the cell never fires
-   (zero `n_disc`, zero `cs_count`, zero `has_disc` across all 10
-   reps). This is a sharp reversal from the Gaussian baseline where
-   the same cells sat at FDR 0.41-0.48. The mechanism: `ebnm`'s
-   data-driven π₀ in `ebnm_point_normal` is conservative when the
-   wavelet-coefficient distribution has heavy tails or no real
-   structure, and only adds mass to the slab when the data force it.
-   Under Gaussian-only the pure-noise tail probability is high so
-   ebnm picks more spurious slabs; under contaminated / null Y the
-   contrast between true signal and noise is sharper for ebnm.
+1. **`per_scale_normal` is well-calibrated under heavy-tailed and null
+   Y in this benchmark.** On heavy-tailed (5 reps per cell), mean FDR
+   is 0.080 (qnorm = F) and 0.000 (qnorm = T) and `cs_count` matches
+   the truth (3) in every rep. On null (5 reps per cell), no false
+   discovery fires across the 10 reps; with 5 reps per cell the
+   per-cell type-I rate is bounded above by roughly 10-20% but cannot
+   be distinguished from zero. The Gaussian baseline placed the same
+   cells at FDR 0.41-0.48, so the relative ordering shifts with
+   scenario. A plausible mechanism: `ebnm_point_normal`'s data-driven
+   π₀ is conservative when wavelet coefficients have heavy tails or
+   no structure and only moves mass to the slab when the data force
+   it, whereas under idealised Gaussian Y the noise tail itself looks
+   like weak signal more often.
 
-2. **`per_scale + mixture_null_weight = 0.05` remains a safe second
-   choice.** It is the only cell that is well-calibrated across all
-   three scenarios (FDR 0.05 / 0.10-0.15 / cs_count 0.2-0.4 on null).
-   Slight degradation on heavy-tailed (FDR creeps to 0.10-0.15) but
-   never catastrophic. Stays the right default when one cannot
-   commit to ebnm's assumptions or when explainability matters.
+2. **`per_scale + mixture_null_weight = 0.05` is the only cell that is
+   reasonably calibrated in all three scenarios.** FDR 0.05 / 0.10-0.15
+   / `cs_count` 0.2-0.4 on null. Heavy-tailed FDR drifts up from
+   nominal 0.05 to 0.10-0.15 but no rep diverges. Stays a safe
+   default when ebnm's assumptions on the noise distribution are
+   uncertain.
 
-3. **`per_scale + mixture_null_weight = 0` is broken in every
-   scenario.** Heavy-tailed FDR 0.71-0.82, null `cs_count = 4.2`
-   (false credible sets on pure noise), 17-30× slower than
-   mnw = 0.05, and 1-3 of 5 reps non-converged in three of the four
-   cells. Should not be a user choice without a strong warning.
+3. **`per_scale + mixture_null_weight = 0` performs poorly across all
+   three scenarios.** Heavy-tailed FDR 0.71-0.82, null `cs_count`
+   averages 4.2 (false credible sets on pure noise), runtime 17-30×
+   the mnw = 0.05 cells, and 1-3 of 5 reps fail to converge in
+   three of the four such cells. Argues for a hint at the API
+   surface (PR-2) when a user passes mnw = 0 explicitly.
 
-4. **`wavelet_qnorm` matters slightly more on heavy-tailed.**
-   Within `per_scale + mnw = 0.05`: qnorm = T improves heavy-tailed
-   FDR from 0.150 to 0.100. Within `per_scale_normal`: qnorm = T
-   improves heavy-tailed FDR from 0.080 to 0.000. The qnorm path is
-   doing real work in heavy-tailed Y, just not on the order of
-   "magic fix" — the underlying `ebnm` choice does the heavy lifting,
-   and qnorm tightens it further.
+4. **`wavelet_qnorm = TRUE` adds modest improvement on heavy-tailed
+   Y.** Within `per_scale + mnw = 0.05`, mean FDR goes from 0.150
+   to 0.100. Within `per_scale_normal`, FDR goes from 0.080 to 0.000.
+   On Gaussian baseline and null no-signal, the qnorm = F vs T
+   difference sits within rep-to-rep variance.
 
 ### Implications for PR-1 / defaults
 
 - **Keep `mixture_null_weight = NULL` (resolves to 0.05) as the
   default of `per_scale`.** Across three scenarios it is the only
   `per_scale` setting that is well-calibrated end-to-end.
-- **Recommend `prior_variance_scope = "per_scale_normal"` as the
-  default for non-Gaussian / real-data fits**, but DO NOT change
-  the package default in PR-1. Reason: the Gaussian baseline shows
-  per_scale_normal at FDR 0.41-0.48 (poor on the easy case), so a
-  user who runs simulation experiments on Gaussian Y will be
-  surprised. A doc-only update is the right move for now: the
-  vignette / `?mfsusie` should describe per_scale_normal as
-  "preferred for heavy-tailed or sparse Y; on idealised Gaussian Y
-  prefer per_scale + mixture_null_weight = 0.05". The real-data perm
-  grid (`submit_perm_mfsusieR.sh` cells 5-6 of each bin size) will
-  decide whether to switch the default in a later PR. Currently
-  `prior_variance_scope = "per_outcome"` remains the package
-  default; this benchmark did not touch `per_outcome` and so cannot
-  argue against it.
+- **Consider `prior_variance_scope = "per_scale_normal"` for
+  non-Gaussian or real-data fits**, but DO NOT change the package
+  default in PR-1. Reason: the Gaussian baseline places
+  per_scale_normal at FDR 0.41-0.48 (poor on the idealised case),
+  so a user who runs Gaussian simulation experiments would be
+  surprised by the looser calibration. A doc-only update is the
+  right move for now: the vignette / `?mfsusie` should note that
+  per_scale_normal looked better calibrated under the heavy-tailed
+  and null scenarios in this benchmark, while per_scale +
+  mixture_null_weight = 0.05 was tighter on Gaussian. The
+  real-data perm grid (`submit_perm_mfsusieR.sh` cells 5-6 of each
+  bin size) is what should drive any later default change.
+  Currently `prior_variance_scope = "per_outcome"` remains the
+  package default; this benchmark did not include `per_outcome` in
+  any cell and so cannot argue for or against it.
 - **Document the `mixture_null_weight = 0` runtime / FDR cliff.**
   Setting `mixture_null_weight = 0` explicitly should emit a
   `warning_message(style = "hint")` in `mfsusie()` pointing out the
@@ -242,10 +243,11 @@ per-rep mean of "any PIP > 0.05 fired"):
   `M = 6`, `L = 20`) is not literal; the real-data perm grid
   (`mfsusieR_20260503_*` under `output/new_package/perm/`) is the
   proper-scale validation.
-- **`per_scale_normal` cs_count = 0 on null is a strong claim, but
-  with only 5 reps means we have not seen a single false CS firing.**
-  At 20+ reps a single false CS would still leave the rate at <= 5%.
-  The benchmark cannot distinguish "exactly zero" from "very rare".
+- **`per_scale_normal` cs_count = 0 on null is observed across only
+  10 reps total** (5 per qnorm state). At 20+ reps a single false
+  CS would still leave the rate at <= 5%, but the benchmark as run
+  cannot distinguish "exactly zero" from "rare". A 20-rep rerun
+  closes that confidence gap.
 
 ### Open follow-ups (not in PR-1)
 
