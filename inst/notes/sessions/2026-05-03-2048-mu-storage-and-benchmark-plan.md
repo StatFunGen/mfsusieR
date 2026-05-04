@@ -106,6 +106,67 @@ The benchmark in P2 produces interpretable FDR/power numbers ONLY after P1 lands
 - Track open work in TaskList; mark each item completed only when its docs + tests are in.
 - This memo lives at `inst/notes/sessions/2026-05-03-2048-mu-storage-and-benchmark-plan.md` and is the canonical handoff for next session.
 
+## Issue #8 SSC: Gao's private hypothesis (off-GitHub, captured here)
+
+GitHub issue #8 ("Check the math for tBF") publicly asks Anjing to verify
+the t-Bayes-factor formula used in `small_sample_correction = TRUE`.
+Off-GitHub, Gao added this hypothesis on 2026-05-03 Slack, asking that
+it be captured in private notes:
+
+> "You [Anjing] reported that SSC does not help in the new simulations.
+> My guess is that we previously found SSC useful because it was
+> *absorbing some of our math errors* in the prior implementation.
+> Now that those errors are fixed, SSC's apparent value drops; it may
+> not be that SSC is useless, but that SSC was a fudge factor masking
+> bugs that have since been fixed. Still need more simulation, and
+> still need to check the tBF math."
+
+Practical implications:
+- **`small_sample_correction = FALSE` as the package default is
+  consistent with this view.** No code change.
+- The 6-cell baseline benchmark holds SSC = FALSE; the heavy-tailed +
+  null follow-up does the same. To revisit the SSC question we would
+  need a separate grid that varies SSC = {FALSE, TRUE} across the
+  same scenarios. This is what PR-4 (issue #8) addresses, not PR-1.
+- If the math check confirms tBF is wrong (or the regime matters),
+  SSC will need a fix or a deprecation. Until then, the conservative
+  default holds.
+
+## PR plan (consolidated)
+
+For tracking against open issues, the PRs split as follows:
+
+| PR  | Scope                                                                                | Status                              | Closes issue |
+|-----|--------------------------------------------------------------------------------------|-------------------------------------|--------------|
+| 1   | `save_mu_method` + `mf_thin` + susieR 0.16.1 compat + bench scaffolding + plan/memo | 4 commits on `fix-mu-storage`, ready to push | #7 (Slim / trim mu, mu2) |
+| 2   | Silent-error defense in sbatch wrapper + R driver (Rscript exit non-zero on tryCatch'd mfsusie / mf_post_smooth errors; sbatch wrapper grep `^Done:`) + `mfsusie()` warning when `mixture_null_weight == 0` is passed | TaskList #22, blocked on PR-1 land | (no GH issue; surfaced 2026-05-03 perm grid debugging) |
+| 3   | `analyse_region_mfsusieR.R::slim_fit` retains 1×T `mu` / `mu2` / `coef_wavelet` when `save_mu_method = "alpha_collapsed"`, so saved `region_<i>.RData` supports `coef()` / `mf_post_smooth()` without re-fit | TaskList #23, blocked on PR-1 land | (no GH issue; perm-side enhancement leveraging PR-1) |
+| 4   | SSC math verification (tBF formula) + a SSC = {FALSE, TRUE} sweep on the same 6-cell grid to test Gao's "SSC was absorbing math errors" hypothesis | (to be added)                       | #8 (Check the math for tBF) |
+
+Issues not yet planned:
+- **#3 ("Inclusion of T=1 trait")** is labelled `bug + enhancement`,
+  but **deprioritised** per Anjing on 2026-05-04.
+  Issue thread:
+  - Gao (last week): "T=1 is implemented in mfsusie() but we should
+    make it use susie() implementation to enable estimate prior
+    variance not via ash."
+  - Gao (4 days ago): "Our alpha package [mvf.susie.alpha] currently
+    has this feature; so am labeling this a bug although **not that
+    important for now**."
+  - Gao closed then reopened the issue (still open).
+  - Anjing 2026-05-04: "可以暂时不优先这个."
+  Mechanically: T = 1 currently runs through `mfsusie()`'s wavelet
+  path (degenerate), which works but uses ash for the prior variance
+  update instead of susie's native scalar V update. Architectural
+  refactor; separate PR scope; not in PR-1 / 2 / 3 / 4. Revisit when
+  the more urgent benchmarking and bug work clears.
+- **#5 ("Generalized multi-task IBSS")** is `enhancement`,
+  multi-package roadmap, far out of scope.
+- **#11 ("Default parameters")** is `documentation`. PR-1 partially
+  addresses it via the new `save_mu_method` documentation in
+  `vignettes/post_processing.Rmd` and the ash-`nullweight`
+  disambiguation. Full default-parameter doc cleanup remains open.
+
 ## Vignette / test parameter audit (2026-05-03)
 
 Audit driver: confirm all vignette and test code uses current public-API parameter names (`mixture_null_weight`, `prior_variance_scope`, `wavelet_qnorm`, `wavelet_magnitude_cutoff`, `null_prior_init`, `alpha_thin_eps`, ...), not legacy names from `mvf.susie.alpha` / `fsusieR` (`nullweight` as null prior, `null_weight`, `null_prior_weight`, `max_SNP_EM`, `low_count_filter`, `cor_small`, `maxit`, `cov_lev`, `min_purity`, `init_pi0_w`, `posthoc`).
