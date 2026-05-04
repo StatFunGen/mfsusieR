@@ -214,26 +214,35 @@ continuation needs only a small increment past that point.
 
 ## Diagnostic tracing inside a long run
 
-For loci that resist convergence, `track_fit = TRUE` keeps a
-per-iteration snapshot list at `fit$trace`. Each entry records
-`alpha` (the per-effect SNP posterior, `L x p`), `sigma2` (the
-per-outcome residual variance), `pi_V` (the mixture weights),
-and the iteration's ELBO.
+For loci that resist convergence, `track_fit = TRUE` populates
+`fit$trace` with the compact `susie_track` object that susieR
+0.16.1+ emits. It is a single list of stacked tables:
+`alpha` (long-format: one row per iteration / effect / variable
+with `alpha >= 1/p`, thresholded for compactness), `effect`
+(per-(iteration, effect) summaries including `V`,
+`top_variable`, `top_alpha`, `effect_lbf`), and `iteration`
+(per-iteration scalars: `sigma2`, `max_alpha`, `n_effects_kept`,
+...). Iteration is 0-indexed.
 
 ```{r track-fit, fig.height = 4.5, fig.width = 8}
 fit_traced <- mfsusie(X, Y_signal,
                       max_iter = 20, tol = 1e-3,
                       verbose = FALSE, track_fit = TRUE)
-length(fit_traced$trace)
-str(fit_traced$trace[[1L]], max.level = 1L)
+nrow(fit_traced$trace$iteration)
+str(fit_traced$trace, max.level = 1L)
 
 # How quickly does the per-iteration posterior at each true
-# causal SNP settle?
+# causal SNP settle? `trace$alpha` stores only rows with
+# alpha >= 1/p; below-threshold variables read as 0.
 true_snps <- c(37L, 88L)
-alpha_path <- vapply(seq_along(fit_traced$trace), function(it) {
-  alpha_it <- fit_traced$trace[[it]]$alpha   # L x p
-  vapply(true_snps, function(j) max(alpha_it[, j]),
-         numeric(1L))
+alpha_df  <- fit_traced$trace$alpha
+n_iter    <- nrow(fit_traced$trace$iteration)
+alpha_path <- vapply(seq(0L, n_iter - 1L), function(it) {
+  rows <- alpha_df[alpha_df$iteration == it, , drop = FALSE]
+  vapply(true_snps, function(j) {
+    vals <- rows$alpha[rows$variable == j]
+    if (length(vals) == 0L) 0 else max(vals)
+  }, numeric(1L))
 }, numeric(2L))
 rownames(alpha_path) <- paste0("SNP ", true_snps)
 
@@ -263,9 +272,10 @@ par(mfrow = c(1L, 1L))
 converge, looking at the alpha trajectories at candidate SNPs
 exposes whether the loop is oscillating between competing
 configurations or simply tightening posterior mass on a
-single one. `track_fit = TRUE` is memory-heavy on real data
-(each snapshot copies `alpha`, `sigma2`, `pi_V`); reserve it
-for diagnostic runs rather than the genome-wide screen pass.
+single one. `track_fit = TRUE` adds compact per-iteration
+records via `susieR::make_track_snapshot()` (alpha entries are
+thresholded at `1/p`); reserve it for diagnostic runs rather
+than the genome-wide screen pass.
 ## Session info
 
 This is the version of R and the packages that were used to generate
