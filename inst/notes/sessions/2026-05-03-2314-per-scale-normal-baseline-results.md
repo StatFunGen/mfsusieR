@@ -219,6 +219,58 @@ type-I count of spurious CSes)
   "every member is causal" should weight the CS-level numbers
   more than the hybrid numbers.
 
+## save_mu_method storage MWE (out-of-band, 2026-05-04)
+
+A small reproducer outside the 6-grid: same simulator as the
+Gaussian baseline (`n = 84`, `p = 500`, `T = 64`, `M = 2`,
+`L = 5`, three causals at indices 50 / 220 / 380), three fits
+generated with each save_mu_method, then `saveRDS(...,
+compress = "xz")` to a temp directory and re-read.
+
+| mode | `object.size()` | `.rds` (xz) | shrink vs complete |
+|---|---|---|---|
+| `complete`        | 7.8 MB   | 2950 KB | (baseline) |
+| `alpha_collapsed` | 0.50 MB  |  230 KB | 15.7x in-mem, 12.9x on-disk |
+| `lead`            | 0.49 MB  |  226 KB | 16.1x in-mem, 13.1x on-disk |
+
+The shrink ratio is below the theoretical `p = 500` because
+non-mu fields (`alpha`, `lbf_variable`, `fitted`, `dwt_meta`,
+the `smoothed` slot when populated, ...) are unchanged across
+modes. At larger `p` the ratio approaches `p`.
+
+Structural verification (per (effect, outcome) slot):
+
+```
+fit$mu[[1]][[1]]:
+  complete           num [1:500, 1:64]      <- p x T_basis
+  alpha_collapsed    num [1, 1:64]          <- alpha %*% mu
+  lead               num [1, 1:64]          <- mu[j*, ]
+
+fit$coef_wavelet[[1]][[1]]   (alpha_collapsed only):
+                     num [1, 1:64]          <- alpha %*% (mu / csd_X)
+
+fit$top_index               (lead only):
+                     [1] 220 380 50 1 1     <- j* = which.max(alpha[l, ])
+                     verified equal to apply(fit$alpha, 1, which.max)
+
+attr(fit, "save_mu_method"):
+  complete -> "complete"
+  alpha_collapsed -> "alpha_collapsed"
+  lead -> "lead"
+```
+
+`coef.mfsusie()` numerical equivalence (5 effects x 64 positions):
+
+```
+complete vs alpha_collapsed: max abs diff = 0.000   (lossless)
+complete vs lead:            max abs diff = 0.108   (cheap-coef bias)
+```
+
+The vignette `vignettes/post_processing.Rmd` "Inspecting the
+structure" / "save_mu_method storage MWE" chunks reproduce these
+numbers at vignette build (smaller `p = 150`, T = 64; the same
+shape pattern, smaller absolute sizes).
+
 ## Open follow-ups (not in PR-1)
 
 - **PR-2**: emit hint when `mixture_null_weight = 0` is passed,
