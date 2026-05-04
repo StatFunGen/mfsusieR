@@ -296,13 +296,17 @@ trade-offs:
 The two 1D modes drop the per-variant axis the SER step needs,
 so they are not valid as `model_init` checkpoints. To get both
 a small distribution copy and a warm-start checkpoint, fit
-once in `"complete"` and use `mf_thin()`:
+once in `"complete"` and use `mf_thin()`. The `saveRDS` calls
+below write to a temp directory so the vignette does not leave
+files in the working directory.
 
-```{r save-mu-method-thin, eval = FALSE}
-fit_full <- mfsusie(X, Y)                          # complete, warm-start ready
+```{r save-mu-method-thin}
+checkpoint_path   <- tempfile("mfsusie_checkpoint_",   fileext = ".rds")
+distribution_path <- tempfile("mfsusie_distribution_", fileext = ".rds")
+fit_full <- fit                                      # complete, warm-start ready
 fit_thin <- mf_thin(fit_full, method = "alpha_collapsed")
-saveRDS(fit_full, "checkpoint.rds")                 # for resuming a fit
-saveRDS(fit_thin, "for_distribution.rds")           # ~factor p smaller
+saveRDS(fit_full, checkpoint_path)                   # for resuming a fit
+saveRDS(fit_thin, distribution_path)                 # ~factor p smaller
 ```
 
 `coef(fit_thin)` and `mf_post_smooth(fit_thin, method = ...)`
@@ -314,36 +318,102 @@ return the same numbers as `coef(fit_full)` and
 ### Inspecting the structure
 
 To see the three storage shapes side by side, fit the same data
-under each mode and `str()` the per-(effect, outcome) slot. The
-example below uses the small `(p, T_m)` of the running fit so the
-output is short; the same pattern holds at any scale.
+under each mode and look at the per-(effect, outcome) slot.
 
-```{r save-mu-method-str, eval = FALSE}
-fit_complete <- mfsusie(X, Y, save_mu_method = "complete")
-fit_alpha    <- mfsusie(X, Y, save_mu_method = "alpha_collapsed")
-fit_lead     <- mfsusie(X, Y, save_mu_method = "lead")
+```{r save-mu-method-build, message = FALSE, warning = FALSE}
+fit_complete <- fsusie(Y, X, pos = positions, save_mu_method = "complete")
+fit_alpha    <- fsusie(Y, X, pos = positions, save_mu_method = "alpha_collapsed")
+fit_lead     <- fsusie(Y, X, pos = positions, save_mu_method = "lead")
 
 # "complete": fit$mu[[l]][[m]] is p x T_basis[m]. fit$top_index
 # and fit$coef_wavelet are absent.
 str(fit_complete$mu[[1]][[1]])
-#  num [1:p, 1:T_basis[m]] ...
 
 # "alpha_collapsed": fit$mu[[l]][[m]] and fit$mu2[[l]][[m]] are
 # 1 x T_basis[m] (= alpha %*% mu_full / mu2_full). fit$coef_wavelet
 # carries the raw-X coef summary 1 x T_basis[m].
-str(fit_alpha$mu[[1]][[1]])             # num [1, 1:T_basis[m]] ...
-str(fit_alpha$coef_wavelet[[1]][[1]])   # num [1, 1:T_basis[m]] ...
+str(fit_alpha$mu[[1]][[1]])
+str(fit_alpha$coef_wavelet[[1]][[1]])
 
 # "lead": fit$mu[[l]][[m]] is the lead row mu_full[j*, ];
 # fit$top_index[l] = j* = which.max(alpha[l, ]).
-str(fit_lead$mu[[1]][[1]])              # num [1, 1:T_basis[m]] ...
-fit_lead$top_index                      # int [1:L]
+str(fit_lead$mu[[1]][[1]])
+fit_lead$top_index
 ```
 
 The `attr(fit, "save_mu_method")` attribute records which mode
 generated the object so downstream code (`coef.mfsusie`,
 `mf_post_smooth`, the `model_init` guard, `mf_thin`) can dispatch
 without re-inferring from shape.
+
+```{r save-mu-method-attrs}
+sapply(list(complete        = fit_complete,
+            alpha_collapsed = fit_alpha,
+            lead            = fit_lead),
+       function(f) attr(f, "save_mu_method"))
+```
+
+The storage-size payoff is tangible: `object.size()` and the
+on-disk `.rds` size both shrink by roughly factor `p` (modulo
+the constant overhead from `alpha`, `lbf_variable`, `fitted`,
+etc., which are unchanged across modes).
+
+```{r save-mu-method-sizes}
+ac_path <- tempfile("mfsusieR_alpha_collapsed_", fileext = ".rds")
+ld_path <- tempfile("mfsusieR_lead_",            fileext = ".rds")
+co_path <- tempfile("mfsusieR_complete_",        fileext = ".rds")
+saveRDS(fit_complete, co_path)
+saveRDS(fit_alpha,    ac_path)
+saveRDS(fit_lead,     ld_path)
+
+size_table <- data.frame(
+  mode        = c("complete", "alpha_collapsed", "lead"),
+  object_mb   = c(object.size(fit_complete),
+                  object.size(fit_alpha),
+                  object.size(fit_lead)) / (1024 * 1024),
+  rds_kb      = c(file.size(co_path),
+                  file.size(ac_path),
+                  file.size(ld_path)) / 1024,
+  has_top_index   = c(FALSE,
+                      !is.null(fit_alpha$top_index),
+                      !is.null(fit_lead$top_index)),
+  has_coef_wavelet = c(FALSE,
+                       !is.null(fit_alpha$coef_wavelet),
+                       !is.null(fit_lead$coef_wavelet))
+)
+size_table
+```
+
+The `coef()` outputs match exactly between `"complete"` and
+`"alpha_collapsed"` (lossless for the coef path); `"lead"`
+diverges by the cheap-coef bias.
+
+```{r save-mu-method-coef-equiv}
+max_abs_diff_alpha <- max(abs(coef(fit_complete)[[1]] - coef(fit_alpha)[[1]]))
+max_abs_diff_lead  <- max(abs(coef(fit_complete)[[1]] - coef(fit_lead)[[1]]))
+c(complete_vs_alpha_collapsed = max_abs_diff_alpha,
+  complete_vs_lead            = max_abs_diff_lead)
+```
+
+The shrink ratio in the table above (~2x in-memory, ~1.85x on-disk
+at the vignette's `p = 150`) is small only because the constant
+overhead of the non-mu fields (`alpha`, `lbf_variable`, `fitted`,
+`dwt_meta`, ...) dominates at this scale. At realistic
+fine-mapping `p = 500-3000` the ratio approaches the theoretical
+factor `p`. For example a separate p = 500 / T = 64 / M = 2 / L = 5
+fixture saved at 7.8 MB under `"complete"` and 0.50 MB under
+`"alpha_collapsed"` (15.7x in-memory, 12.9x on disk).
+
+The `coef()` zero-difference between `"complete"` and `"lead"` on
+this fixture is also a small-`p` artifact: every credible set
+collapses onto a single lead variable with purity ~1 here, so
+`mu[j*, ]` equals `alpha %*% mu_full` to floating-point precision.
+On a CS with multiple high-alpha members the `"lead"` mode does
+diverge from `"complete"` (the cheap-coef bias the docstring
+warns about); see the
+`inst/notes/sessions/2026-05-03-2314-per-scale-normal-baseline-results.md`
+benchmark, where the same comparison at p = 500 gives
+`max abs diff = 0.108`.
 
 ### Per-CS lfsr bubble grid
 
