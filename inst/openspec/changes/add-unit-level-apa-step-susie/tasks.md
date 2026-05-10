@@ -117,50 +117,66 @@
       matching the number of outcomes; allow zero weights.
 - [ ] 4.4 Add tests against manual weighted logBF sums.
 
-## 5. L0 initialization module
+## 5. Initialization module
 
-- [ ] 5.1 Add `R/apa_l0_init.R` with `apa_l0learn_init()` and
-      `apa_init_from_step_coef()`.
-- [ ] 5.2 Add wrapper controls `init_method = c("default",
-      "l0learn", "none")` and `l0_control = list()`.
-- [ ] 5.3 In `apa_l0learn_init()`, check that `L0Learn` is installed;
+- [ ] 5.1 Add `R/apa_init.R` with `apa_marginal_init()`,
+      `apa_l0learn_init()`, and `apa_init_from_step_coef()`.
+- [ ] 5.2 Add wrapper controls `init_method = c("marginal",
+      "none", "l0learn")` and `l0_control = list()`. The default
+      must be `"marginal"`.
+- [ ] 5.3 Implement `apa_marginal_init()` using matrix-free marginal
+      step statistics from `apa_step_Xtr()` and `apa_step_colnorm()`;
+      do not create a dense or sparse explicit step matrix.
+- [ ] 5.4 Pool default marginal support across units using a
+      documented positive-evidence score such as
+      `score_t = sum_i unit_weights[i] * logBF_it^+`, retain at most
+      `min(L, max_nonzero, T)` candidates, and build a
+      SuSiE-compatible one-hot initialization.
+- [ ] 5.5 Under the default upstream-positive model, initialize
+      unit-specific starting effects from positive marginal
+      estimates and use zero for non-positive marginal evidence.
+- [ ] 5.6 In `apa_l0learn_init()`, check that `L0Learn` is installed;
       otherwise return `NULL` with a diagnostic and let the wrapper
-      use standard initialization.
-- [ ] 5.4 Guard explicit sparse step-matrix construction with
-      `max_explicit_entries`; do not create `S` for large genes.
-- [ ] 5.5 For each analysis unit `i`, run
+      use marginal initialization.
+- [ ] 5.7 Guard optional explicit sparse step-matrix construction with
+      `max_explicit_entries`; do not create `S` except for
+      `init_method = "l0learn"`.
+- [ ] 5.8 For each analysis unit `i`, when `init_method = "l0learn"`,
+      run
       `L0Learn::L0Learn.cvfit(S_w, y_w, penalty = "L0", ...)`, where
       `y_w = sqrt(w_i) * (Y_i - offset_i)` and
       `S_w = sqrt(w_i) * S` when row weights are supplied; otherwise
       use `Y_i - offset_i` and `S`.
-- [ ] 5.6 Select the lambda rule, initially `cv_min` using
+- [ ] 5.9 Select the lambda rule, initially `cv_min` using
       `which.min(fit$cvMeans[[1]])`, matching the susieR vignette.
-- [ ] 5.7 Extract coefficients, remove the intercept, and map nonzero
+- [ ] 5.10 Extract coefficients, remove the intercept, and map nonzero
       coefficients to candidate PAS indices.
-- [ ] 5.8 Under the default upstream-positive model, discard or
-      non-positive coefficients; do not truncate them to positive
+- [ ] 5.11 Under the default upstream-positive model, discard
+      non-positive L0 coefficients; do not truncate them to positive
       values by default.
-- [ ] 5.9 Combine selected candidates across units by weighted support,
+- [ ] 5.12 Combine L0-selected candidates across units by weighted support,
       `score_t = sum_i unit_weights[i] * max(beta_hat_it, 0)^2`, and
       keep at most `min(L, max_nonzero, T)` candidates.
-- [ ] 5.10 Create a SuSiE-compatible initialization with one-hot
+- [ ] 5.13 Create a SuSiE-compatible initialization with one-hot
       `alpha[l, t_l] = 1` and mfsusieR-shaped unit-specific starting
       effects: `mu[[l]][[i]][t_l, 1] = beta_init[i, l]` and
       `mu2[[l]][[i]][t_l, 1] = beta_init[i, l]^2`.
-- [ ] 5.11 For selected candidates missing in a unit, fill starting
+- [ ] 5.14 For selected L0 candidates missing in a unit, fill starting
       effects using the positive marginal WLS estimate at that
       candidate, or zero if no positive evidence exists.
-- [ ] 5.12 Store initialization metadata on the fit: selected
-      candidates, scores, lambda rule, package availability, fallback
-      reason, and explicit-matrix size.
-- [ ] 5.13 Add tests for successful initialization, no-`L0Learn`
-      fallback, threshold fallback, positive filtering, and `L` cap.
-- [ ] 5.14 Validate the warm-start object before fitting: finite
+- [ ] 5.15 Store initialization metadata on the fit: method used,
+      selected candidates, scores, optional lambda rule, package
+      availability, fallback reason, and explicit-matrix size when
+      relevant.
+- [ ] 5.16 Add tests for marginal initialization, no explicit-matrix
+      use in the marginal path, positive filtering, `L` cap,
+      optional no-`L0Learn` fallback, and optional threshold fallback.
+- [ ] 5.17 Validate the warm-start object before fitting: finite
       `alpha`, `mu`, `mu2`, non-negative `V` if present, normalized
       alpha rows, dimensions matching `L`, `T`, and the number of
       analysis units, and no negative starting `beta` under the
       upstream-positive model.
-- [ ] 5.15 If a MAD residual-variance warm start is implemented,
+- [ ] 5.18 If a MAD residual-variance warm start is implemented,
       mirror `susie_trendfilter()` behavior: skip it when
       `model_init` is supplied, apply it per analysis unit to
       `Y_i - offset_i`, and fall back cleanly when the estimate is
@@ -189,10 +205,13 @@
       into the existing SuSiE variable-selection prior path.
 - [ ] 6.7 Pass `unit_weights` through the weighted cross-unit
       combiner.
-- [ ] 6.8 If requested, call `apa_l0learn_init()` before the IBSS fit
-      and pass its result as `model_init`; fall back cleanly when it
-      returns `NULL`.
-- [ ] 6.9 Treat `Y` as a working coverage outcome; accept `offset`,
+- [ ] 6.8 Unless `init_method = "none"` or a user-supplied
+      `model_init` is provided, call `apa_marginal_init()` before the
+      IBSS fit and pass its result as `model_init`.
+- [ ] 6.9 If `init_method = "l0learn"` is explicitly requested, call
+      `apa_l0learn_init()` before the IBSS fit; if it returns `NULL`,
+      fall back cleanly to `apa_marginal_init()` with diagnostics.
+- [ ] 6.10 Treat `Y` as a working coverage outcome; accept `offset`,
       `weights`, and already-corrected coverage, but do not implement
       a built-in library-size, GC-bias, or 5'/3' bias correction
       pipeline in this change.
@@ -299,22 +318,26 @@
       direction on a two-unit toy example.
 - [ ] 10.4 Verify default fitting path does not call
       `apa_step_explicit()`.
-- [ ] 10.5 Verify `init_method = "l0learn"` improves or matches the
-      default initialization on a simple simulated breakpoint example
-      without changing final output shape.
-- [ ] 10.6 Verify increasing `prior_strength` increases prior odds for
+- [ ] 10.5 Verify marginal initialization selects plausible
+      positive candidates on a simple simulated breakpoint example
+      without calling `apa_step_explicit()`.
+- [ ] 10.6 Verify `init_method = "l0learn"` is optional, preserves
+      final output shape when available, and falls back to marginal
+      initialization when unavailable or above the explicit-matrix
+      threshold.
+- [ ] 10.7 Verify increasing `prior_strength` increases prior odds for
       higher-scored candidates while `prior_floor` preserves positive
       probability for all candidates.
-- [ ] 10.7 Verify `apa_phenotype()` exports mixed-model compatible
+- [ ] 10.8 Verify `apa_phenotype()` exports mixed-model compatible
       uncertainty summaries without running any association model.
-- [ ] 10.8 Verify `apa_prescan()` output can be passed to
+- [ ] 10.9 Verify `apa_prescan()` output can be passed to
       `apa_susie()` as the candidate set on a simulated multi-PAS
       gene.
-- [ ] 10.9 Simulate a no-signal gene and verify the model does not
+- [ ] 10.10 Simulate a no-signal gene and verify the model does not
       report a confident APA phenotype without evidence.
-- [ ] 10.10 Simulate duplicated or overlapping analysis units and
+- [ ] 10.11 Simulate duplicated or overlapping analysis units and
       verify downweighting duplicates reduces overconfident PIPs.
-- [ ] 10.11 Simulate broad positional bias with a supplied offset and
+- [ ] 10.12 Simulate broad positional bias with a supplied offset and
       verify false scan peaks are reduced while a true sharp
       breakpoint remains detectable.
 
@@ -328,6 +351,10 @@
       design is created in the default fit path.
 - [ ] 11.4 Add a pre-scan performance smoke test showing dense
       `R = J` scanning uses prefix sums and scales like `O(n * J)`.
+- [ ] 11.5 Record fit dimensions, IBSS iteration count, initializer
+      used, explicit-matrix use, and fallback diagnostics so users can
+      evaluate empirical scaling on their data. Do not impose fixed
+      hard size limits in the default matrix-free fitting path.
 
 ## 11A. Code-generation and output-quality checks
 
@@ -340,9 +367,10 @@
       required fields, dimensions, usage row sums for informative
       units, missing flags for low-information units, and finite
       uncertainty summaries.
-- [ ] 11A.4 Ensure optional dependencies (`L0Learn`) are
-      guarded by `requireNamespace()` and tested through skip/fallback
-      paths.
+- [ ] 11A.4 Ensure optional dependencies (`L0Learn`) are guarded by
+      `requireNamespace()` and tested through skip/fallback paths;
+      the default marginal path must work without optional
+      dependencies.
 - [ ] 11A.5 Keep APA code in APA-specific files except for minimal
       S3 registration, `NAMESPACE`, `DESCRIPTION`, and documentation
       edits.

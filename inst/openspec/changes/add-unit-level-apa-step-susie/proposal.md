@@ -30,7 +30,7 @@ Add an additive APA module under separate files:
 - `R/apa_prior_annotation.R`
 - `R/apa_prior_positive.R`
 - `R/apa_cross_unit.R`
-- `R/apa_l0_init.R`
+- `R/apa_init.R`
 - `R/apa_phenotype.R`
 - `R/apa_mfsusie.R`
 
@@ -230,16 +230,33 @@ For a downstream-step orientation, the wrapper may internally sign-flip
 the marginal estimates and use the same positive-prior functions. The
 annotation prior remains sign-free.
 
-### L0 initialization module
+### Initialization module
 
-`R/apa_l0_init.R` provides an optional warm start, following susieR's
-`L0Learn` initialization pattern. This module does not define the
-posterior target. It only provides `model_init` for the main APA
-step-SuSiE fit.
+`R/apa_init.R` provides warm starts for the main APA step-SuSiE fit.
+This module does not define the posterior target. The default
+initializer is a cheap marginal positive initializer using the same
+matrix-free step statistics as the model. `L0Learn` is an optional
+initializer only when explicitly requested.
 
-The implementation should fit an L0-regularized regression on the same
-step-basis predictors, extract nonzero candidate PAS coefficients, and
-convert them to a SuSiE-style initialization:
+The default initializer computes positive marginal evidence for each
+candidate and analysis unit, pools that evidence across units, and
+converts the strongest candidates to a SuSiE-style initialization:
+
+```text
+apa_marginal_init(Y, basis, L, unit_weights = NULL,
+                  weights = NULL, offset = NULL, max_nonzero = L, ...)
+```
+
+For each candidate `t` and unit `i`, compute the weighted marginal
+step estimate `bhat_it` and sampling variance `shat2_it`. Under the
+default upstream-positive parameterization, candidates with no
+positive marginal evidence are not used for positive starts. Pool
+candidate support across units, for example with
+`score_t = sum_i unit_weights[i] * logBF_it^+`, keep at most
+`min(L, max_nonzero, T)` candidates, and initialize one effect per
+retained candidate.
+
+The optional L0 initializer follows susieR's `L0Learn` pattern:
 
 ```text
 apa_l0learn_init(Y, basis, L, unit_weights = NULL,
@@ -265,7 +282,7 @@ candidate, or zero if there is no positive marginal evidence.
 If `L0Learn` is not installed, the sparse explicit matrix would exceed
 the safety threshold, no positive candidate is selected, or the
 L0Learn fit fails, the wrapper must fall back to the standard
-initialization with a clear diagnostic.
+matrix-free marginal initialization with a clear diagnostic.
 
 ### Cross-unit sharing module
 
