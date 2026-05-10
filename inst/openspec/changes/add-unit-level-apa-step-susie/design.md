@@ -29,9 +29,10 @@
   produced by an optional high-recall `apa_prescan()` function. The
   pre-scan is an input-variable screening step, not final APA
   inference and not a strong coverage-derived prior.
-- **Initialization**: optional `L0Learn` initialization may warm-start
-  the IBSS fit. It must not change the posterior target and must have
-  a safe fallback.
+- **Initialization**: the default warm start is a matrix-free
+  marginal positive initializer. Optional `L0Learn` initialization is
+  off by default, only runs when explicitly requested, must not change
+  the posterior target, and must have a safe fallback.
 - **Efficiency**: the default fit must use cumulative-sum step
   operators. Dense explicit `J x T` matrices are allowed only for
   tests, debugging, and bounded-size optional initialization.
@@ -96,8 +97,8 @@ source-level patterns.
 6. **Coefficient-based initialization**:
    `susieR/R/susie_get_functions.R::susie_init_coef()` builds a
    one-hot `alpha`, `mu`, and `mu2` object from selected coefficient
-   indices. APA's L0 initializer should mirror that shape after
-   adapting it to mfsusieR's list-of-list posterior moments:
+   indices. APA's marginal and optional L0 initializers should mirror
+   that shape after adapting it to mfsusieR's list-of-list posterior moments:
    `alpha[l, t_l] = 1`, `mu[[l]][[i]][t_l, 1] = beta_init[i,l]`,
    and `mu2[[l]][[i]][t_l, 1] = beta_init[i,l]^2`.
 7. **Model-init plumbing**:
@@ -109,14 +110,15 @@ source-level patterns.
    `expand_model_init_to_L()` path in `R/ibss_methods.R`; APA should
    reuse that path and add only shape checks specific to candidate
    locations and per-unit positive effects.
-8. **L0Learn initialization vignette**:
+8. **Optional L0Learn initialization vignette**:
    `susieR/vignettes/l0_initialization.Rmd` uses
    `L0Learn::L0Learn.cvfit(X, y, penalty = "L0")`, chooses
    `which.min(fit$cvMeans[[1]])`, extracts nonzero coefficients
    after removing the intercept, and converts them with
-   `susie_init_coef()`. APA should follow this sequence on the
-   explicit sparse step matrix only under the configured size
-   threshold, then combine selected candidates across analysis units.
+   `susie_init_coef()`. APA should follow this sequence only when
+   `init_method = "l0learn"` is explicitly requested, only on the
+   explicit sparse step matrix under the configured size threshold,
+   and then combine selected candidates across analysis units.
 9. **Posterior normalization**:
    `susieR/R/single_effect_regression.R::apply_ser_lbf()` and
    `susieR/R/susie_utils.R::lbf_stabilization()` /
@@ -522,13 +524,23 @@ the upstream-positive convention, use the same positive-prior
 functions, and convert back only if needed. The default APA phenotype
 uses upstream positive coefficients.
 
-## L0 initialization module
+## Initialization module
 
-File: `R/apa_l0_init.R`.
+File: `R/apa_init.R`.
 
 Required helpers:
 
 ```r
+apa_marginal_init <- function(Y,
+                              basis,
+                              L,
+                              unit_weights = NULL,
+                              weights = NULL,
+                              offset = NULL,
+                              tau2 = NULL,
+                              max_nonzero = L,
+                              ...)
+
 apa_l0learn_init <- function(Y,
                              basis,
                              L,
@@ -545,7 +557,30 @@ apa_init_from_step_coef <- function(candidate_index,
                                     L)
 ```
 
-Detailed behavior:
+Default marginal behavior:
+
+1. Form `ytilde_i = Y_i - offset_i`, with zero offset when none is
+   supplied.
+2. For each analysis unit, compute marginal weighted step estimates
+   and sampling variances for all candidates using `apa_step_Xtr()`
+   and `apa_step_colnorm()`, not a dense step matrix.
+3. Compute a positive-prior marginal score for each unit-candidate
+   pair, such as `logBF_it^+ = apa_halfnormal_lbf(bhat_it,
+   shat2_it, tau2)`.
+4. Pool candidate support across units as
+   `score_t = sum_i unit_weights[i] * logBF_it^+`, with unit weights
+   defaulting to one.
+5. Keep at most `min(L, max_nonzero, T)` candidates by pooled score.
+6. Create a SuSiE initialization with one effect per retained
+   candidate: `alpha[l, t_l] = 1`, with unit-specific starting
+   effects from positive marginal estimates.
+7. For a retained candidate with non-positive marginal evidence in
+   unit `i`, initialize that unit's coefficient at zero.
+8. Return an object accepted by the APA wrapper's `model_init`
+   plumbing, plus metadata recording selected candidates, scores, and
+   the initializer used.
+
+Optional L0Learn behavior:
 
 1. If `L0Learn` is not installed, return `NULL` plus a diagnostic.
 2. If `J * T > max_explicit_entries`, return `NULL` plus a diagnostic.
@@ -578,8 +613,9 @@ Detailed behavior:
     lambda rule, and fallback diagnostics.
 
 This module is allowed to materialize a sparse explicit step matrix
-only for initialization and only under the safety threshold. The main
-fitting loop must remain matrix-free.
+only for optional `init_method = "l0learn"` and only under the safety
+threshold. The default marginal initializer and main fitting loop must
+remain matrix-free.
 
 ## Cross-unit module
 
@@ -626,7 +662,7 @@ apa_susie <- function(Y,
                       orientation = c("upstream", "downstream"),
                       prior_strength = 1,
                       prior_floor = NULL,
-                      init_method = c("default", "l0learn", "none"),
+                      init_method = c("marginal", "none", "l0learn"),
                       l0_control = list(),
                       weights = NULL,
                       offset = NULL,
@@ -654,11 +690,14 @@ Input contract:
   argument; the slab scale is controlled by `tau2`;
 - `prior_strength` and `prior_floor` control how strongly annotation
   affects candidate prior odds while keeping candidates available;
+- `init_method = "marginal"` is the default matrix-free warm start;
 - `init_method = "l0learn"` requests the optional L0 warm start.
 
 The wrapper builds the APA data object, sets `prior_weights`, installs
 the weighted cross-unit combiner, chooses the positive prior path,
-optionally creates `model_init` via `apa_l0learn_init()`, and calls
+creates `model_init` via `apa_marginal_init()` unless
+`init_method = "none"` or a user-supplied `model_init` is provided,
+optionally tries `apa_l0learn_init()` only when requested, and calls
 `susieR::susie_workhorse()`.
 
 ## S3 methods to implement for `mf_apa_individual`
@@ -810,20 +849,24 @@ full wrapper:
    drop candidates.
 5. Annotation strength changes prior odds monotonically while
    preserving a positive prior floor.
-6. L0 initialization recovers valid candidate indices on a simulated
-   breakpoint example, respects `L`, discards negative coefficients
-   under the positive default, and falls back cleanly when `L0Learn`
-   is unavailable or the explicit-matrix threshold is exceeded.
-7. `apa_susie()` recovers simulated shared breakpoints with
+6. Marginal initialization recovers valid candidate indices on a
+   simulated breakpoint example, respects `L`, and does not use a
+   dense step matrix.
+7. Optional L0 initialization recovers valid candidate indices when
+   explicitly requested, respects `L`, discards negative coefficients
+   under the positive default, and falls back cleanly to marginal
+   initialization when `L0Learn` is unavailable or the explicit-matrix
+   threshold is exceeded.
+8. `apa_susie()` recovers simulated shared breakpoints with
    unit-specific positive effects.
-8. `apa_phenotype()` returns normalized usage and expected length
+9. `apa_phenotype()` returns normalized usage and expected length
    with correct dimensions.
-9. `apa_phenotype()` handles zero, one, and multiple cutpoints,
+10. `apa_phenotype()` handles zero, one, and multiple cutpoints,
    validates cutpoint coordinates, and returns one balance column per
    cutpoint.
-10. `apa_phenotype()` exports mixed-model compatible uncertainty fields
+11. `apa_phenotype()` exports mixed-model compatible uncertainty fields
    when requested, without running association tests.
-11. The default fitting path does not call `apa_step_explicit()`; tests
+12. The default fitting path does not call `apa_step_explicit()`; tests
    may monkey-patch or count calls.
 
 ## Simulation validation plan
@@ -874,7 +917,8 @@ modular:
 - do not rewrite the existing DWT path;
 - do not add `L0Learn` to `Imports`; it should be in `Suggests` and
   guarded by `requireNamespace`;
-- keep the core fit working without `L0Learn`;
+- keep the core fit and default marginal initializer working without
+  `L0Learn`;
 - expose diagnostics for every fallback: missing optional package,
   dense-matrix threshold exceeded, failed L0 fit, invalid prior
   weights, and skipped pre-scan positions.
@@ -911,6 +955,14 @@ larger sparse example. Exact wall-clock thresholds may be loose because CI
 is noisy, but the implementation must not materialize dense design
 matrices in the default fit path.
 
+Do not impose fixed hard limits on `n`, `J`, or `T` in the default
+matrix-free fitting path. Instead, record empirical scaling
+diagnostics on the fit object: dimensions, initializer used, IBSS
+iteration count, whether an explicit matrix was created, and fallback
+reasons. Hard safety thresholds are appropriate only for optional
+paths that explicitly build a step matrix, such as
+`init_method = "l0learn"`.
+
 ## Documentation
 
 Add roxygen documentation for all exported helpers and one vignette or
@@ -923,7 +975,7 @@ article stub explaining:
 - annotation priors;
 - strong annotation via prior odds, `prior_strength`, and `prior_floor`;
 - positive effect priors;
-- L0Learn initialization;
+- marginal initialization and optional L0Learn initialization;
 - unit weights;
 - phenotype outputs, including the interpretation of cutpoints;
 - uncertainty exports for downstream mixed models, while making clear

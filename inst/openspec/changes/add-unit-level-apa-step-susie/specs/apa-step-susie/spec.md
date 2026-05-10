@@ -378,11 +378,26 @@ effective unit weights.
 - **WHEN** the weighted combiner is constructed or called
 - **THEN** the implementation SHALL throw an informative error.
 
-### Requirement: L0Learn initialization
+### Requirement: Initialization
 
-The package SHALL provide an optional L0Learn-based warm start for the
-APA step-SuSiE fit. The initializer SHALL NOT change the posterior
-model being optimized.
+The package SHALL provide a matrix-free marginal warm start for the
+APA step-SuSiE fit. Optional L0Learn-based initialization SHALL be
+available only when explicitly requested. No initializer SHALL change
+the posterior model being optimized.
+
+#### Scenario: Default marginal initialization
+
+- **GIVEN** `init_method = "marginal"` or the default wrapper call
+- **WHEN** `apa_susie()` initializes the fit
+- **THEN** it SHALL compute marginal positive step estimates and
+  sampling variances using `apa_step_Xtr()` and
+  `apa_step_colnorm()`
+- **AND** it SHALL pool candidate support across analysis units using
+  documented unit weights
+- **AND** it SHALL convert at most `L` retained candidates into a
+  SuSiE-compatible `model_init`
+- **AND** it SHALL NOT call `apa_step_explicit()` or construct a
+  dense or sparse explicit step matrix.
 
 #### Scenario: Successful L0Learn initialization
 
@@ -416,7 +431,7 @@ model being optimized.
 #### Scenario: Positive initialization under upstream model
 
 - **GIVEN** the default upstream-positive parameterization
-- **AND** L0Learn returns a non-positive coefficient for a candidate
+- **AND** an initializer returns a non-positive coefficient for a candidate
 - **WHEN** the initializer builds retained candidates
 - **THEN** the initializer SHALL discard the non-positive coefficient
 - **AND** SHALL NOT initialize a positive effect with a negative
@@ -439,10 +454,13 @@ model being optimized.
 #### Scenario: Candidate union across units
 
 - **GIVEN** different analysis units select different candidates in
-  their L0 fits
+  their marginal or optional L0 initializers
 - **WHEN** the initializer combines them
-- **THEN** it SHALL rank the union of candidates by
-  `score_t = sum_i unit_weights[i] * max(beta_hat_it, 0)^2`
+- **THEN** it SHALL rank the union of candidates by a documented
+  positive-evidence score, such as
+  `sum_i unit_weights[i] * logBF_it^+` for marginal initialization
+  or `sum_i unit_weights[i] * max(beta_hat_it, 0)^2` for L0
+  initialization
 - **AND** retain at most `min(L, max_nonzero, T)` candidates.
 
 #### Scenario: L0Learn fallback
@@ -451,7 +469,7 @@ model being optimized.
 - **AND** `L0Learn` is unavailable, the explicit matrix threshold is
   exceeded, the fit fails, or no valid positive candidate is selected
 - **WHEN** `apa_susie()` initializes the fit
-- **THEN** it SHALL fall back to standard initialization
+- **THEN** it SHALL fall back to marginal initialization
 - **AND** record an informative diagnostic on the fit object.
 
 ### Requirement: APA data subclass
@@ -462,7 +480,8 @@ APA-specific computations.
 
 #### Scenario: No dense design in default path
 
-- **GIVEN** a normal call to `apa_susie()` with default initialization
+- **GIVEN** a normal call to `apa_susie()` with default marginal
+  initialization
 - **WHEN** the model is fit
 - **THEN** dense `J x T` step design construction SHALL NOT be used
   by the fitting loop.
@@ -562,6 +581,20 @@ operations.
 - **THEN** the intended cost SHALL be `O(n * (J + T))`
 - **AND** SHALL NOT require `O(n * J * T)` dense multiplication in
   the default path.
+
+#### Scenario: Scaling diagnostics without fixed size limits
+
+- **GIVEN** any fitted APA model
+- **WHEN** the fit object is returned
+- **THEN** it SHALL record fit dimensions such as `n`, `J`, `T`, `L`,
+  the number of IBSS iterations, and whether any explicit step matrix
+  was created
+- **AND** the default matrix-free fitting path SHALL NOT impose fixed
+  hard limits on the number of analysis units, positions, or
+  candidates
+- **AND** fixed safety thresholds SHALL apply only to optional paths
+  that materialize explicit step matrices, such as `init_method =
+  "l0learn"`.
 
 ### Requirement: Validation and simulation evidence
 
