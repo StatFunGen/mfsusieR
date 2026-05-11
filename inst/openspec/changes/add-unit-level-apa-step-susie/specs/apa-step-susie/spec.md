@@ -48,6 +48,18 @@ outcome for analysis unit `i` and ordered position `j`.
 - **AND** SHALL NOT require a built-in library-size, GC-bias, or
   5'/3' bias correction pipeline.
 
+#### Scenario: Row precision weights
+
+- **GIVEN** row weights supplied as `NULL`, a length-`J` vector, a
+  `J x n` matrix, or a list of `n` length-`J` vectors
+- **WHEN** `apa_susie()` validates inputs
+- **THEN** it SHALL convert them to one finite non-negative
+  length-`J` weight vector per analysis unit
+- **AND** reject missing, negative, non-finite, or zero-total weights
+  for any unit
+- **AND** document that row weights are precision weights within a
+  unit and are distinct from cross-unit evidence weights.
+
 #### Scenario: No explicit intercept in IBSS
 
 - **GIVEN** working coverage `Y`, optional `offset`, and optional row
@@ -60,6 +72,14 @@ outcome for analysis unit `i` and ordered position `j`.
   predictors
 - **AND** SHALL NOT add an explicit intercept column or baseline
   candidate to the IBSS variable set.
+
+#### Scenario: Fitted coverage reconstruction
+
+- **GIVEN** a fitted APA model with centered fitted step contribution
+- **WHEN** fitted working coverage is requested
+- **THEN** it SHALL reconstruct
+  `offset_i(j) + ybar_i + sum_l sum_t alpha_lt * mu_lit * Sc_it(j)`
+- **AND** SHALL keep the baseline outside the IBSS variable set.
 
 ### Requirement: Step-basis transform module
 
@@ -321,6 +341,26 @@ annotations or user-supplied scores.
   called
 - **THEN** the result SHALL be strictly positive and sum to one.
 
+#### Scenario: Annotation coefficients omitted
+
+- **GIVEN** `coefficients = NULL`
+- **AND** an annotation feature table without a numeric column named
+  `score`
+- **WHEN** `apa_prior_from_annotations(features, coefficients = NULL)`
+  is called
+- **THEN** the helper SHALL throw an informative error
+- **AND** SHALL NOT invent feature weights.
+
+#### Scenario: Annotation fixed linear score
+
+- **GIVEN** annotation features and supplied coefficients
+- **WHEN** `apa_prior_from_annotations(features, coefficients)` is
+  called
+- **THEN** coefficients SHALL either be named to match feature columns
+  or have length equal to the number of feature columns
+- **AND** the score SHALL be computed as
+  `intercept + features %*% coefficients`.
+
 #### Scenario: No trained annotation prediction model
 
 - **GIVEN** annotation features for candidates
@@ -478,15 +518,25 @@ the posterior model being optimized.
 - **AND** `L0Learn` is installed
 - **AND** the explicit sparse step matrix is below the configured
   safety threshold
+- **AND** row weights are absent or constant within every analysis
+  unit
 - **WHEN** `apa_susie()` initializes the fit
-- **THEN** it SHALL run `L0Learn::L0Learn.cvfit(S_w, y_w,
-  penalty = "L0", ...)` for each analysis unit, where
-  `y_w = sqrt(w_i) * (Y_i - offset_i)` and
-  `S_w = sqrt(w_i) * S` when row weights are supplied, and otherwise
-  `y_w = Y_i - offset_i` and `S_w = S`
+- **THEN** it SHALL run `L0Learn::L0Learn.cvfit(S, ytilde_i,
+  penalty = "L0", ...)` for each analysis unit
+- **AND** rely on L0Learn's intercept and remove that intercept after
+  fitting
 - **AND** select candidate PAS with nonzero coefficients
 - **AND** convert at most `L` retained candidates into a
   SuSiE-compatible `model_init`.
+
+#### Scenario: L0Learn non-constant row-weight fallback
+
+- **GIVEN** `init_method = "l0learn"`
+- **AND** row weights are non-constant within at least one analysis
+  unit
+- **WHEN** `apa_susie()` initializes the fit
+- **THEN** it SHALL skip L0Learn initialization
+- **AND** fall back to marginal initialization with a diagnostic.
 
 #### Scenario: SuSiE-shaped warm start
 
@@ -565,6 +615,30 @@ the posterior model being optimized.
   when the MAD estimate is zero or non-finite
 - **AND** use a positive floor with diagnostics when neither estimate
   is available.
+
+#### Scenario: Residual variance update
+
+- **GIVEN** `estimate_residual_variance = TRUE`
+- **WHEN** `update_model_variance.mf_apa_individual()` is called
+- **THEN** it SHALL update each unit's residual variance as
+  `max(sigma2_floor_i, ERSS_i / sum_j w_ij)`
+- **AND** `ERSS_i` SHALL be the weighted expected squared residual
+  including posterior second-moment terms
+- **AND** it SHALL NOT use only the squared posterior mean residual
+- **AND** it SHALL leave the fixed slab scale `tau2` unchanged.
+
+#### Scenario: Candidate validation and L cap
+
+- **GIVEN** candidate validation leaves `T` informative candidates
+- **WHEN** `apa_susie()` prepares the model
+- **THEN** it SHALL set the effective number of effects to
+  `min(L, T)` and record any adjustment in diagnostics.
+
+#### Scenario: No informative candidates
+
+- **GIVEN** no candidate maps to an informative step after validation
+- **WHEN** `apa_susie()` prepares the model
+- **THEN** it SHALL stop before IBSS with an informative error.
 
 #### Scenario: Candidate union across units
 
@@ -645,6 +719,16 @@ step-basis effects into unit-level APA summaries.
 - **AND** SHALL NOT materialize dense `S` or require correlation
   purity filtering by default.
 
+#### Scenario: Credible-set diffuseness diagnostics
+
+- **GIVEN** default credible sets are constructed
+- **WHEN** credible-set diagnostics are returned
+- **THEN** each credible set SHALL include size, `cs_fraction = size/T`,
+  claimed coverage, and `cs_is_diffuse`
+- **AND** the default diffuse rule SHALL be `cs_fraction > 0.5`
+- **AND** diffuse credible sets SHALL be reported but SHALL NOT be
+  treated as confident breakpoint calls.
+
 #### Scenario: Optional bounded purity filtering
 
 - **GIVEN** a user explicitly requests credible-set purity filtering
@@ -660,7 +744,22 @@ step-basis effects into unit-level APA summaries.
 - **WHEN** `apa_phenotype(fit, type = "usage")` is called
 - **THEN** it SHALL return a unit-by-candidate usage matrix
 - **AND** each informative unit's usage SHALL sum to one within
-  numerical tolerance.
+  numerical tolerance
+- **AND** usage SHALL be normalized only over modeled step-derived
+  candidate contributions
+- **AND** the centered baseline/intercept component SHALL NOT be
+  included as a distal PAS or in the usage denominator.
+
+#### Scenario: Usage reportability
+
+- **GIVEN** a fitted APA model
+- **WHEN** `apa_phenotype()` returns usage
+- **THEN** it SHALL include a unit-level `usage_reportable` flag
+- **AND** the default rule SHALL require usage denominator at least
+  `eps`, `max(candidate_pip) >= 0.5`, and at least one non-diffuse
+  credible set
+- **AND** non-reportable usage SHALL be returned as missing or flagged
+  according to the documented output contract.
 
 #### Scenario: Expected length
 
@@ -668,7 +767,9 @@ step-basis effects into unit-level APA summaries.
 - **AND** candidate usage estimates
 - **WHEN** expected length is requested
 - **THEN** the helper SHALL return `sum_t usage_it * coordinate_t`
-  for each analysis unit.
+  for each analysis unit with reportable usage
+- **AND** expected length SHALL be missing with diagnostics for
+  non-reportable units.
 
 #### Scenario: Cutpoints are optional reporting boundaries
 
@@ -777,12 +878,49 @@ its candidate-screening path.
   explicit weighted least-squares regression containing an intercept
 - **THEN** `bhat` and `shat2` SHALL match within numerical tolerance.
 
+#### Scenario: Row-weight validation tests
+
+- **GIVEN** row precision weights supplied as `NULL`, a length-`J`
+  vector, a `J x n` matrix, or a list of `n` length-`J` vectors
+- **WHEN** the APA wrapper validates input
+- **THEN** all valid shapes SHALL be converted to the internal
+  per-unit representation
+- **AND** missing, negative, non-finite, or zero-total weights for any
+  analysis unit SHALL raise informative errors.
+
 #### Scenario: Half-normal numerical tests
 
 - **GIVEN** small finite values of `bhat`, `shat2`, and `tau2`
 - **WHEN** half-normal logBFs and moments are computed
 - **THEN** they SHALL match numerical integration within documented
   tolerance.
+
+#### Scenario: Residual-variance update tests
+
+- **GIVEN** a small weighted APA fit with fixed posterior
+  responsibilities and moments
+- **WHEN** residual variance is updated
+- **THEN** the implementation SHALL match an explicit weighted ERSS
+  calculation that includes posterior second-moment terms
+- **AND** SHALL apply the documented per-unit variance floor.
+
+#### Scenario: Candidate validation tests
+
+- **GIVEN** more single effects than informative candidate PAS
+- **WHEN** the wrapper validates candidates
+- **THEN** it SHALL reduce `L` to the number of informative candidates
+  and record this diagnostic
+- **AND** if no informative candidate remains, it SHALL stop before
+  IBSS with an informative error.
+
+#### Scenario: Fitted reconstruction tests
+
+- **GIVEN** a small centered APA fit with known offset, stored
+  baseline, and posterior mean step effects
+- **WHEN** fitted working coverage is reconstructed
+- **THEN** the result SHALL equal `offset_i + ybar_i +
+  sum_l sum_t alpha_lt * mu_lit * Sc_it`
+- **AND** the baseline SHALL remain outside the IBSS variable set.
 
 #### Scenario: No-signal simulation
 
@@ -792,6 +930,16 @@ its candidate-screening path.
   under the documented default thresholds
 - **AND** low-information usage SHALL be flagged rather than reported
   as an over-precise phenotype.
+
+#### Scenario: Phenotype reportability tests
+
+- **GIVEN** fitted models with low maximum PIP, diffuse credible sets,
+  or too little modeled step-derived abundance
+- **WHEN** `apa_phenotype()` reports usage
+- **THEN** `usage_reportable` SHALL be `FALSE`
+- **AND** expected length SHALL be missing for non-reportable units
+- **AND** the centered baseline/intercept SHALL NOT be included in the
+  usage denominator.
 
 #### Scenario: Shared-breakpoint simulation
 
@@ -819,6 +967,15 @@ its candidate-screening path.
   explicit `J x T` design
 - **AND** optional dense construction SHALL be allowed only in tests,
   debugging, or bounded-size L0 initialization.
+
+#### Scenario: Optional L0Learn fallback tests
+
+- **GIVEN** `init_method = "l0learn"` and at least one analysis unit
+  has non-constant row precision weights
+- **WHEN** initialization is requested
+- **THEN** the implementation SHALL skip L0Learn
+- **AND** SHALL fall back to matrix-free marginal initialization with
+  a diagnostic.
 
 #### Scenario: PIP and credible-set parity tests
 
