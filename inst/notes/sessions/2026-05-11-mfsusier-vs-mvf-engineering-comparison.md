@@ -573,7 +573,65 @@ derivation. D3 is a derivation error in mvf that does not affect PIP convergence
 
 ---
 
-## §21. Next session
+## §21. Summary
+
+### Differences with clear right/wrong
+
+**1. ER2 bias correction — mvf bug (D1)**
+mvf's `get_ER2.multfsusie` is missing the `xtx_diag` factor in the bias
+correction term. sigma2 is underestimated by 1.5-2x, making log-BF values
+larger and inflating CS counts and FDR in real data. mfsusieR's formula is
+correct.
+
+**2. KL sign — mvf bug (D3)**
+mvf negates both terms in the KL formula (`-loglik_SFR - loglik_SFR_post`
+instead of `loglik_SFR_post - loglik_SFR`). The reported ELBO is inflated by
+O(L·n·T). Because both packages default to PIP convergence rather than ELBO
+convergence, this error has no effect on PIP, CS, or any output the user sees.
+
+### Differences with no right/wrong (design choices)
+
+**3. Bhat/Shat (D2)**
+mfsusieR uses global sigma2 / xtx[j], consistent with the SuSiE variational
+derivation. mvf uses per-variable marginal SE from univariate regression, which
+can give higher power at true signals but breaks variational consistency. Both
+are internally self-consistent choices.
+
+**4. Inner EM loop — mfsusieR only**
+mfsusieR runs up to 6 M-step + alpha update cycles per effect per outer
+iteration (default `max_inner_em_steps = 5`). mvf runs one M-step per effect
+per outer iteration. The inner loop tightens the prior/posterior agreement
+within each outer step at the cost of IBSS ELBO monotonicity (restored at
+iter end). No right or wrong; a precision vs speed trade-off.
+
+**5. M-step warm vs cold start**
+mfsusieR defaults to warm start (initializes mixsqp from the previous
+iteration's pi). mvf always cold-starts (`pi = (0.9, 1e-12, ...)`). Both
+converge; warm start is faster.
+
+**6. max_SNP_EM — mvf approximation**
+mvf limits the M-step input to the top-100 SNPs by log-BF. mfsusieR uses all
+p variables. The top-100 truncation is a computational shortcut; mixture
+weights are estimated from less data. Not a bug, but the approximation becomes
+coarser at large p.
+
+**7. Architecture**
+mfsusieR delegates the IBSS loop entirely to `susieR::susie_workhorse` via S3
+dispatch. mvf owns its own `while` loop and calls all functions directly.
+Neither is wrong; mfsusieR inherits future susieR improvements automatically,
+mvf is fully self-contained.
+
+### One-sentence summary
+
+The only bug with measurable numerical impact is D1 (ER2 bias correction in
+mvf), which deflates sigma2 and inflates FDR. Everything else is either a
+harmless derivation error (D3, KL sign) or a deliberate design difference
+(Bhat/Shat, inner EM, warm start, max_SNP_EM, architecture) with no clear
+winner.
+
+---
+
+## §22. Next session
 
 - Fix the NA bug in `mf_quantile_normalize` (`R/utils_wavelet.R`), pending user
   approval. Change: add `na.last = "keep"` to `rank()` call.
