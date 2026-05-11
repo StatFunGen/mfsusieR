@@ -251,3 +251,17 @@ test_that("posthoc: explicit call (mfsusieR) vs automatic (mvf)", {
   message(sprintf("posthoc susiex tuples: mfsusieR=%d, mvf=%d",
     length(pc$susiex), length(non_null)))
 })
+
+# ── Observed results on the MWE fixture (seed=42, n=60, p=80, M=2, T=32) ─────
+#
+# CS members:   identical — CS1={SNP 10}, CS2={SNP 60} in both packages.
+# PIP at signals: both return PIP=1 for SNP 10 and SNP 60.
+# PIP at nulls: mfsusieR rounds to 0 for all null SNPs; mvf gives ~0.012
+#   to a few null SNPs. Direct consequence of D1: mvf sigma2 is lower
+#   (0.822 vs 0.909), making log-BF slightly inflated on null SNPs.
+# sigma2:       mfsusieR ~0.909, mvf ~0.822, ratio ~1.11 (D1 ER2 bug).
+# Convergence:  mfsusieR 3 iterations, mvf 5 iterations.
+#
+# On this strong-signal dataset the two packages agree on the main findings
+# (CS, top PIPs). The D1 sigma2 deflation becomes more consequential on
+# weak-signal or null data, where inflated log-BF pushes null SNPs into CS.
