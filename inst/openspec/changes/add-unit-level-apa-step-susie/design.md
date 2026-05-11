@@ -102,7 +102,7 @@ source-level patterns.
    `residual_variance = 0.5 * median(abs(diff(y))/0.6745)^2`, then
    passes that fit as `model_init`. For APA this is optional and
    should be treated only as a warm start. If used, apply it per
-   analysis unit to the working residual `Y_i - offset_i`, skip it when the user
+   analysis unit to centered `Y_i - offset_i`, skip it when the user
    supplies `model_init`, and fall back to variance-based
    initialization when the MAD estimate is zero or non-finite.
 6. **Coefficient-based initialization**:
@@ -577,6 +577,14 @@ implementation should be deliberately simple: support direct
 score from supplied feature columns and supplied coefficients. It must
 not train a genome-wide prediction model or classifier.
 
+If `apa_prior_from_annotations(features, coefficients = NULL)` is
+called, the helper must look for one explicit numeric column named
+`score`. If that column is absent, it must throw an informative error
+rather than inventing feature weights. If `coefficients` are supplied,
+they must have names matching feature columns or length equal to the
+number of feature columns; the score is `intercept + features %*%
+coefficients`.
+
 Implementation notes:
 
 - `prior_strength` multiplies the annotation score before softmax.
@@ -642,6 +650,8 @@ apa_l0learn_init <- function(Y,
                              basis,
                              L,
                              unit_weights = NULL,
+                             weights = NULL,
+                             offset = NULL,
                              positive = TRUE,
                              lambda_choice = c("cv_min", "cv_1se"),
                              max_nonzero = L,
@@ -742,31 +752,35 @@ Optional L0Learn behavior:
 
 1. If `L0Learn` is not installed, return `NULL` plus a diagnostic.
 2. If `J * T > max_explicit_entries`, return `NULL` plus a diagnostic.
-3. Build `S <- apa_step_explicit(basis, sparse = TRUE)`.
-4. For each analysis unit `i`, form `ytilde_i = Y_i - offset_i`,
-   with zero offset when none is supplied. If row weights are present,
-   use the weighted least-squares equivalent
-   `S_w = sqrt(w_i) * S` and `y_w = sqrt(w_i) * ytilde_i`;
-   otherwise use `S` and `ytilde_i`.
-5. Fit `L0Learn::L0Learn.cvfit(S_w, y_w, penalty = "L0", ...)`.
-6. Choose the lambda index using `lambda_choice`. For `cv_min`, use
+3. If row weights are non-constant within any analysis unit, return
+   `NULL` plus a diagnostic and let the wrapper use marginal
+   initialization. This avoids a non-equivalent intercept in the
+   optional L0 path.
+4. Build `S <- apa_step_explicit(basis, sparse = TRUE)`.
+5. For each analysis unit `i`, form `ytilde_i = Y_i - offset_i`,
+   with zero offset when none is supplied. With no row weights or
+   constant row weights, rely on L0Learn's intercept and remove it
+   after fitting; this is equivalent to the centered intercept
+   convention for candidate coefficients.
+6. Fit `L0Learn::L0Learn.cvfit(S, ytilde_i, penalty = "L0", ...)`.
+7. Choose the lambda index using `lambda_choice`. For `cv_min`, use
    `which.min(fit$cvMeans[[1]])`, matching the susieR vignette.
-7. Extract coefficients with `coef(fit$fit, lambda = selected_lambda)`,
+8. Extract coefficients with `coef(fit$fit, lambda = selected_lambda)`,
    remove the intercept, and map nonzero entries to candidate indices.
-8. Under `positive = TRUE`, discard coefficients `<= 0`. Do not
+9. Under `positive = TRUE`, discard coefficients `<= 0`. Do not
    truncate negative coefficients to positive values in the default
    implementation.
-9. Score each candidate across units as
+10. Score each candidate across units as
    `score_t = sum_i unit_weights_norm[i] * max(beta_hat_it, 0)^2`,
    with unit weights defaulting to one and normalized before use.
-10. Keep at most `min(L, max_nonzero, T)` candidates by score.
-11. Create a SuSiE initialization with one effect per retained
+11. Keep at most `min(L, max_nonzero, T)` candidates by score.
+12. Create a SuSiE initialization with one effect per retained
     candidate: `alpha[l, t_l] = 1`. Store unit-specific posterior
     mean starts from the L0 coefficients when available.
-12. For a retained candidate missing in unit `i`, initialize
+13. For a retained candidate missing in unit `i`, initialize
     `beta_it` by the positive marginal WLS estimate at that candidate,
     or zero if the estimate is not positive.
-13. Return an object accepted by the APA wrapper's `model_init`
+14. Return an object accepted by the APA wrapper's `model_init`
     plumbing, plus metadata recording selected candidates, scores,
     lambda rule, and fallback diagnostics.
 
@@ -849,11 +863,21 @@ Input contract:
 - `candidates` are positions or integer indices mappable to `pos`;
   they may be user-supplied directly or taken from
   `apa_prescan(...)$candidates`;
+- if no candidate maps to an informative step after validation, the
+  wrapper must stop with an informative error before calling IBSS;
+- if `L > T`, the wrapper uses `L = T` after candidate validation and
+  records this adjustment in diagnostics;
 - `prior_weights` overrides annotation-derived weights when supplied;
 - `annotations` is optional and must have one row per candidate;
 - `unit_weights` is optional and length `n`; if supplied, it is
   normalized to positive mean one before being used in shared
   log-BF combination or initialization scores;
+- `weights` are optional row precision weights. They may be `NULL`, a
+  length-`J` vector recycled across units, a `J x n` matrix, or a
+  list of `n` length-`J` vectors. They must be finite and
+  non-negative; each analysis unit must have positive total row
+  weight. Missing weights are invalid. These weights are distinct from
+  `unit_weights`, which combine cross-unit evidence;
 - `tau2` is scalar and positive; if `NULL`, initialize from marginal
   step estimates;
 - `residual_variance` is optional and initializes per-unit residual
@@ -877,6 +901,17 @@ The wrapper must not pass an explicit intercept variable into IBSS.
 It stores weighted response centers and step centers on the APA data
 object and implements all residual, fitted-value, and SER-statistic
 methods using centered quantities.
+
+Fitted coverage on the working-outcome scale is reconstructed as
+
+```text
+fitted_i(j) = offset_i(j) + ybar_i
+              + sum_l sum_t alpha_lt mu_lit Sc_it(j).
+```
+
+Equivalently, this is the posterior mean under the conceptual
+baseline-plus-step model, with the baseline folded into `ybar_i` and
+the centered step contribution.
 
 ## S3 methods to implement for `mf_apa_individual`
 
@@ -957,6 +992,29 @@ and `post_loglik_prior_hook.mf_apa_individual` return the current
 `estimate_residual_variance = TRUE`; that hook is not the slab
 variance update.
 
+For residual-variance updates, row weights are treated as precision
+weights in the working Gaussian likelihood. For analysis unit `i`,
+let
+
+```text
+Fc_i(j) = sum_l sum_t alpha_lt mu_lit Sc_it(j)
+ERSS_i  = sum_j w_ij E[(Yc_i(j) - Fc_i(j))^2].
+```
+
+The expected squared residual must include posterior second-moment
+terms for single effects, analogous to susieR's `get_ER2()`, and must
+not use only the squared posterior mean residual. The first
+implementation updates
+
+```text
+sigma2_i = max(sigma2_floor_i, ERSS_i / sum_j w_ij).
+```
+
+If `estimate_residual_variance = FALSE`, the initialized or
+user-supplied `sigma2_i` remains fixed. The update must refresh any
+cached quantities that depend on `sigma2_i`, while leaving `tau2`
+unchanged.
+
 ## Phenotype module
 
 File: `R/apa_phenotype.R`.
@@ -1001,6 +1059,12 @@ requests purity and the candidate count is below a configured safety
 threshold, the implementation may compute a step-basis `Xcorr` and
 pass it to `susie_get_cs()`.
 
+Credible-set diagnostics must include each CS size, `cs_fraction =
+size / T`, claimed coverage, and a Boolean `cs_is_diffuse`. The
+default diffuse rule is `cs_fraction > 0.5`, unless the user supplies
+a different threshold. Diffuse CSs are reported but are not considered
+confident breakpoint calls.
+
 For candidate `t` in analysis unit `i`,
 
 ```text
@@ -1014,11 +1078,29 @@ effect `l` selecting candidate `t`. Usage is
 U_it = A_it / sum_s A_is.
 ```
 
+This first-version usage is normalized only over modeled step-derived
+candidate contributions. The fitted baseline used for coverage
+reconstruction is not treated as a distal PAS and does not enter
+`sum_s A_is`. Consequently `U_it` is a relative breakpoint/PAS-usage
+phenotype among detected candidate steps, not a complete absolute
+isoform-abundance decomposition.
+
+If `sum_s A_is < eps`, usage for that unit is returned as missing.
+The output must include a unit-level `usage_reportable` flag. The
+default rule is reportable only when the usage denominator is at least
+`eps`, `max(candidate_pip)` is at least `pip_report_threshold`
+defaulting to `0.5`, and at least one non-diffuse credible set is
+present. These thresholds are post-fit reporting diagnostics, not
+model parameters.
+
 Expected length is
 
 ```text
 EL_i = sum_t U_it c_t.
 ```
+
+Expected length is returned only for units with reportable usage;
+otherwise it is missing with the same diagnostic.
 
 Balance for cutpoint `r`:
 

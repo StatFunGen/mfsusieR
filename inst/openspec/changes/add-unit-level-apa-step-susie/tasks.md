@@ -110,6 +110,11 @@
       direct `prior_weights`, direct numeric `scores`, or a supplied
       small linear score from feature columns; do not train a
       genome-wide prediction model or classifier.
+- [ ] 2.10 If `apa_prior_from_annotations()` is called with
+      `coefficients = NULL`, require a numeric column named `score`;
+      otherwise error rather than inventing feature weights. If
+      coefficients are supplied, require names matching feature
+      columns or length equal to the number of columns.
 
 ## 3. Positive prior module
 
@@ -170,8 +175,9 @@
       excess estimates.
 - [ ] 5.5C Estimate the default `tau2` as a robust weighted quantile
       of retained positive excess estimates, defaulting to the
-      weighted median with `unit_weights`, and enforce a positive
-      `tau2_floor` on the working-outcome scale.
+      weighted median with normalized positive-mean-one
+      `unit_weights`, and enforce a positive `tau2_floor` on the
+      working-outcome scale.
 - [ ] 5.5D If no finite positive excess estimates are available, set
       `tau2 = tau2_floor`, record
       `tau2_source = "floor_no_positive_excess"`, and store `tau2`,
@@ -190,57 +196,62 @@
       `max_explicit_entries`; do not create `S` except for
       `init_method = "l0learn"`.
 - [ ] 5.8 For each analysis unit `i`, when `init_method = "l0learn"`,
-      run
-      `L0Learn::L0Learn.cvfit(S_w, y_w, penalty = "L0", ...)`, where
-      `y_w = sqrt(w_i) * (Y_i - offset_i)` and
-      `S_w = sqrt(w_i) * S` when row weights are supplied; otherwise
-      use `Y_i - offset_i` and `S`.
-- [ ] 5.9 Select the lambda rule, initially `cv_min` using
+      allow the optional L0 path only when row weights are absent or
+      constant within every unit; otherwise return `NULL` with a
+      diagnostic and fall back to marginal initialization.
+- [ ] 5.9 For the allowed L0 path, run
+      `L0Learn::L0Learn.cvfit(S, ytilde_i, penalty = "L0", ...)`,
+      rely on L0Learn's intercept, and remove that intercept after
+      fitting.
+- [ ] 5.10 Select the lambda rule, initially `cv_min` using
       `which.min(fit$cvMeans[[1]])`, matching the susieR vignette.
-- [ ] 5.10 Extract coefficients, remove the intercept, and map nonzero
+- [ ] 5.11 Extract coefficients, remove the intercept, and map nonzero
       coefficients to candidate PAS indices.
-- [ ] 5.11 Under the default upstream-positive model, discard
+- [ ] 5.12 Under the default upstream-positive model, discard
       non-positive L0 coefficients; do not truncate them to positive
       values by default.
-- [ ] 5.12 Combine L0-selected candidates across units by weighted support,
+- [ ] 5.13 Combine L0-selected candidates across units by weighted support,
       `score_t = sum_i unit_weights_norm[i] * max(beta_hat_it, 0)^2`,
       and keep at most `min(L, max_nonzero, T)` candidates.
-- [ ] 5.13 Create a SuSiE-compatible initialization with one-hot
+- [ ] 5.14 Create a SuSiE-compatible initialization with one-hot
       `alpha[l, t_l] = 1` and mfsusieR-shaped unit-specific starting
       effects: `mu[[l]][[i]][t_l, 1] = beta_init[i, l]` and
       `mu2[[l]][[i]][t_l, 1] = beta_init[i, l]^2`.
-- [ ] 5.14 For selected L0 candidates missing in a unit, fill starting
+- [ ] 5.15 For selected L0 candidates missing in a unit, fill starting
       effects using the positive marginal WLS estimate at that
       candidate, or zero if no positive evidence exists.
-- [ ] 5.15 Store initialization metadata on the fit: method used,
+- [ ] 5.16 Store initialization metadata on the fit: method used,
       selected candidates, scores, optional lambda rule, package
       availability, fallback reason, and explicit-matrix size when
       relevant.
-- [ ] 5.16 Add tests for marginal initialization, no explicit-matrix
+- [ ] 5.17 Add tests for marginal initialization, no explicit-matrix
       use in the marginal path, positive filtering, `L` cap,
       default `tau2` estimation and floor fallback, optional
       no-`L0Learn` fallback, optional threshold fallback, and
-      residual-variance initialization fallbacks.
-- [ ] 5.17 Validate the warm-start object before fitting: finite
+      residual-variance initialization fallbacks. Include a test that
+      non-constant row weights make L0 initialization fall back to
+      marginal initialization.
+- [ ] 5.18 Validate the warm-start object before fitting: finite
       `alpha`, `mu`, `mu2`, non-negative `V` if present, normalized
       alpha rows, dimensions matching `L`, `T`, and the number of
       analysis units, and no negative starting `beta` under the
       upstream-positive model.
-- [ ] 5.18 If a MAD residual-variance warm start is implemented,
+- [ ] 5.19 If a MAD residual-variance warm start is implemented,
       mirror `susie_trendfilter()` behavior: skip it when
       `model_init` is supplied, apply it per analysis unit to
-      `Y_i - offset_i`, and fall back cleanly when the estimate is
-      zero or non-finite.
+      centered `Y_i - offset_i`, and fall back cleanly when the
+      estimate is zero or non-finite.
 
 ## 6. APA data subclass and wrapper
 
 - [ ] 6.1 Add `R/apa_mfsusie.R` with an APA data constructor
       `create_mf_apa_individual()`.
 - [ ] 6.2 Add public wrapper `apa_susie()`, accepting
-      `Y`, `pos`, `candidates`, `L`, `prior_weights`,
-      `annotations`, `unit_weights`, `tau2`, `orientation`,
-      `prior_strength`, `prior_floor`, `init_method`, `l0_control`,
-      `residual_variance`, and standard SuSiE control arguments.
+      `Y`, `pos`, `candidates`, `L`, `offset`, row precision
+      `weights`, `prior_weights`, `annotations`, `unit_weights`,
+      `tau2`, `orientation`, `prior_strength`, `prior_floor`,
+      `init_method`, `l0_control`, `residual_variance`, and standard
+      SuSiE control arguments.
       Do not expose
       `estimate_prior_variance` in the first APA wrapper; `tau2`
       controls the slab scale.
@@ -250,6 +261,10 @@
       one response column.
 - [ ] 6.4 Ensure the wrapper uses the matrix-free basis object in
       the default path and does not materialize a dense step matrix.
+- [ ] 6.4A After candidate validation, reduce `L` to `min(L, T)` with
+      diagnostics; if no candidate maps to an informative step or no
+      unit-candidate pair is informative, stop with an informative
+      error before IBSS.
 - [ ] 6.5 Initialize scalar `tau2` when omitted using
       `apa_estimate_tau2()` from marginal positive step coefficients;
       do not update `tau2` inside IBSS.
@@ -267,9 +282,15 @@
       `weights`, and already-corrected coverage, but do not implement
       a built-in library-size, GC-bias, or 5'/3' bias correction
       pipeline in this change.
+- [ ] 6.10A Validate row precision weights. Accept `NULL`, a length-`J`
+      vector recycled across units, a `J x n` matrix, or a list of
+      `n` length-`J` vectors. Reject missing, negative, non-finite,
+      or zero-total weights for any unit.
 - [ ] 6.11 Do not fit an explicit intercept inside IBSS. Store
       weighted response centers and step centers so the centered fit
       is equivalent to a unit-specific baseline model.
+- [ ] 6.12 Reconstruct fitted working coverage as
+      `offset_i + ybar_i + sum_l sum_t alpha_lt * mu_lit * Sc_it`.
 
 ## 7. Required S3 method overrides
 
@@ -302,6 +323,11 @@
       residual-variance updates and derived-cache refresh, mirroring
       `update_model_variance.mf_individual` but using APA residual
       structures. This method must not update `tau2`.
+- [ ] 7.9A Update residual variance per unit as
+      `sigma2_i = max(sigma2_floor_i, ERSS_i / sum_j w_ij)`, where
+      `ERSS_i` is the weighted expected squared residual including
+      posterior second-moment terms, not just squared posterior mean
+      residuals.
 - [ ] 7.10 Register all `mf_apa_individual` S3 methods using the
       same mechanism as the corresponding `mf_individual` method:
       `.onLoad` for susieR generics already registered there, and
@@ -322,8 +348,16 @@
       passing dense `X`; skip correlation-purity filtering by
       default. Optional purity requires a bounded-size step-basis
       `Xcorr` path.
+- [ ] 8.2C Add credible-set diagnostics: size, `cs_fraction = size/T`,
+      claimed coverage, and `cs_is_diffuse` using default threshold
+      `cs_fraction > 0.5`. Diffuse CSs are reported but not treated
+      as confident breakpoint calls.
 - [ ] 8.3 Normalize usage by unit and return missing usage with a
       diagnostic when total inferred abundance is below tolerance.
+- [ ] 8.3A Define first-version usage as relative modeled
+      step-derived candidate usage. Do not include the centered
+      baseline/intercept component as a distal PAS or in the usage
+      denominator.
 - [ ] 8.4 Carry optional effective numerator-denominator summaries or
       precision weights when supplied, so downstream mixed generalized
       linear models can use the phenotype without redefining it.
@@ -343,7 +377,12 @@
 - [ ] 8.9 If uncertainty summaries are not implemented by a documented
       approximation, return them as `NA` with diagnostics rather than
       using an undocumented delta-method shortcut.
-- [ ] 8.10 Add deterministic tests for usage normalization, zero/one/
+- [ ] 8.10 Add `usage_reportable` diagnostics. By default usage is
+      reportable only when the usage denominator is at least `eps`,
+      `max(candidate_pip) >= 0.5`, and at least one non-diffuse CS is
+      present. Expected length is missing when usage is not
+      reportable.
+- [ ] 8.11 Add deterministic tests for usage normalization, zero/one/
       multiple cutpoints, expected length, missing denominator flags,
       mixed-model export fields, and dimensions.
 
@@ -418,6 +457,27 @@
 - [ ] 10.14 Verify default APA credible sets match
       `susieR::susie_get_cs()` called without `X` or `Xcorr`, and
       candidate PIPs match `susieR::susie_get_pip()`.
+- [ ] 10.15 Verify row precision weights accept all documented shapes
+      and reject missing, negative, non-finite, or zero-total weights
+      for any analysis unit.
+- [ ] 10.16 Verify `L > T` is reduced to `L = T` with diagnostics and
+      no informative candidate stops before IBSS with an informative
+      error.
+- [ ] 10.17 Verify residual-variance updates match an explicit small
+      weighted ERSS calculation that includes posterior second-moment
+      terms.
+- [ ] 10.18 Verify fitted coverage reconstruction restores offset and
+      stored baseline while keeping the baseline outside the IBSS
+      variable set.
+- [ ] 10.19 Verify first-version usage excludes the baseline from the
+      usage denominator and returns missing usage when the modeled
+      step-derived denominator is below tolerance.
+- [ ] 10.20 Verify diffuse credible sets and low maximum PIP make
+      `usage_reportable = FALSE`, and expected length is missing for
+      non-reportable units.
+- [ ] 10.21 Verify `init_method = "l0learn"` falls back to marginal
+      initialization when any unit has non-constant row precision
+      weights.
 
 ## 11. Performance tests
 
@@ -442,9 +502,10 @@
       `alpha`, `mu`, `mu2`, `lbf`, `pip`, normalized priors, and
       recorded diagnostics.
 - [ ] 11A.3 Add an `apa_phenotype()` output validator checking
-      required fields, dimensions, usage row sums for informative
-      units, missing flags for low-information units, and finite
-      uncertainty summaries.
+      required fields, dimensions, usage row sums for reportable
+      units, missing flags for low-information units,
+      credible-set diffuseness flags, `usage_reportable`, and finite
+      uncertainty summaries where implemented.
 - [ ] 11A.4 Ensure optional dependencies (`L0Learn`) are guarded by
       `requireNamespace()` and tested through skip/fallback paths;
       the default marginal path must work without optional

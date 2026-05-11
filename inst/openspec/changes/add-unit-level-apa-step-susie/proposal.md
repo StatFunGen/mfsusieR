@@ -284,9 +284,10 @@ When `tau2 = NULL`, reuse the same marginal `bhat_it` and `shat2_it`
 to compute positive excess estimates
 `e_it = max(bhat_it, 0)^2 - shat2_it`. The default fixed slab scale is
 a robust weighted quantile of finite positive `e_it` values, using
-`unit_weights` and defaulting to the weighted median. A positive
-`tau2_floor` is enforced, and the floor is used with a diagnostic when
-no finite positive excess estimates are available.
+normalized positive-mean-one `unit_weights` and defaulting to the
+weighted median. A positive `tau2_floor` is enforced, and the floor is
+used with a diagnostic when no finite positive excess estimates are
+available.
 The working-outcome scale used for the floor is the median across
 units of the weighted variance of centered `Y - offset`.
 
@@ -294,16 +295,21 @@ The optional L0 initializer follows susieR's `L0Learn` pattern:
 
 ```text
 apa_l0learn_init(Y, basis, L, unit_weights = NULL,
+                 weights = NULL, offset = NULL,
                  positive = TRUE, lambda_choice = "cv_min",
                  max_nonzero = L, ...)
 ```
 
-For each analysis unit `i`, run `L0Learn::L0Learn.cvfit(S_w, y_w,
-penalty = "L0")` only when the explicit sparse step matrix size is
-below a documented threshold. Here `y_w = sqrt(w_i) * (Y_i - offset_i)`
-and `S_w = sqrt(w_i) * S` when row weights are supplied; otherwise
-`y_w = Y_i - offset_i` and `S_w = S`. Select the lambda by the
-requested rule, remove the intercept, and keep nonzero coefficients.
+For each analysis unit `i`, run `L0Learn::L0Learn.cvfit(S, ytilde_i,
+penalty = "L0")` only when row weights are absent or constant within
+each unit and the explicit sparse step matrix size is below a
+documented threshold. Here `ytilde_i` is the offset-adjusted working
+outcome passed to L0Learn; L0Learn estimates its own intercept, and
+the APA initializer removes that intercept before mapping nonzero
+coefficients back to candidate PAS indices. If row weights vary across
+positions within any unit, skip L0Learn and use the matrix-free
+marginal initializer instead. Select the lambda by the requested rule
+and keep nonzero coefficients.
 Under the default positive upstream parameterization, discard
 non-positive coefficients. Combine candidates selected across units by
 the weighted support score
@@ -357,8 +363,19 @@ A_it = sum_l alpha_lt E[beta_il | Z_l = t, Y]
 U_it = A_it / sum_s A_is.
 ```
 
+The first implementation defines usage among modeled step-derived
+candidate PAS contributions. The centered baseline used for coverage
+reconstruction is not treated as a distal PAS and is not included in
+the usage denominator. Therefore the usage phenotype is a relative
+APA-usage phenotype for detected candidate steps, not an absolute
+isoform-abundance decomposition.
+
 If the denominator is below a numerical tolerance, the usage for that
 unit/gene is returned as missing with a diagnostic flag.
+The phenotype output also includes reportability diagnostics, such as
+maximum PIP, credible-set size fraction, and whether any credible set
+passes a documented confidence rule. No-signal genes should return
+non-reportable phenotypes rather than precise-looking usage values.
 
 Cutpoints are not model parameters. They are post-processing reporting
 boundaries used to collapse a multi-PAS usage vector into a
@@ -370,6 +387,8 @@ PIPs and credible sets should reuse susieR's posterior semantics:
 correlation-purity filtering by default because adjacent breakpoint
 candidates are naturally highly correlated; optional purity filtering
 may be added only through a bounded-size step-basis correlation path.
+Large diffuse credible sets are retained but marked as diffuse rather
+than treated as confident breakpoint calls.
 
 ## Impact
 
