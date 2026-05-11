@@ -12,6 +12,10 @@
 - **Default orientation**: use upstream step functions
   `S[j, t] = 1(x_j <= c_t)` so positive coefficients are directly
   interpretable as upstream/PAS contribution.
+- **Intercept handling**: match susieR's intercept strategy. Do not
+  add an intercept predictor to IBSS. Subtract offsets, then use
+  weighted centering of `Y` and each step predictor so the fit is
+  equivalent to a unit-specific baseline model.
 - **Default effect prior**: simple one-sided Gaussian slab with a
   scalar `tau2`. If `tau2 = NULL`, initialize it once from marginal
   positive step estimates before IBSS. Keep it fixed during the first
@@ -25,6 +29,9 @@
 - **Sharing**: PAS locations are shared across analysis units through
   the common `alpha[l, t]`; effect magnitudes remain unit-specific as
   `beta_il`.
+- **Unit weights**: default unit weights are all one. User-supplied
+  nonzero unit weights are normalized to have mean one before use;
+  zero weights are allowed and contribute no shared location evidence.
 - **Candidate pre-scan**: candidate PAS can be supplied directly or
   produced by an optional high-recall `apa_prescan()` function. The
   pre-scan is an input-variable screening step, not final APA
@@ -36,6 +43,10 @@
 - **Efficiency**: the default fit must use cumulative-sum step
   operators. Dense explicit `J x T` matrices are allowed only for
   tests, debugging, and bounded-size optional initialization.
+- **PIP and credible sets**: use susieR posterior semantics for PIP
+  and CS construction. Skip dense correlation-purity filtering by
+  default; optional purity filtering can use a bounded-size
+  step-basis correlation path.
 
 ## Review of existing code paths
 
@@ -160,10 +171,11 @@ PAS / breakpoint positions. Let `x_j` be the coordinate of position
 `j`, and `c_t` be the coordinate of candidate PAS `t`.
 
 For each analysis unit `i`, after offsets and bias corrections are
-applied outside or inside the wrapper, the working Gaussian model is
+applied outside or inside the wrapper, the conceptual Gaussian model is
 
 ```text
-Y_i(j) = offset_i(j) + sum_{l=1}^L beta_il S[j, Z_l] + e_i(j),
+Y_i(j) = offset_i(j) + baseline_i
+         + sum_{l=1}^L beta_il S[j, Z_l] + e_i(j),
 e_i(j) ~ approximately Gaussian,
 beta_il >= 0.
 ```
@@ -181,6 +193,29 @@ The default upstream step basis is
 ```text
 S[j, t] = 1(x_j <= c_t).
 ```
+
+The baseline is handled exactly in the spirit of susieR's
+individual-level constructor: it is not included as a variable in
+IBSS. Define `ytilde_i(j) = Y_i(j) - offset_i(j)`, using zero offset
+when none is supplied. Let `w_ij` be row precision weights, defaulting
+to one. The APA data constructor computes
+
+```text
+ybar_i   = sum_j w_ij ytilde_i(j) / sum_j w_ij
+Sbar_it  = sum_j w_ij S[j,t]      / sum_j w_ij
+Yc_i(j)  = ytilde_i(j) - ybar_i
+Sc_it(j) = S[j,t]      - Sbar_it.
+```
+
+The IBSS loop operates on the centered model
+
+```text
+Yc_i(j) = sum_{l=1}^L beta_il Sc_i,Z_l(j) + e_i(j).
+```
+
+This is algebraically equivalent to fitting a unit-specific baseline
+outside the sparse effects. The stored baseline is metadata for
+reconstruction and diagnostics, not a single-effect candidate.
 
 The single-effect location variable is shared:
 
@@ -260,10 +295,19 @@ requiring dense `data$X` multiplication. It must include:
 
 - `basis`: step-basis metadata and candidate indices;
 - `D`: list of unit response matrices, each `J x 1`;
+- `Y_center`: unit-specific weighted mean of `Y - offset`;
+- `step_center`: per-unit, per-candidate weighted step means
+  `Sbar_it`;
+- `centered_d`: per-unit, per-candidate centered weighted
+  denominators `d_it`;
 - `residuals`: list of unit residual matrices;
 - `xtx_diag_list`: per-unit candidate column norms;
 - `na_idx`: per-unit complete-position indices;
-- `unit_weights`: numeric length `n`;
+- `unit_weights`: normalized numeric length `n`;
+- `row_weights`: row precision weights for each unit, if supplied;
+- `sigma2_init`: residual-variance initialization per unit;
+- `apa_diagnostics`: centering, low-information, scaling, and
+  fallback diagnostics;
 - `prior`: location prior object;
 - any standard fields expected by inherited mfsusieR methods.
 
@@ -286,6 +330,7 @@ Required operations:
 apa_step_Xb <- function(basis, b)
 apa_step_Xtr <- function(basis, r, weights = NULL)
 apa_step_colnorm <- function(basis, weights = NULL)
+apa_step_center_cache <- function(basis, weights = NULL)
 apa_step_explicit <- function(basis, sparse = TRUE)
 ```
 
@@ -314,6 +359,39 @@ apa_step_colnorm:
 Downstream orientation uses suffix sums or the equivalent sign /
 complement transformation. Duplicate candidates are disallowed unless
 the constructor explicitly collapses them with a documented rule.
+
+`apa_step_center_cache()` precomputes all basis quantities that do not
+change across IBSS iterations:
+
+```text
+Q_i       = sum_j w_ij
+Sbar_it  = sum_j w_ij S[j,t] / Q_i
+d_it     = sum_j w_ij (S[j,t] - Sbar_it)^2.
+```
+
+For upstream steps, these are obtained from prefix sums at candidate
+position indices:
+
+```text
+P_it     = sum_{j:x_j <= c_t} w_ij
+Sbar_it  = P_it / Q_i
+d_it     = P_it - P_it^2 / Q_i.
+```
+
+Candidates with `d_it` below `min_denominator` or with too little
+effective weight on either side should be flagged as low-information
+for that unit. The fit may keep the candidate for other units, but
+its SER statistics for the low-information unit must be made
+uninformative.
+
+Candidate mapping rule: if `candidates` are integer indices, use them
+directly after bounds checking. If they are coordinates, map each
+candidate to the last ordered position satisfying `x_j <= c_t` for
+upstream orientation, and to the first valid downstream-side position
+for downstream orientation. Candidates with no observed position on
+one side are flagged or removed according to the same
+low-information rule. The constructor must store both original
+coordinates and mapped position indices.
 
 ## Candidate PAS pre-scan module
 
@@ -405,13 +483,21 @@ The unit score is
 m_ir = log BF^+(bhat_ir^scan, shat2_ir, tau2_scan).
 ```
 
+If `tau2_scan` is `NULL`, estimate it once from the scan marginal
+statistics using the same positive-excess rule as the main
+`tau2` initializer, with its own scan diagnostic label. This keeps
+the scan scale on the working-outcome scale without introducing a
+separate tuning grid.
+
 The pooled score curve is
 
 ```text
-M_r = sum_i unit_weights[i] * m_ir.
+M_r = sum_i unit_weights_norm[i] * m_ir.
 ```
 
 Candidate regions are seeded from local maxima in the pooled curve.
+By default, retain finite local maxima with `M_r > 0`. If `max_peaks`
+is finite, keep the highest-scoring retained maxima up to that cap.
 If a user wants a stratified sensitivity scan, the same function can
 be called separately within those strata, but this is not part of the
 core API. Local maxima are expanded to
@@ -485,7 +571,11 @@ and fall back to uniform only when requested explicitly.
 
 Annotation features are evidence about candidate locations. They must
 not encode effect signs. Hard filtering, if explicitly requested by a
-user before calling the wrapper, is outside this module.
+user before calling the wrapper, is outside this module. The first
+implementation should be deliberately simple: support direct
+`prior_weights`, direct numeric `scores`, or a small fixed linear
+score from supplied feature columns and supplied coefficients. It must
+not train a genome-wide prediction model or classifier.
 
 Implementation notes:
 
@@ -541,6 +631,13 @@ apa_marginal_init <- function(Y,
                               max_nonzero = L,
                               ...)
 
+apa_estimate_tau2 <- function(bhat,
+                              shat2,
+                              unit_weights = NULL,
+                              y_scale = NULL,
+                              tau2_floor = NULL,
+                              quantile = 0.5)
+
 apa_l0learn_init <- function(Y,
                              basis,
                              L,
@@ -561,24 +658,85 @@ Default marginal behavior:
 
 1. Form `ytilde_i = Y_i - offset_i`, with zero offset when none is
    supplied.
-2. For each analysis unit, compute marginal weighted step estimates
-   and sampling variances for all candidates using `apa_step_Xtr()`
-   and `apa_step_colnorm()`, not a dense step matrix.
-3. Compute a positive-prior marginal score for each unit-candidate
+2. Center `ytilde_i` by its weighted mean and use the centered step
+   cache. The default initializer must follow the same no-explicit
+   intercept convention as the main fit.
+3. For each analysis unit, compute marginal weighted step estimates
+   and sampling variances for all candidates using cumulative-sum
+   operators and cached centered denominators, not a dense step
+   matrix:
+
+   ```text
+   bhat_it = sum_j w_ij Sc_it(j) Yc_i(j) / d_it
+   shat2_it = sigma2_i / d_it.
+   ```
+
+   Low-information `d_it` entries are treated as uninformative.
+4. Compute a positive-prior marginal score for each unit-candidate
    pair, such as `logBF_it^+ = apa_halfnormal_lbf(bhat_it,
    shat2_it, tau2)`.
-4. Pool candidate support across units as
-   `score_t = sum_i unit_weights[i] * logBF_it^+`, with unit weights
-   defaulting to one.
-5. Keep at most `min(L, max_nonzero, T)` candidates by pooled score.
-6. Create a SuSiE initialization with one effect per retained
+5. Pool candidate support across units as
+   `score_t = sum_i unit_weights_norm[i] * logBF_it^+`, with unit
+   weights defaulting to one and normalized before use.
+6. Keep at most `min(L, max_nonzero, T)` candidates by pooled score.
+7. Create a SuSiE initialization with one effect per retained
    candidate: `alpha[l, t_l] = 1`, with unit-specific starting
    effects from positive marginal estimates.
-7. For a retained candidate with non-positive marginal evidence in
+8. For a retained candidate with non-positive marginal evidence in
    unit `i`, initialize that unit's coefficient at zero.
-8. Return an object accepted by the APA wrapper's `model_init`
+9. Return an object accepted by the APA wrapper's `model_init`
    plumbing, plus metadata recording selected candidates, scores, and
    the initializer used.
+
+Default `tau2` initialization:
+
+1. If the user supplies a positive scalar `tau2`, use it unchanged
+   and record `tau2_source = "user"`.
+2. Otherwise, use the same marginal `bhat_it` and `shat2_it` computed
+   for `apa_marginal_init()`.
+3. For each unit-candidate pair, compute the positive excess signal
+   estimate
+   `e_it = max(bhat_it, 0)^2 - shat2_it`.
+4. Keep finite `e_it > 0` values and weight them by
+   normalized unit weights, defaulting to one.
+5. Set `tau2` to a robust weighted quantile of the retained positive
+   excess values, defaulting to the weighted median. Enforce
+   `tau2 >= tau2_floor`.
+6. If no finite positive excess values are available, set
+   `tau2 = tau2_floor` and record
+   `tau2_source = "floor_no_positive_excess"`.
+7. The default `y_scale` is the median across analysis units of the
+   finite weighted variance of centered `Y - offset`. The default
+   `tau2_floor` should be
+   `max(.Machine$double.eps, 1e-8 * y_scale)`, with a fallback
+   `y_scale = 1` if no finite positive scale is available.
+8. Store `tau2`, `tau2_source`, `tau2_floor`, the quantile used, and
+   the number of positive excess estimates in fit diagnostics.
+
+This rule is deliberately a one-time initialization, not empirical
+Bayes inside IBSS. It gives the positive-prior SER update a stable
+scale without running per-effect or in-loop scale optimization.
+
+Residual variance initialization:
+
+1. If the user supplies `residual_variance`, validate it as positive
+   and use it as the initial `sigma2_i`.
+2. Otherwise, for each unit use a weighted analogue of susieR
+   trend-filtering's MAD-difference initializer on the centered
+   working coverage:
+
+   ```text
+   sigma2_i^MAD = 0.5 * (median(|diff(Yc_i)|) / 0.6745)^2.
+   ```
+
+3. If the MAD value is zero or non-finite, fall back to the weighted
+   variance of `Yc_i`.
+4. If both are unavailable, use a small positive floor and record a
+   diagnostic.
+5. Residual variance may be updated by
+   `update_model_variance.mf_apa_individual()` when
+   `estimate_residual_variance = TRUE`; this is separate from the
+   fixed `tau2` slab scale.
 
 Optional L0Learn behavior:
 
@@ -599,8 +757,8 @@ Optional L0Learn behavior:
    truncate negative coefficients to positive values in the default
    implementation.
 9. Score each candidate across units as
-   `score_t = sum_i unit_weights[i] * max(beta_hat_it, 0)^2`, with
-   unit weights defaulting to one.
+   `score_t = sum_i unit_weights_norm[i] * max(beta_hat_it, 0)^2`,
+   with unit weights defaulting to one and normalized before use.
 10. Keep at most `min(L, max_nonzero, T)` candidates by score.
 11. Create a SuSiE initialization with one effect per retained
     candidate: `alpha[l, t_l] = 1`. Store unit-specific posterior
@@ -634,15 +792,24 @@ combine_outcome_lbfs.mf_prior_cross_unit_weighted <-
   function(prior, outcome_lbfs, model_state)
 ```
 
+The method first validates and normalizes weights. If `unit_weights`
+is `NULL`, use all ones. If supplied, weights must be finite,
+non-negative, length `n`, and not all zero. The positive weights are
+rescaled so their mean is one:
+
+```text
+unit_weights_norm[i] = unit_weights[i] /
+                       mean(unit_weights[k] : unit_weights[k] > 0).
+```
+
+Zero weights remain zero. This convention preserves the all-one
+default and prevents arbitrary global rescaling of evidence.
+
 The method returns
 
 ```r
-Reduce("+", Map(function(w, lbf) w * lbf, unit_weights, outcome_lbfs)).
+Reduce("+", Map(function(w, lbf) w * lbf, unit_weights_norm, outcome_lbfs)).
 ```
-
-If `unit_weights` is `NULL`, use all ones. The method must reject
-negative or non-finite weights. A zero weight is allowed and means the
-unit contributes no location evidence.
 
 ## APA data subclass and wrapper
 
@@ -666,6 +833,7 @@ apa_susie <- function(Y,
                       l0_control = list(),
                       weights = NULL,
                       offset = NULL,
+                      residual_variance = NULL,
                       estimate_residual_variance = TRUE,
                       ...)
 ```
@@ -683,9 +851,14 @@ Input contract:
   `apa_prescan(...)$candidates`;
 - `prior_weights` overrides annotation-derived weights when supplied;
 - `annotations` is optional and must have one row per candidate;
-- `unit_weights` is optional and length `n`;
+- `unit_weights` is optional and length `n`; if supplied, it is
+  normalized to positive mean one before being used in shared
+  log-BF combination or initialization scores;
 - `tau2` is scalar and positive; if `NULL`, initialize from marginal
   step estimates;
+- `residual_variance` is optional and initializes per-unit residual
+  variance; if `NULL`, initialize from centered working coverage using
+  MAD-difference with weighted-variance fallback;
 - `estimate_prior_variance` is not a first-version public APA
   argument; the slab scale is controlled by `tau2`;
 - `prior_strength` and `prior_floor` control how strongly annotation
@@ -699,6 +872,11 @@ creates `model_init` via `apa_marginal_init()` unless
 `init_method = "none"` or a user-supplied `model_init` is provided,
 optionally tries `apa_l0learn_init()` only when requested, and calls
 `susieR::susie_workhorse()`.
+
+The wrapper must not pass an explicit intercept variable into IBSS.
+It stores weighted response centers and step centers on the APA data
+object and implements all residual, fitted-value, and SER-statistic
+methods using centered quantities.
 
 ## S3 methods to implement for `mf_apa_individual`
 
@@ -746,6 +924,27 @@ Within `loglik.mf_apa_individual`, per-unit logBFs are computed from
 `combine_outcome_lbfs()`. The resulting joint logBF is combined with
 `model$pi` exactly as in `loglik.mf_individual` to update `alpha`.
 
+For effect `l`, compute the centered partial residual
+
+```text
+Rc_il(j) = Yc_i(j) - sum_{l' != l} sum_t alpha_l't mu_il't Sc_it(j).
+```
+
+The SER sufficient statistics are
+
+```text
+x_it      = sum_j w_ij Sc_it(j) Rc_il(j)
+d_it      = sum_j w_ij Sc_it(j)^2
+betahat_it = x_it / d_it
+shat2_it   = sigma2_i / d_it.
+```
+
+`d_it`, `Sbar_it`, low-information flags, and candidate mapping are
+cached in the data object. At each IBSS update only residual-dependent
+inner products `x_it` are recomputed using prefix or suffix sums.
+Low-information unit-candidate pairs receive uninformative logBFs and
+zero posterior moments for that unit.
+
 Within `calculate_posterior_moments.mf_apa_individual`, per-unit
 posterior means and second moments are computed by
 `apa_halfnormal_moments()`.
@@ -788,6 +987,20 @@ Expected returned object:
   when supplied by preprocessing or requested through an approximation;
 - `diagnostics`: denominator flags, low-information units, and basis metadata.
 
+Candidate PIP should be computed by susieR's standard formula:
+
+```text
+PIP_t = 1 - prod_l (1 - alpha_lt).
+```
+
+The default credible sets are alpha-based CSs from
+`susieR::susie_get_cs(fit, coverage = coverage)` without passing a
+dense `X` matrix. This skips purity filtering by default, which is
+appropriate for nearby breakpoint candidates. If a caller explicitly
+requests purity and the candidate count is below a configured safety
+threshold, the implementation may compute a step-basis `Xcorr` and
+pass it to `susie_get_cs()`.
+
 For candidate `t` in analysis unit `i`,
 
 ```text
@@ -827,6 +1040,12 @@ constructed upstream, `apa_phenotype()` may carry them through for
 downstream mixed generalized linear models. Otherwise it returns
 posterior means, standard errors, and optional precision weights for
 weighted Gaussian or logit-scale mixed models.
+
+For the first implementation, uncertainty fields that do not have a
+clear implemented approximation may be returned as `NA` with a
+diagnostic rather than using an undocumented delta-method shortcut.
+The required phenotype is the posterior plug-in usage mean plus the
+available posterior summaries from the fitted SuSiE object.
 
 The package must not implement ISSAC-style association testing in this
 change. It only exports quantities that such a downstream model could
