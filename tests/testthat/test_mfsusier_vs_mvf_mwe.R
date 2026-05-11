@@ -351,3 +351,83 @@ test_that("mvf requires Y = list(Y_f = ...) while mfsusieR takes flat list", {
   # Both converge within max_iter
   expect_lte(fit_mf$niter, 10L)
 })
+
+# ── Test 7: posthoc API — document the divergence in how it is exposed ─────────
+#
+# mfsusieR: stores lbf_variable_outcome (L x p x M) during IBSS; the user calls
+#   susieR::susie_post_outcome_configuration(fit, by = "outcome", method = "susiex")
+#   explicitly after fitting. The susiex method enumerates 2^M configurations per
+#   CS tuple (one tuple per credible set, one L-index per outcome).
+#
+# mvf: posthoc_multfsusie() is called automatically inside out_prep() when
+#   posthoc = TRUE (default). Results live at fit$posthoc[[l]] with fields
+#   logBF_trait, posthoc (marginal prob per trait), active, configs, config_prob.
+
+test_that("mfsusieR lbf_variable_outcome is an L x p x M array", {
+  d <- make_mwe_data()
+
+  fit_mf <- mfsusie(
+    X = d$X, Y = d$Y,
+    pos                  = lapply(seq_len(d$M), function(m) seq_len(d$T_y)),
+    L                    = MWE_L,
+    prior_variance_scope = "per_outcome",
+    wavelet_qnorm        = FALSE,
+    max_inner_em_steps   = 0L,
+    mixture_null_weight  = MWE_NULL_WEIGHT,
+    control_mixsqp       = MWE_CTRL,
+    L_greedy             = NULL,
+    tol                  = MWE_TOL,
+    max_iter             = MWE_MAXIT,
+    verbose              = FALSE
+  )
+
+  # lbf_variable_outcome is always allocated; shape is [L, p, M].
+  expect_true(is.array(fit_mf$lbf_variable_outcome))
+  expect_equal(dim(fit_mf$lbf_variable_outcome), c(MWE_L, d$p, d$M))
+
+  # susie_post_outcome_configuration() is accessible from the installed susieR.
+  skip_if_not_installed("susieR")
+  pc <- susieR::susie_post_outcome_configuration(
+    fit_mf, by = "outcome", method = "susiex"
+  )
+  expect_true(inherits(pc, "susie_post_outcome_configuration"))
+  # When there are CS, $susiex is a non-empty list of per-tuple results.
+  # When no CS (no signal detected), $susiex is an empty list -- still valid.
+  expect_true(is.list(pc$susiex))
+  message(sprintf("susiex tuples: %d", length(pc$susiex)))
+  if (length(pc$susiex) > 0L) {
+    t1 <- pc$susiex[[1L]]
+    expect_true(all(c("cs_indices", "logBF_trait", "marginal_prob",
+                       "active", "configs", "config_prob") %in% names(t1)))
+    expect_equal(length(t1$logBF_trait), d$M)
+  }
+})
+
+test_that("mvf posthoc is baked into fit at $posthoc (automatic, default TRUE)", {
+  skip_if_no_mvf()
+
+  d <- make_mwe_data()
+
+  fit_mvf <- mvf.susie.alpha::multfsusie(
+    Y = list(Y_f = d$Y), X = d$X, L = MWE_L,
+    prior = "mixture_normal", nullweight = 0.7,
+    maxit = MWE_MAXIT, tol = MWE_TOL,
+    greedy = FALSE, backfit = FALSE,
+    posthoc = TRUE,   # default; included explicitly for documentation
+    verbose = FALSE
+  )
+
+  # fit$posthoc is a list of length L; each element NULL or a list with
+  # logBF_trait, posthoc (marginal per-trait prob), active, configs, config_prob.
+  expect_true(is.list(fit_mvf$posthoc))
+  expect_equal(length(fit_mvf$posthoc), MWE_L)
+  non_null <- Filter(Negate(is.null), fit_mvf$posthoc)
+  message(sprintf("mvf posthoc non-null effects: %d / %d", length(non_null), MWE_L))
+  if (length(non_null) > 0L) {
+    t1 <- non_null[[1L]]
+    expect_true(all(c("logBF_trait", "posthoc", "active",
+                       "configs", "config_prob") %in% names(t1)))
+    # logBF_trait length = number of modalities (M functional + K_u univariate)
+    expect_equal(length(t1$logBF_trait), d$M)
+  }
+})

@@ -349,7 +349,38 @@ choice baked into `out_prep`.
 
 ### mfsusieR
 
-Not implemented. `fit$posthoc` is always NULL.
+Implemented via `susieR::susie_post_outcome_configuration()`. mfsusieR stores a
+per-(effect, variant, outcome) log Bayes factor array `lbf_variable_outcome`
+(L x p x M) during the IBSS sweep (`R/individual_data_methods.R:231`). Users call
+this susieR function after fitting:
+
+```r
+susieR::susie_post_outcome_configuration(fit, by = "outcome", method = "susiex")
+```
+
+Two modes via `by`:
+- `by = "outcome"` (for mfsusie): expands the single fit into M per-outcome views
+  using `lbf_variable_outcome[, , m]` slices. Each view has `alpha` (the shared
+  L x p matrix) and per-outcome `lbf` (L x p). Runs `susiex_configurations()` on
+  the M views.
+- `by = "fit"`: treats the whole fit as one trait, using the joint composite
+  `lbf_variable` (L x p). Used for pairwise comparison across separate fits.
+
+Two computation methods via `method`:
+- `"susiex"`: enumerates `2^M` configurations per CS tuple. For each tuple of
+  L-indices (one per outcome), computes
+  `logBF_trait[m] = sum_j alpha[l_m, j] * lbf[l_m, j, m]`, then
+  `prob_conf = normalize(exp(configs %*% logBF_trait))`,
+  `marginal_prob = crossprod(configs, prob_conf)`.
+  Same enumeration logic as mvf's `posthoc_multfsusie`.
+- `"coloc"`: pairwise Bayes-factor coloc (`coloc.abf` style) for N=2 comparisons
+  across separate fits. Not applicable to a single mfsusie fit with `by = "outcome"`.
+
+Output: a `susie_post_outcome_configuration` object with either `$susiex` (list of
+CS tuples, each with `cs_indices`, `logBF_trait`, `configs`, `config_prob`,
+`marginal_prob`, `active`) or `$coloc_pairwise`.
+
+NOT called automatically; the user must invoke it after `mfsusie()`.
 
 ### mvf
 
@@ -361,9 +392,19 @@ Not implemented. `fit$posthoc` is always NULL.
 4. Marginal per-trait probability: `posthoc_trait = colSums(configs * prob_conf)`.
 
 Output at `fit$posthoc[[l]]`: list with `logBF_trait`, `posthoc`, `active`
-(posthoc >= 0.8), `configs`, `config_prob`.
+(posthoc >= 0.8), `configs`, `config_prob`. Called automatically by default.
 
 Reference: Yuan et al., Nat Genet 2024.
+
+### Key differences
+
+| Aspect | mfsusieR | mvf |
+|--------|---------|-----|
+| Where implemented | `susieR::susie_post_outcome_configuration()` | `posthoc_multfsusie()` in mvf |
+| When called | User calls explicitly after `mfsusie()` | Automatic inside `out_prep` |
+| Storage | `fit$lbf_variable_outcome` (L x p x M) enables the call | `fit$posthoc[[l]]` stores results |
+| Methods | `"susiex"` (2^M enum) and `"coloc"` (pairwise BF) | susiex-style only |
+| Input flexibility | Accepts single fit (`by="outcome"`) or list of fits (`by="fit"`) | Per-CS on one fit only |
 
 ---
 
@@ -382,7 +423,8 @@ Reference: Yuan et al., Nat Genet 2024.
 | `fit$pi_V[[l]][[m]]` | S_m x K matrix | mixture weights per (effect, outcome, scale) |
 | `fit$dwt_meta` | list | inverse-DWT parameters |
 | `fit$smoothed[[method]]` | list | populated after `mf_post_smooth()` |
-| `fit$posthoc` | NULL | not computed |
+| `fit$lbf_variable_outcome` | L x p x M array | per-(effect, variant, outcome) lbf; input to `susie_post_outcome_configuration()` |
+| `fit$posthoc` | NULL | not stored; call `susieR::susie_post_outcome_configuration(fit)` explicitly |
 
 ### mvf
 
