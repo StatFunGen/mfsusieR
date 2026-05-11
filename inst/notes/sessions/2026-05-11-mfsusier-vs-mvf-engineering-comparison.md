@@ -75,9 +75,16 @@ No S3 delegation. All functions called directly.
 | mfsusieR | `list(Y_1, ..., Y_M)` — flat list of M matrices, each `n x T_m` |
 | mvf | `list(Y_f = list(Y_1, ..., Y_M), Y_u = matrix n x K_u)` — separates functional (`Y_f`) and univariate (`Y_u`) modalities |
 
-mfsusieR does not support a univariate (`Y_u`) modality; each outcome must
-have `T_m >= 1` positions (scalar outcomes use `T_m = 1`). mvf's `Y_u` path
-calls a separate `m_step_u` and stores separate `fitted_u` / `fitted_u2` arrays.
+mfsusieR supports scalar outcomes via `T_m = 1`: the DWT step is skipped and
+the single column is treated as the wavelet-domain representation directly
+(`individual_data_class.R:147`). Mixed ragged lists such as
+`list(n x 1, n x 1, n x 64)` are valid inputs. There is no separate `Y_u`
+channel; scalar outcomes share the same S3 code path as functional outcomes.
+
+mvf has a two-channel design: `Y_f` (functional, DWT applied) and `Y_u`
+(univariate, no DWT). The `Y_u` path calls a dedicated `m_step_u` and stores
+results separately in `fitted_u` / `fitted_u2` / `sigma2$sd_u`. The two
+channels combine at the log-BF level inside `EM_pi_multsusie`.
 
 ---
 
@@ -131,8 +138,9 @@ global per-outcome sigma2. The same sigma2 is shared across all variables.
 
 ### mvf (`R/computational_routine.R:cal_Bhat_Shat_multfsusie`)
 
-Calls `fsusieR:::cal_Bhat_Shat(R_l, X, v1, ...)`, which computes the marginal
-per-variable effect estimate from univariate regression of each wavelet column:
+Calls `fsusieR:::cal_Bhat_Shat(R_l, X, v1, ...)` — fixed, no parameter to
+select a different formula. The function computes the marginal per-variable
+effect estimate from univariate regression of each wavelet column:
 
 ```
 Bhat[j, t] = (X_j^T R_t) / ||X_j||^2
