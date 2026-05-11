@@ -48,6 +48,19 @@ outcome for analysis unit `i` and ordered position `j`.
 - **AND** SHALL NOT require a built-in library-size, GC-bias, or
   5'/3' bias correction pipeline.
 
+#### Scenario: No explicit intercept in IBSS
+
+- **GIVEN** working coverage `Y`, optional `offset`, and optional row
+  precision weights
+- **WHEN** `apa_susie()` constructs the APA data object
+- **THEN** it SHALL subtract the offset, using zero offset when absent
+- **AND** compute unit-specific weighted response centers
+- **AND** compute weighted candidate step centers
+- **AND** run IBSS on centered working coverage and centered step
+  predictors
+- **AND** SHALL NOT add an explicit intercept column or baseline
+  candidate to the IBSS variable set.
+
 ### Requirement: Step-basis transform module
 
 The package SHALL implement a step-basis module that represents
@@ -98,6 +111,29 @@ candidate PAS locations as step functions over ordered positions.
 - **WHEN** `apa_step_colnorm(basis)` is called
 - **THEN** the result SHALL equal `colSums(S * S)` for the explicit
   basis.
+
+#### Scenario: Candidate coordinate mapping
+
+- **GIVEN** candidate coordinates not exactly equal to observed
+  position coordinates
+- **WHEN** `apa_step_basis(pos, candidates, orientation = "upstream")`
+  is constructed
+- **THEN** each candidate SHALL be mapped to the last observed
+  position with `x_j <= c_t`
+- **AND** the original candidate coordinate and mapped position index
+  SHALL both be stored.
+
+#### Scenario: Centered step cache
+
+- **GIVEN** row weights for an analysis unit
+- **WHEN** `apa_step_center_cache()` is called
+- **THEN** it SHALL compute weighted step means `Sbar_it`
+- **AND** centered denominators
+  `d_it = sum_j w_ij * (S[j,t] - Sbar_it)^2`
+- **AND** flag candidates with near-zero denominators or insufficient
+  effective weight on either side
+- **AND** SHALL compute these quantities without materializing a dense
+  `J x T` step matrix.
 
 #### Scenario: Trend-filtering helper parity
 
@@ -184,6 +220,15 @@ not final APA inference.
   `m_ir = log BF^+(bhat_ir^scan, shat2_ir, tau2_scan)`
 - **AND** SHALL NOT describe `shat2_ir` as a score.
 
+#### Scenario: Default scan tau2
+
+- **GIVEN** `tau2_scan = NULL`
+- **WHEN** `apa_prescan()` computes scan scores
+- **THEN** it SHALL estimate one scan slab scale from scan marginal
+  statistics using the documented positive-excess rule
+- **AND** record the scan slab scale and fallback status in
+  diagnostics.
+
 #### Scenario: Low-information scan positions
 
 - **GIVEN** a scan position with too little effective weight upstream
@@ -197,7 +242,16 @@ not final APA inference.
 - **GIVEN** unit-level scan scores
 - **WHEN** pooled scores are requested
 - **THEN** the function SHALL compute weighted sums across analysis
-  units using `unit_weights`.
+  units using normalized unit weights.
+
+#### Scenario: Default peak retention
+
+- **GIVEN** a pooled score curve with local maxima
+- **WHEN** `apa_prescan()` selects peaks
+- **THEN** it SHALL retain finite local maxima with positive pooled
+  score by default
+- **AND** if `max_peaks` is finite, retain at most `max_peaks`
+  highest-scoring retained maxima.
 
 #### Scenario: Candidate regions and local background
 
@@ -266,6 +320,15 @@ annotations or user-supplied scores.
 - **WHEN** `apa_prior_from_annotations(features, coefficients)` is
   called
 - **THEN** the result SHALL be strictly positive and sum to one.
+
+#### Scenario: No trained annotation prediction model
+
+- **GIVEN** annotation features for candidates
+- **WHEN** first-version APA prior helpers are used
+- **THEN** they SHALL use direct prior weights, direct numeric scores,
+  or a supplied fixed linear score
+- **AND** SHALL NOT train a genome-wide prediction model or
+  classifier.
 
 #### Scenario: Strong annotation through prior odds
 
@@ -370,7 +433,17 @@ effective unit weights.
 - **GIVEN** unit weights `w_i`
 - **AND** per-unit logBF vectors `lbf_i`
 - **WHEN** the weighted combiner is called
-- **THEN** it SHALL return `sum_i w_i * lbf_i`.
+- **THEN** it SHALL normalize positive weights to mean one, leaving
+  zeros as zeros
+- **AND** return `sum_i w_i_norm * lbf_i`.
+
+#### Scenario: Global weight scale invariance
+
+- **GIVEN** two positive unit-weight vectors that differ only by a
+  positive constant multiplier
+- **WHEN** per-unit logBFs are combined
+- **THEN** the combined logBF SHALL be identical up to numerical
+  tolerance.
 
 #### Scenario: Invalid weights
 
@@ -390,10 +463,10 @@ the posterior model being optimized.
 - **GIVEN** `init_method = "marginal"` or the default wrapper call
 - **WHEN** `apa_susie()` initializes the fit
 - **THEN** it SHALL compute marginal positive step estimates and
-  sampling variances using `apa_step_Xtr()` and
-  `apa_step_colnorm()`
+  sampling variances using centered working coverage, cached centered
+  step denominators, and matrix-free step operators
 - **AND** it SHALL pool candidate support across analysis units using
-  documented unit weights
+  normalized unit weights
 - **AND** it SHALL convert at most `L` retained candidates into a
   SuSiE-compatible `model_init`
 - **AND** it SHALL NOT call `apa_step_explicit()` or construct a
@@ -440,9 +513,20 @@ the posterior model being optimized.
 #### Scenario: Fixed tau2 in first implementation
 
 - **GIVEN** `tau2 = NULL`
+- **AND** marginal estimates `bhat_it` and sampling variances
+  `shat2_it` are available from the matrix-free marginal initializer
 - **WHEN** `apa_susie()` prepares the model
-- **THEN** it SHALL initialize one positive scalar `tau2` from
-  marginal step estimates before the IBSS loop
+- **THEN** it SHALL compute
+  `e_it = max(bhat_it, 0)^2 - shat2_it`
+- **AND** keep finite positive excess estimates
+- **AND** initialize one positive scalar `tau2` before the IBSS loop
+  as a robust weighted quantile of those excess estimates, defaulting
+  to the weighted median with normalized unit weights
+- **AND** enforce a positive `tau2_floor` on the working-outcome scale
+- **AND** define the default working-outcome scale as the median
+  across units of finite weighted variances of centered `Y - offset`
+- **AND** record `tau2`, `tau2_source`, `tau2_floor`, the quantile
+  used, and the retained-excess count in diagnostics
 - **AND** the APA prior-variance hooks SHALL leave `tau2` unchanged
   during IBSS
 - **AND** `update_model_variance.mf_apa_individual()` SHALL remain
@@ -451,6 +535,37 @@ the posterior model being optimized.
 - **AND** the implementation SHALL NOT perform grid, mixture, or
   in-loop `tau2` estimation in this change.
 
+#### Scenario: User-supplied tau2
+
+- **GIVEN** the user supplies a positive scalar `tau2`
+- **WHEN** `apa_susie()` prepares the model
+- **THEN** it SHALL use that value unchanged as the positive slab
+  scale
+- **AND** record `tau2_source = "user"`
+- **AND** the APA prior-variance hooks SHALL leave `tau2` unchanged
+  during IBSS.
+
+#### Scenario: Tau2 floor fallback
+
+- **GIVEN** `tau2 = NULL`
+- **AND** no finite positive excess estimates are available
+- **WHEN** `apa_susie()` prepares the model
+- **THEN** it SHALL set `tau2 = tau2_floor`
+- **AND** record `tau2_source = "floor_no_positive_excess"`
+- **AND** report the fallback in diagnostics.
+
+#### Scenario: Residual variance initialization
+
+- **GIVEN** `residual_variance = NULL`
+- **WHEN** `apa_susie()` prepares the model
+- **THEN** it SHALL initialize each unit's residual variance from a
+  MAD-difference estimate on centered working coverage when finite
+  and positive
+- **AND** fall back to weighted variance of centered working coverage
+  when the MAD estimate is zero or non-finite
+- **AND** use a positive floor with diagnostics when neither estimate
+  is available.
+
 #### Scenario: Candidate union across units
 
 - **GIVEN** different analysis units select different candidates in
@@ -458,8 +573,8 @@ the posterior model being optimized.
 - **WHEN** the initializer combines them
 - **THEN** it SHALL rank the union of candidates by a documented
   positive-evidence score, such as
-  `sum_i unit_weights[i] * logBF_it^+` for marginal initialization
-  or `sum_i unit_weights[i] * max(beta_hat_it, 0)^2` for L0
+  `sum_i unit_weights_norm[i] * logBF_it^+` for marginal initialization
+  or `sum_i unit_weights_norm[i] * max(beta_hat_it, 0)^2` for L0
   initialization
 - **AND** retain at most `min(L, max_nonzero, T)` candidates.
 
@@ -498,10 +613,46 @@ APA-specific computations.
   same roxygen/NAMESPACE S3 mechanism used by the corresponding
   `mf_individual` hooks.
 
+#### Scenario: Centered SER statistics
+
+- **GIVEN** centered partial residuals for one effect
+- **WHEN** `compute_ser_statistics.mf_apa_individual()` is called
+- **THEN** it SHALL compute
+  `x_it = sum_j w_ij * Sc_it(j) * Rc_il(j)`
+- **AND** compute `bhat_it = x_it / d_it`
+- **AND** compute `shat2_it = sigma2_i / d_it`
+- **AND** use cached `d_it` from the centered step cache
+- **AND** make low-information unit-candidate pairs uninformative.
+
 ### Requirement: APA phenotype extraction
 
 The package SHALL provide phenotype extraction that converts posterior
 step-basis effects into unit-level APA summaries.
+
+#### Scenario: Candidate PIP
+
+- **GIVEN** a fitted APA model with posterior `alpha`
+- **WHEN** candidate PIPs are requested
+- **THEN** the implementation SHALL use susieR posterior semantics,
+  `PIP_t = 1 - prod_l (1 - alpha_lt)`.
+
+#### Scenario: Default credible sets
+
+- **GIVEN** a fitted APA model
+- **WHEN** credible sets are requested with default options
+- **THEN** the implementation SHALL construct alpha-based credible
+  sets using susieR's `susie_get_cs()` semantics
+- **AND** SHALL NOT materialize dense `S` or require correlation
+  purity filtering by default.
+
+#### Scenario: Optional bounded purity filtering
+
+- **GIVEN** a user explicitly requests credible-set purity filtering
+- **WHEN** candidate count is below the configured explicit-correlation
+  safety threshold
+- **THEN** the implementation MAY compute a step-basis `Xcorr` and
+  pass it to `susie_get_cs()`
+- **AND** SHALL otherwise skip purity filtering with a diagnostic.
 
 #### Scenario: Candidate usage
 
@@ -567,6 +718,15 @@ step-basis effects into unit-level APA summaries.
   numerically defined
 - **AND** SHALL NOT run QTL, ISSAC, or other association testing.
 
+#### Scenario: Unimplemented uncertainty summaries
+
+- **GIVEN** an uncertainty field is requested but no documented
+  approximation is implemented
+- **WHEN** `apa_phenotype()` returns output
+- **THEN** the field SHALL be returned as missing
+- **AND** a diagnostic SHALL explain that the approximation is not
+  implemented.
+
 ### Requirement: Performance scaling
 
 The APA step-SuSiE fitting path SHALL scale linearly in the number of
@@ -610,6 +770,13 @@ its candidate-screening path.
 - **THEN** `apa_step_Xb`, `apa_step_Xtr`, and `apa_step_colnorm`
   SHALL match explicit multiplication within numerical tolerance.
 
+#### Scenario: Centered intercept-equivalence tests
+
+- **GIVEN** a small weighted example
+- **WHEN** centered APA marginal statistics are compared with an
+  explicit weighted least-squares regression containing an intercept
+- **THEN** `bhat` and `shat2` SHALL match within numerical tolerance.
+
 #### Scenario: Half-normal numerical tests
 
 - **GIVEN** small finite values of `bhat`, `shat2`, and `tau2`
@@ -652,3 +819,11 @@ its candidate-screening path.
   explicit `J x T` design
 - **AND** optional dense construction SHALL be allowed only in tests,
   debugging, or bounded-size L0 initialization.
+
+#### Scenario: PIP and credible-set parity tests
+
+- **GIVEN** a fitted APA model with valid `alpha`
+- **WHEN** APA PIPs and default credible sets are computed
+- **THEN** PIPs SHALL match `susieR::susie_get_pip()`
+- **AND** default credible sets SHALL match `susieR::susie_get_cs()`
+  called without `X` or `Xcorr`.

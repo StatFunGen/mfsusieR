@@ -42,7 +42,7 @@ The fitted model is a unit-level multi-response step-SuSiE model. For
 one gene, with the gene subscript dropped:
 
 ```text
-Y_i(j) = offset_i(j) + sum_l beta_il S[j, Z_l] + e_i(j),
+Y_i(j) = offset_i(j) + baseline_i + sum_l beta_il S[j, Z_l] + e_i(j),
          beta_il >= 0.
 ```
 
@@ -56,6 +56,14 @@ module starts from this working outcome; it may accept offsets,
 weights, and user-supplied bias-corrected coverage, but it does not
 define a unique preprocessing pipeline.
 
+As in susieR, the baseline term is not represented as an explicit
+predictor inside IBSS. The wrapper subtracts the offset, then uses
+weighted centering of the response and step predictors to obtain the
+same effect estimates as a unit-specific intercept model. The IBSS
+loop therefore operates on centered working coverage and centered
+step functions, while the reported baseline is stored only as
+metadata.
+
 The first implementation deliberately avoids grid priors, mixture
 priors, and learned scale mixtures. It uses a simple one-sided
 Gaussian slab in the step-basis coefficient space:
@@ -64,8 +72,21 @@ Gaussian slab in the step-basis coefficient space:
 beta_il | Z_l = t ~ N_+(0, tau2)
 ```
 
-or a user-supplied scalar `tau2`. Later empirical-Bayes scale updates
-can be added as a separate change.
+The first version uses one fixed positive scalar `tau2` per fitted
+gene. A user-supplied positive `tau2` is used unchanged. If `tau2`
+is `NULL`, the wrapper initializes it once from marginal positive step
+estimates before IBSS and keeps it fixed during IBSS. Later
+empirical-Bayes scale updates can be added as a separate change.
+Residual variance is initialized per unit, mirroring the
+`susie_trendfilter()` idea: use a MAD-difference estimate on centered
+working coverage when possible, with weighted-variance and positive
+floor fallbacks.
+
+Cross-unit evidence is combined with normalized unit weights. If
+users provide weights, positive weights are rescaled to have mean one
+and zero weights remain zero. This keeps the usual all-one analysis
+unchanged and prevents arbitrary global rescaling of posterior
+confidence.
 
 ## Codebase review conclusions
 
@@ -135,6 +156,8 @@ cleavage-site precision claim. Nearby positions within
 `merge_distance`, default exactly 25 nt, are collapsed by a documented
 representative rule as microheterogeneity unless users disable merging
 with `merge_distance = NULL` or `merge_distance <= 0`.
+By default, finite local maxima with positive pooled score are
+retained; `max_peaks` can be used as an optional high-score cap.
 
 The returned candidate set must be the union of scan-window
 positions, annotation-supported sites, tail-read sites, motif sites,
@@ -244,7 +267,8 @@ converts the strongest candidates to a SuSiE-style initialization:
 
 ```text
 apa_marginal_init(Y, basis, L, unit_weights = NULL,
-                  weights = NULL, offset = NULL, max_nonzero = L, ...)
+                  weights = NULL, offset = NULL, tau2 = NULL,
+                  max_nonzero = L, ...)
 ```
 
 For each candidate `t` and unit `i`, compute the weighted marginal
@@ -252,9 +276,19 @@ step estimate `bhat_it` and sampling variance `shat2_it`. Under the
 default upstream-positive parameterization, candidates with no
 positive marginal evidence are not used for positive starts. Pool
 candidate support across units, for example with
-`score_t = sum_i unit_weights[i] * logBF_it^+`, keep at most
+`score_t = sum_i unit_weights_norm[i] * logBF_it^+`, keep at most
 `min(L, max_nonzero, T)` candidates, and initialize one effect per
 retained candidate.
+
+When `tau2 = NULL`, reuse the same marginal `bhat_it` and `shat2_it`
+to compute positive excess estimates
+`e_it = max(bhat_it, 0)^2 - shat2_it`. The default fixed slab scale is
+a robust weighted quantile of finite positive `e_it` values, using
+`unit_weights` and defaulting to the weighted median. A positive
+`tau2_floor` is enforced, and the floor is used with a diagnostic when
+no finite positive excess estimates are available.
+The working-outcome scale used for the floor is the median across
+units of the weighted variance of centered `Y - offset`.
 
 The optional L0 initializer follows susieR's `L0Learn` pattern:
 
@@ -273,7 +307,7 @@ requested rule, remove the intercept, and keep nonzero coefficients.
 Under the default positive upstream parameterization, discard
 non-positive coefficients. Combine candidates selected across units by
 the weighted support score
-`score_t = sum_i unit_weights[i] * max(beta_hat_it, 0)^2`, keep at
+`score_t = sum_i unit_weights_norm[i] * max(beta_hat_it, 0)^2`, keep at
 most `L`, and create one one-hot SuSiE effect per retained candidate.
 For selected candidates missing in a unit, initialize that unit's
 coefficient by the positive marginal least-squares estimate at that
@@ -296,7 +330,9 @@ log BF_t^joint = sum_i w_i log BF_it.
 The existing `prior_weights` mechanism supplies `log pi_t` through
 the usual SuSiE softmax path. The weights `w_i` capture effective
 information content and dependency among user-supplied units. If not
-provided, all weights default to 1.
+provided, all weights default to 1. Nonzero unit weights are
+normalized to have mean 1 before they are used, so multiplying all
+weights by a constant does not change posterior confidence.
 
 ### APA phenotype module
 
@@ -328,6 +364,12 @@ Cutpoints are not model parameters. They are post-processing reporting
 boundaries used to collapse a multi-PAS usage vector into a
 proximal-versus-distal balance. If no cutpoint is supplied, the module
 must still return usage, PIPs, credible sets, and expected length.
+PIPs and credible sets should reuse susieR's posterior semantics:
+`PIP_t = 1 - prod_l (1 - alpha_lt)` and alpha-based credible sets via
+`susie_get_pip()` / `susie_get_cs()`. APA should skip dense
+correlation-purity filtering by default because adjacent breakpoint
+candidates are naturally highly correlated; optional purity filtering
+may be added only through a bounded-size step-basis correlation path.
 
 ## Impact
 
