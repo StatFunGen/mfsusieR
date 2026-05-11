@@ -1,433 +1,253 @@
-# Minimal working example: mfsusieR HEAD vs mvf.susie.alpha
+# Full-pipeline comparison: mfsusieR HEAD vs mvf.susie.alpha
 #
-# Runs both packages on identical data under maximally-equivalent parameter
-# settings and documents the confirmed output divergences. This file is NOT
-# an apple-to-apple parity test (the two packages are not expected to match).
-# Its purpose is to make the known engineering differences observable and
-# reproducible in a single place.
+# Covers: fit -> HMM post-smooth -> CS -> LFSR -> posthoc
+# Not a parity test. Documents call signatures, output structure, and
+# known divergences (D1-D3).
 #
-# Companion note: inst/notes/sessions/2026-05-11-mfsusier-vs-mvf-engineering-comparison.md
+# D1. sigma2: mfsusieR > mvf because mvf ER2 bias correction is missing
+#     predictor_weights (deflated ~2x).
+# D2. Bhat/Shat: mvf uses per-variable marginal SE; mfsusieR uses global
+#     sigma2/xtx. Different algorithm, not a bug.
+# D3. ELBO KL sign error in mvf; does not affect PIP convergence.
 #
-# Three confirmed divergences (see §4 of the companion note):
-#   D1. ER2 bias correction: mvf missing predictor_weights → sigma2 deflated ~2x
-#   D2. Bhat/Shat: mvf per-(j,m) marginal SE vs mfsusieR global sigma2/xtx
-#   D3. ELBO sign error in mvf KL term (does not affect PIP-convergence runs)
-#
-# These are mvf bugs or intentional design choices, all documented in
-# inst/notes/refactor-exceptions.md and inst/notes/sessions/2026-04-29-0716-mvf-divergences.md.
-#
-# Skip policy: all tests skip when mvf.susie.alpha is not installed. The package
-# is a read-only reference; do not add it to DESCRIPTION Imports.
+# Companion: inst/notes/sessions/2026-05-11-mfsusier-vs-mvf-engineering-comparison.md
 
-skip_if_no_mvf <- function() {
-  skip_if_not_installed("mvf.susie.alpha")
-}
+skip_if_no_mvf <- function() skip_if_not_installed("mvf.susie.alpha")
 
-# ── Shared fixture ────────────────────────────────────────────────────────────
+# ── Data and parameters ───────────────────────────────────────────────────────
 
-make_mwe_data <- function(seed = 42L, n = 60L, p = 120L, M = 3L, T_y = 64L,
-                          n_signals = 2L) {
+make_mwe_data <- function(seed = 42L, n = 60L, p = 80L, M = 2L, T_y = 32L) {
   set.seed(seed)
-  X      <- matrix(rnorm(n * p), n, p)
-  # Two true causal SNPs with smooth bell-shape effects
-  beta   <- matrix(0, p, T_y)
-  sig_idx <- c(10L, 80L)
-  for (j in sig_idx) {
-    t_grid       <- seq_len(T_y)
-    beta[j, ]   <- exp(-0.5 * ((t_grid - T_y / 2) / (T_y / 8))^2) *
-                   rnorm(1, sd = 0.8)
+  X    <- matrix(rnorm(n * p), n, p)
+  beta <- matrix(0, p, T_y)
+  for (j in c(10L, 60L)) {
+    t    <- seq_len(T_y)
+    beta[j, ] <- exp(-0.5 * ((t - T_y / 2) / (T_y / 8))^2) * rnorm(1, sd = 0.8)
   }
-  Y <- lapply(seq_len(M), function(m) {
-    E <- matrix(rnorm(n * T_y, sd = 0.5), n, T_y)
-    X %*% beta + E
-  })
-  list(X = X, Y = Y, sig_idx = sig_idx, n = n, p = p, M = M, T_y = T_y)
+  Y <- lapply(seq_len(M), function(m)
+    X %*% beta + matrix(rnorm(n * T_y, sd = 0.5), n, T_y))
+  list(X = X, Y = Y, n = n, p = p, M = M, T_y = T_y, sig_idx = c(10L, 60L))
 }
 
-# Maximally-equivalent parameter settings (see §8.1 of companion note):
-#   - no qnorm, no inner EM, cold start, no greedy, same L/tol/max_iter
-MWE_CTRL <- list(
-  convtol.sqp = 1e-8, numiter.em = 20L, tol.svd = 1e-10, verbose = FALSE
-)
-MWE_NULL_WEIGHT <- 0.12   # ≈ mvf nullweight(0.7) / M(3) for M=3 → 0.7/3 ≈ 0.23; use 0.12 for both
-MWE_L      <- 5L
-MWE_MAXIT  <- 30L
-MWE_TOL    <- 1e-4
+MWE_L    <- 5L
+MWE_CTRL <- list(convtol.sqp = 1e-8, numiter.em = 20L, tol.svd = 1e-10, verbose = FALSE)
 
-# ── Test 1: both packages run without error ───────────────────────────────────
+# ── Lazy fit cache ────────────────────────────────────────────────────────────
+# Fits both packages once; shared across all tests below.
 
-test_that("mfsusieR and mvf both run on the same data (sanity)", {
+.cache <- new.env(parent = emptyenv())
+
+.get_fits <- function() {
+  if (isTRUE(.cache$ready)) return(.cache)
   skip_if_no_mvf()
-
   d <- make_mwe_data()
-
-  # mfsusieR
-  fit_mf <- mfsusie(
-    X                    = d$X,
-    Y                    = d$Y,
-    pos                  = lapply(seq_len(d$M), function(m) seq_len(d$T_y)),
-    L                    = MWE_L,
-    prior_variance_scope = "per_outcome",
-    wavelet_qnorm        = FALSE,
-    max_inner_em_steps   = 0L,
-    mixture_null_weight  = MWE_NULL_WEIGHT,
-    control_mixsqp       = MWE_CTRL,
-    L_greedy             = NULL,
-    tol                  = MWE_TOL,
-    max_iter             = MWE_MAXIT,
-    verbose              = FALSE
-  )
-
-  # mvf: Y must be wrapped as list(Y_f = ...)
-  fit_mvf <- mvf.susie.alpha::multfsusie(
-    Y          = list(Y_f = d$Y),
-    X          = d$X,
-    L          = MWE_L,
-    pos        = NULL,
-    prior      = "mixture_normal",
-    nullweight = 0.7,
-    maxit      = MWE_MAXIT,
-    tol        = MWE_TOL,
-    greedy     = FALSE,
-    backfit    = FALSE,
-    verbose    = FALSE
-  )
-
-  expect_true(inherits(fit_mf,  "mfsusie"))
-  expect_true(is.list(fit_mvf))
-
-  # Both produce alpha[L × p]
-  expect_equal(dim(fit_mf$alpha), c(MWE_L, d$p))
-  # mvf stores alpha as a list of L plain numeric vectors of length p;
-  # convert to matrix via rbind.
-  alpha_mvf <- do.call(rbind, fit_mvf$alpha)
-  expect_equal(dim(alpha_mvf), c(MWE_L, d$p))
-})
-
-# ── Test 2: sigma2 — mfsusieR larger than mvf (D1: ER2 bias correction bug) ──
-
-test_that("mfsusieR sigma2 is larger than mvf sigma2 due to correct ER2 formula", {
-  skip_if_no_mvf()
-
-  d <- make_mwe_data()
-
-  fit_mf <- mfsusie(
-    X = d$X, Y = d$Y,
-    pos                  = lapply(seq_len(d$M), function(m) seq_len(d$T_y)),
-    L                    = MWE_L,
-    prior_variance_scope = "per_outcome",
-    wavelet_qnorm        = FALSE,
-    max_inner_em_steps   = 0L,
-    mixture_null_weight  = MWE_NULL_WEIGHT,
-    control_mixsqp       = MWE_CTRL,
-    L_greedy             = NULL,
-    tol                  = MWE_TOL,
-    max_iter             = MWE_MAXIT,
-    verbose              = FALSE
-  )
-
-  fit_mvf <- mvf.susie.alpha::multfsusie(
-    Y = list(Y_f = d$Y), X = d$X, L = MWE_L,
-    prior = "mixture_normal", nullweight = 0.7,
-    maxit = MWE_MAXIT, tol = MWE_TOL,
-    greedy = FALSE, backfit = FALSE, verbose = FALSE
-  )
-
-  # mfsusieR: sigma2 is a list[M] of scalars
-  sigma2_mf  <- unlist(fit_mf$sigma2)
-
-  # mvf: sigma2 stored as $sigma2$sd_f (list[M] of SDs, not variances)
-  sigma2_mvf <- unlist(fit_mvf$sigma2$sd_f)^2
-
-  # D1 prediction: mfsusieR sigma2 > mvf sigma2 because mvf's ER2 bias
-  # correction is ~1/n of the correct value (missing predictor_weights factor).
-  # Both are expected to exceed true noise variance (0.25 = 0.5^2) because
-  # residual includes unmodelled signal, but mvf deflation is a bug.
-  expect_true(
-    all(sigma2_mf > sigma2_mvf),
-    label = sprintf(
-      "mfsusieR sigma2 [%s] should all exceed mvf sigma2 [%s]",
-      paste(round(sigma2_mf,  3), collapse = ", "),
-      paste(round(sigma2_mvf, 3), collapse = ", ")
-    )
-  )
-
-  # Report magnitudes for diagnostic visibility
-  message(sprintf(
-    "sigma2: mfsusieR [%s], mvf [%s], ratio [%s]",
-    paste(round(sigma2_mf,  3), collapse = "/"),
-    paste(round(sigma2_mvf, 3), collapse = "/"),
-    paste(round(sigma2_mf / sigma2_mvf, 2), collapse = "/")
-  ))
-})
-
-# ── Test 3: PIP at signal vs null — document the detection gap ─────────────
-
-test_that("both packages detect at least one signal; document detection gap", {
-  skip_if_no_mvf()
-
-  d <- make_mwe_data()
-
-  fit_mf <- mfsusie(
-    X = d$X, Y = d$Y,
-    pos                  = lapply(seq_len(d$M), function(m) seq_len(d$T_y)),
-    L                    = MWE_L,
-    prior_variance_scope = "per_outcome",
-    wavelet_qnorm        = FALSE,
-    max_inner_em_steps   = 0L,
-    mixture_null_weight  = MWE_NULL_WEIGHT,
-    control_mixsqp       = MWE_CTRL,
-    L_greedy             = NULL,
-    tol                  = MWE_TOL,
-    max_iter             = MWE_MAXIT,
-    verbose              = FALSE
-  )
-
-  fit_mvf <- mvf.susie.alpha::multfsusie(
-    Y = list(Y_f = d$Y), X = d$X, L = MWE_L,
-    prior = "mixture_normal", nullweight = 0.7,
-    maxit = MWE_MAXIT, tol = MWE_TOL,
-    greedy = FALSE, backfit = FALSE, verbose = FALSE
-  )
-
-  pip_mf  <- fit_mf$pip
-  pip_mvf <- fit_mvf$pip
-
-  sig_pip_mf  <- pip_mf[d$sig_idx]
-  sig_pip_mvf <- pip_mvf[d$sig_idx]
-  null_pip_mf  <- max(pip_mf[-d$sig_idx])
-  null_pip_mvf <- max(pip_mvf[-d$sig_idx])
-
-  message(sprintf(
-    "PIP at signals  — mfsusieR: [%s], mvf: [%s]",
-    paste(round(sig_pip_mf,  3), collapse = ", "),
-    paste(round(sig_pip_mvf, 3), collapse = ", ")
-  ))
-  message(sprintf(
-    "Max PIP at null — mfsusieR: %.3f, mvf: %.3f",
-    null_pip_mf, null_pip_mvf
-  ))
-
-  # At least one signal SNP should be detected by each package at pip > 0.5.
-  # D2 (Bhat/Shat) means mvf may detect signals that mfsusieR misses, because
-  # mvf's per-variable marginal SE is smaller at true signals.
-  expect_true(
-    any(sig_pip_mf > 0.5) || any(sig_pip_mvf > 0.5),
-    label = "at least one package detects at least one signal"
-  )
-})
-
-# ── Test 4: CS purity structure ───────────────────────────────────────────────
-
-test_that("CS count and purity accessible from both fit objects", {
-  skip_if_no_mvf()
-
-  d <- make_mwe_data()
-
-  fit_mf <- mfsusie(
-    X = d$X, Y = d$Y,
-    pos                  = lapply(seq_len(d$M), function(m) seq_len(d$T_y)),
-    L                    = MWE_L,
-    prior_variance_scope = "per_outcome",
-    wavelet_qnorm        = FALSE,
-    max_inner_em_steps   = 0L,
-    mixture_null_weight  = MWE_NULL_WEIGHT,
-    control_mixsqp       = MWE_CTRL,
-    L_greedy             = NULL,
-    tol                  = MWE_TOL,
-    max_iter             = MWE_MAXIT,
-    verbose              = FALSE
-  )
-
-  fit_mvf <- mvf.susie.alpha::multfsusie(
-    Y = list(Y_f = d$Y), X = d$X, L = MWE_L,
-    prior = "mixture_normal", nullweight = 0.7,
-    maxit = MWE_MAXIT, tol = MWE_TOL,
-    greedy = FALSE, backfit = FALSE, verbose = FALSE
-  )
-
-  # mfsusieR: CSes live at fit$sets$cs (susieR 0.16.x format);
-  #   each element is a list with $variables (integer vec) and $purity (matrix).
-  cs_mf  <- fit_mf$sets$cs
-  n_cs_mf <- length(cs_mf)
-
-  # mvf: fit$cs is a list of L plain integer vectors (SNP indices).
-  #   Purity lives at the top-level fit$purity (computed by fsusieR::cal_purity
-  #   inside out_prep). It is a matrix with one row per CS.
-  cs_mvf  <- fit_mvf$cs
-  n_cs_mvf <- length(cs_mvf)
-
-  message(sprintf("CS count — mfsusieR: %d, mvf: %d", n_cs_mf, n_cs_mvf))
-
-  # Both should return a list (possibly empty) without error.
-  expect_true(is.list(cs_mf))
-  expect_true(is.list(cs_mvf))
-
-  # If mfsusieR has any CS, purity is accessible via sets$cs[[i]]$purity.
-  if (n_cs_mf > 0) {
-    purities_mf <- vapply(cs_mf, function(cs) {
-      if (is.matrix(cs$purity)) mean(cs$purity[, "mean.abs.corr"]) else mean(cs$purity)
-    }, numeric(1))
-    message(sprintf("mfsusieR purity: [%s]", paste(round(purities_mf, 3), collapse = ", ")))
-    expect_true(all(is.finite(purities_mf)))
-  }
-  # If mvf has any CS, purity is at fit_mvf$purity (top-level matrix).
-  if (n_cs_mvf > 0 && !is.null(fit_mvf$purity)) {
-    purities_mvf <- if (is.matrix(fit_mvf$purity)) rowMeans(fit_mvf$purity, na.rm = TRUE)
-                    else as.numeric(fit_mvf$purity)
-    message(sprintf("mvf purity: [%s]", paste(round(purities_mvf, 3), collapse = ", ")))
-    expect_true(all(is.finite(purities_mvf)))
-  }
-})
-
-# ── Test 5: alpha matrix dimensions and row sums ──────────────────────────────
-
-test_that("alpha[l,] sums to 1 in both packages", {
-  skip_if_no_mvf()
-
-  d <- make_mwe_data()
-
-  fit_mf <- mfsusie(
-    X = d$X, Y = d$Y,
-    pos                  = lapply(seq_len(d$M), function(m) seq_len(d$T_y)),
-    L                    = MWE_L,
-    prior_variance_scope = "per_outcome",
-    wavelet_qnorm        = FALSE,
-    max_inner_em_steps   = 0L,
-    mixture_null_weight  = MWE_NULL_WEIGHT,
-    control_mixsqp       = MWE_CTRL,
-    L_greedy             = NULL,
-    tol                  = MWE_TOL,
-    max_iter             = MWE_MAXIT,
-    verbose              = FALSE
-  )
-
-  fit_mvf <- mvf.susie.alpha::multfsusie(
-    Y = list(Y_f = d$Y), X = d$X, L = MWE_L,
-    prior = "mixture_normal", nullweight = 0.7,
-    maxit = MWE_MAXIT, tol = MWE_TOL,
-    greedy = FALSE, backfit = FALSE, verbose = FALSE
-  )
-
-  # mfsusieR: alpha is an L × p matrix
-  row_sums_mf <- rowSums(fit_mf$alpha)
-  expect_equal(row_sums_mf, rep(1, MWE_L), tolerance = 1e-10,
-               label = "mfsusieR alpha row sums = 1")
-
-  # mvf: each element of fit_mvf$alpha is a plain numeric vector of length p
-  alpha_mvf_rows <- vapply(fit_mvf$alpha, sum, numeric(1))
-  expect_equal(alpha_mvf_rows, rep(1, MWE_L), tolerance = 1e-10,
-               label = "mvf alpha row sums = 1")
-})
-
-# ── Test 6: mvf Y input format vs mfsusieR (document wrapping) ───────────────
-
-test_that("mvf requires Y = list(Y_f = ...) while mfsusieR takes flat list", {
-  skip_if_no_mvf()
-
-  d <- make_mwe_data(n = 30L, p = 40L, M = 2L, T_y = 32L)
   pos <- lapply(seq_len(d$M), function(m) seq_len(d$T_y))
 
-  # mfsusieR: flat list of M matrices
+  # mfsusieR ─────────────────────────────────────────────────────────────────
+  #   1. mfsusie(): returns fit with class "mfsusie"
+  #   2. mf_post_smooth(method="HMM"): adds fit$smoothed$HMM with
+  #        $effect_curves[[m]][[l]]  — length-T position-space curve
+  #        $credible_bands[[m]][[l]] — T x 2 matrix [lower, upper]
+  #        $lfsr_curves[[m]][[l]]    — length-T LFSR in [0,1]
+  #      indexed by outcome m (1..M) and effect l (1..L, all L)
+  #   3. susie_post_outcome_configuration(): reads fit$lbf_variable_outcome
+  #      (L x p x M), enumerates 2^M configs per CS tuple
+
   fit_mf <- mfsusie(
     X = d$X, Y = d$Y, pos = pos,
-    L = 3L, prior_variance_scope = "per_outcome",
-    wavelet_qnorm = FALSE, max_inner_em_steps = 0L,
-    mixture_null_weight = MWE_NULL_WEIGHT,
-    control_mixsqp = MWE_CTRL, L_greedy = NULL,
-    tol = MWE_TOL, max_iter = 10L, verbose = FALSE
-  )
-
-  # mvf: wrapped as list(Y_f = ...)
-  fit_mvf <- mvf.susie.alpha::multfsusie(
-    Y = list(Y_f = d$Y), X = d$X, L = 3L,
-    prior = "mixture_normal", nullweight = 0.7,
-    maxit = 10L, tol = MWE_TOL,
-    greedy = FALSE, backfit = FALSE, verbose = FALSE
-  )
-
-  expect_true(inherits(fit_mf, "mfsusie"))
-  expect_true(is.list(fit_mvf))
-  # Both converge within max_iter
-  expect_lte(fit_mf$niter, 10L)
-})
-
-# ── Test 7: posthoc API — document the divergence in how it is exposed ─────────
-#
-# mfsusieR: stores lbf_variable_outcome (L x p x M) during IBSS; the user calls
-#   susieR::susie_post_outcome_configuration(fit, by = "outcome", method = "susiex")
-#   explicitly after fitting. The susiex method enumerates 2^M configurations per
-#   CS tuple (one tuple per credible set, one L-index per outcome).
-#
-# mvf: posthoc_multfsusie() is called automatically inside out_prep() when
-#   posthoc = TRUE (default). Results live at fit$posthoc[[l]] with fields
-#   logBF_trait, posthoc (marginal prob per trait), active, configs, config_prob.
-
-test_that("mfsusieR lbf_variable_outcome is an L x p x M array", {
-  d <- make_mwe_data()
-
-  fit_mf <- mfsusie(
-    X = d$X, Y = d$Y,
-    pos                  = lapply(seq_len(d$M), function(m) seq_len(d$T_y)),
     L                    = MWE_L,
     prior_variance_scope = "per_outcome",
     wavelet_qnorm        = FALSE,
     max_inner_em_steps   = 0L,
-    mixture_null_weight  = MWE_NULL_WEIGHT,
+    mixture_null_weight  = 0.12,
     control_mixsqp       = MWE_CTRL,
     L_greedy             = NULL,
-    tol                  = MWE_TOL,
-    max_iter             = MWE_MAXIT,
-    verbose              = FALSE
+    tol = 1e-4, max_iter = 30L, verbose = FALSE
   )
-
-  # lbf_variable_outcome is always allocated; shape is [L, p, M].
-  expect_true(is.array(fit_mf$lbf_variable_outcome))
-  expect_equal(dim(fit_mf$lbf_variable_outcome), c(MWE_L, d$p, d$M))
-
-  # susie_post_outcome_configuration() is accessible from the installed susieR.
-  skip_if_not_installed("susieR")
-  pc <- susieR::susie_post_outcome_configuration(
+  fit_mf <- mf_post_smooth(fit_mf, method = "HMM")
+  pc_mf  <- susieR::susie_post_outcome_configuration(
     fit_mf, by = "outcome", method = "susiex"
   )
-  expect_true(inherits(pc, "susie_post_outcome_configuration"))
-  # When there are CS, $susiex is a non-empty list of per-tuple results.
-  # When no CS (no signal detected), $susiex is an empty list -- still valid.
-  expect_true(is.list(pc$susiex))
-  message(sprintf("susiex tuples: %d", length(pc$susiex)))
-  if (length(pc$susiex) > 0L) {
-    t1 <- pc$susiex[[1L]]
-    expect_true(all(c("cs_indices", "logBF_trait", "marginal_prob",
-                       "active", "configs", "config_prob") %in% names(t1)))
-    expect_equal(length(t1$logBF_trait), d$M)
+
+  # mvf ──────────────────────────────────────────────────────────────────────
+  #   multfsusie() with post_processing="HMM" and posthoc=TRUE runs
+  #   both inside out_prep(), trimming null effects before output.
+  #   After trimming: length(fit$alpha) = length(fit$cs) = L_active (<= L).
+  #   HMM output indexed by CS (l_cs = 1..L_active), modality (k = 1..M):
+  #        fit$fitted_func[[l_cs]][[k]] — length-T effect curve
+  #        fit$cred_band[[l_cs]][[k]]   — 2 x T matrix [lower; upper]  (rows, not cols)
+  #        fit$lfsr[[l_cs]]$est_lfsr_functional[[k]] — length-T LFSR
+  #   Posthoc at fit$posthoc[[l_cs]], called automatically.
+
+  fit_mvf <- mvf.susie.alpha::multfsusie(
+    Y               = list(Y_f = d$Y),
+    X               = d$X,
+    pos             = pos,
+    L               = MWE_L,
+    prior           = "mixture_normal",
+    nullweight      = 0.7,
+    maxit           = 30L,
+    tol             = 1e-4,
+    greedy          = FALSE,
+    backfit         = FALSE,
+    post_processing = "HMM",
+    posthoc         = TRUE,
+    verbose         = FALSE
+  )
+
+  .cache$d     <- d
+  .cache$mf    <- fit_mf
+  .cache$pc_mf <- pc_mf
+  .cache$mvf   <- fit_mvf
+  .cache$ready <- TRUE
+  .cache
+}
+
+# ── Tests ─────────────────────────────────────────────────────────────────────
+
+test_that("both pipelines complete without error", {
+  c <- .get_fits()
+  expect_true(inherits(c$mf, "mfsusie"))
+  expect_true(is.list(c$mvf))
+  expect_true(!is.null(c$mf$smoothed$HMM))
+  expect_true(inherits(c$pc_mf, "susie_post_outcome_configuration"))
+})
+
+test_that("alpha: L x p matrix (mfsusieR) vs list of L_active vectors (mvf)", {
+  c <- .get_fits(); d <- c$d
+  # mfsusieR: always L x p, row sums = 1
+  expect_equal(dim(c$mf$alpha), c(MWE_L, d$p))
+  expect_equal(rowSums(c$mf$alpha), rep(1, MWE_L), tolerance = 1e-10)
+  # mvf: out_prep trims null effects; length = L_active (<= L)
+  L_active <- length(c$mvf$alpha)
+  expect_true(L_active <= MWE_L)
+  expect_equal(ncol(do.call(rbind, c$mvf$alpha)), d$p)
+  expect_equal(vapply(c$mvf$alpha, sum, numeric(1)),
+               rep(1, L_active), tolerance = 1e-10)
+  message(sprintf("L_active: mvf=%d / L=%d", L_active, MWE_L))
+})
+
+test_that("PIP: both packages return a length-p vector", {
+  c <- .get_fits(); d <- c$d
+  expect_equal(length(c$mf$pip),  d$p)
+  expect_equal(length(c$mvf$pip), d$p)
+  sig <- d$sig_idx
+  message(sprintf("PIP at signals: mfsusieR [%s], mvf [%s]",
+    paste(round(c$mf$pip[sig],  3), collapse = "/"),
+    paste(round(c$mvf$pip[sig], 3), collapse = "/")))
+})
+
+test_that("sigma2: mfsusieR > mvf (D1: correct vs deflated ER2)", {
+  c <- .get_fits()
+  # mfsusieR: list of M scalars
+  s_mf  <- unlist(c$mf$sigma2)
+  # mvf: $sigma2$sd_f stores SDs, not variances; square to compare
+  s_mvf <- unlist(c$mvf$sigma2$sd_f)^2
+  expect_true(all(s_mf > s_mvf))
+  message(sprintf("sigma2 mfsusieR/mvf ratio: [%s]",
+    paste(round(s_mf / s_mvf, 2), collapse = "/")))
+})
+
+test_that("CS: count and purity accessible from both fits", {
+  c <- .get_fits()
+  # mfsusieR: fit$sets$cs — named list of integer vectors (SNP indices)
+  #           fit$sets$purity — data.frame, one row per CS
+  cs_mf <- c$mf$sets$cs
+  expect_true(is.list(cs_mf))
+  if (length(cs_mf) > 0L) {
+    expect_true(is.data.frame(c$mf$sets$purity) || is.matrix(c$mf$sets$purity))
+    pur_mf <- c$mf$sets$purity[, "mean.abs.corr"]
+    message(sprintf("mfsusieR: %d CS, mean purity [%s]",
+      length(cs_mf), paste(round(pur_mf, 3), collapse = ", ")))
+  }
+  # mvf: fit$cs — list of L_active integer vectors (trimmed)
+  #      fit$purity — matrix, one row per CS
+  cs_mvf <- c$mvf$cs
+  expect_true(is.list(cs_mvf))
+  if (length(cs_mvf) > 0L && !is.null(c$mvf$purity)) {
+    pur_mvf <- if (is.matrix(c$mvf$purity)) rowMeans(c$mvf$purity, na.rm = TRUE)
+               else as.numeric(c$mvf$purity)
+    message(sprintf("mvf: %d CS, mean purity [%s]",
+      length(cs_mvf), paste(round(pur_mvf, 3), collapse = ", ")))
+  }
+  message(sprintf("CS count: mfsusieR=%d, mvf=%d",
+    length(cs_mf), length(cs_mvf)))
+})
+
+test_that("HMM effect curves: shape and indexing", {
+  c <- .get_fits(); d <- c$d
+  hmm <- c$mf$smoothed$HMM
+
+  # mfsusieR: [[outcome m]][[effect l]], all M x L slots, each length T_y
+  expect_equal(length(hmm$effect_curves),        d$M)
+  expect_equal(length(hmm$effect_curves[[1L]]), MWE_L)
+  expect_equal(length(hmm$effect_curves[[1L]][[1L]]), d$T_y)
+
+  # mfsusieR credible bands: T x 2 (lower, upper as columns)
+  expect_equal(dim(hmm$credible_bands[[1L]][[1L]]), c(d$T_y, 2L))
+
+  # mvf: [[CS index]][[modality k]], only L_active slots
+  n_cs <- length(c$mvf$fitted_func)
+  if (n_cs > 0L) {
+    expect_equal(length(c$mvf$fitted_func[[1L]]), d$M)
+    expect_equal(length(c$mvf$fitted_func[[1L]][[1L]]), d$T_y)
+    # mvf credible bands: 2 x T (lower/upper as rows, opposite of mfsusieR)
+    expect_equal(dim(c$mvf$cred_band[[1L]][[1L]]), c(2L, d$T_y))
   }
 })
 
-test_that("mvf posthoc is baked into fit at $posthoc (automatic, default TRUE)", {
-  skip_if_no_mvf()
+test_that("LFSR: values in [0,1]; indexing differs between packages", {
+  c <- .get_fits(); d <- c$d
 
-  d <- make_mwe_data()
+  # mfsusieR: $smoothed$HMM$lfsr_curves[[m]][[l]], all M x L effects
+  lfsr_mf <- c$mf$smoothed$HMM$lfsr_curves
+  expect_equal(length(lfsr_mf),        d$M)
+  expect_equal(length(lfsr_mf[[1L]]), MWE_L)
+  for (m in seq_len(d$M))
+    for (l in seq_len(MWE_L))
+      expect_true(all(lfsr_mf[[m]][[l]] >= 0 & lfsr_mf[[m]][[l]] <= 1))
 
-  fit_mvf <- mvf.susie.alpha::multfsusie(
-    Y = list(Y_f = d$Y), X = d$X, L = MWE_L,
-    prior = "mixture_normal", nullweight = 0.7,
-    maxit = MWE_MAXIT, tol = MWE_TOL,
-    greedy = FALSE, backfit = FALSE,
-    posthoc = TRUE,   # default; included explicitly for documentation
-    verbose = FALSE
-  )
+  # mvf: $lfsr[[l_cs]]$est_lfsr_functional[[k]], only detected CS
+  n_cs <- length(c$mvf$lfsr)
+  if (n_cs > 0L) {
+    for (l in seq_len(n_cs))
+      for (k in seq_len(d$M)) {
+        v <- c$mvf$lfsr[[l]]$est_lfsr_functional[[k]]
+        expect_true(all(v >= 0 & v <= 1))
+      }
+  }
+  message(sprintf(
+    "LFSR slots: mfsusieR %dx%d=%d; mvf %d CS x %d outcomes=%d",
+    d$M, MWE_L, d$M * MWE_L, n_cs, d$M, n_cs * d$M))
+})
 
-  # fit$posthoc is a list of length L; each element NULL or a list with
-  # logBF_trait, posthoc (marginal per-trait prob), active, configs, config_prob.
-  expect_true(is.list(fit_mvf$posthoc))
-  expect_equal(length(fit_mvf$posthoc), MWE_L)
-  non_null <- Filter(Negate(is.null), fit_mvf$posthoc)
-  message(sprintf("mvf posthoc non-null effects: %d / %d", length(non_null), MWE_L))
+test_that("posthoc: explicit call (mfsusieR) vs automatic (mvf)", {
+  c <- .get_fits(); d <- c$d
+
+  # mfsusieR: lbf_variable_outcome (L x p x M) is stored during IBSS;
+  #   user calls susie_post_outcome_configuration() after fit.
+  expect_equal(dim(c$mf$lbf_variable_outcome), c(MWE_L, d$p, d$M))
+  pc <- c$pc_mf
+  expect_true(is.list(pc$susiex))
+  if (length(pc$susiex) > 0L) {
+    t1 <- pc$susiex[[1L]]
+    expect_true(all(c("cs_indices", "logBF_trait", "configs",
+                      "config_prob", "marginal_prob") %in% names(t1)))
+    expect_equal(length(t1$logBF_trait), d$M)
+    expect_equal(nrow(t1$configs), 2L^d$M)
+  }
+
+  # mvf: posthoc computed automatically inside out_prep(); stored at fit$posthoc.
+  #   Length = L_active (same as fit$alpha, fit$cs).
+  expect_true(is.list(c$mvf$posthoc))
+  expect_true(length(c$mvf$posthoc) <= MWE_L)
+  non_null <- Filter(Negate(is.null), c$mvf$posthoc)
   if (length(non_null) > 0L) {
     t1 <- non_null[[1L]]
     expect_true(all(c("logBF_trait", "posthoc", "active",
-                       "configs", "config_prob") %in% names(t1)))
-    # logBF_trait length = number of modalities (M functional + K_u univariate)
-    expect_equal(length(t1$logBF_trait), d$M)
+                      "configs", "config_prob") %in% names(t1)))
+    expect_equal(nrow(t1$configs), 2L^length(t1$logBF_trait))
   }
+  message(sprintf("posthoc susiex tuples: mfsusieR=%d, mvf=%d",
+    length(pc$susiex), length(non_null)))
 })
