@@ -16,11 +16,22 @@
   add an intercept predictor to IBSS. Subtract offsets, then use
   weighted centering of `Y` and each step predictor so the fit is
   equivalent to a unit-specific baseline model.
+- **Working outcome scale**: `Y` must remain on an approximately
+  linear coverage scale after correction. Variance-stabilizing
+  transformations and precision weights are allowed when they preserve
+  linear contrasts. Rank-normalization and quantile-normalization are
+  outside the APA wrapper because they change the interpretation of
+  `beta`.
 - **Default effect prior**: simple one-sided Gaussian slab with a
   scalar `tau2`. If `tau2 = NULL`, initialize it once from marginal
   positive step estimates before IBSS. Keep it fixed during the first
   implementation's IBSS loop. No mixture, no grid, no scale mixture
   in this change.
+- **Residual variance**: `sigma2_i` is a unit-specific noise scale,
+  distinct from `tau2` and row precision weights. If not supplied,
+  initialize it once with `apa_estimate_residual_variance()` and keep
+  it fixed by default. Residual-variance updates are optional and must
+  never update `tau2`.
 - **Annotation prior**: annotations supply nonnegative prior weights
   over candidate PAS positions. They do not impose effect direction
   and do not hard-filter candidates. Strong annotation is represented
@@ -32,10 +43,13 @@
 - **Unit weights**: default unit weights are all one. User-supplied
   nonzero unit weights are normalized to have mean one before use;
   zero weights are allowed and contribute no shared location evidence.
-- **Candidate pre-scan**: candidate PAS can be supplied directly or
-  produced by an optional high-recall `apa_prescan()` function. The
-  pre-scan is an input-variable screening step, not final APA
-  inference and not a strong coverage-derived prior.
+- **Candidate pre-scan**: `apa_prescan()` is the package's coverage
+  scan for constructing or augmenting candidates. It may take
+  `initial_candidates` from any external source, but external PAS
+  discovery is outside this change. If initial candidates are present,
+  residualize on them first and scan the residual. If not, scan
+  working coverage directly. The scan is input-variable screening, not
+  final APA inference and not a strong coverage-derived prior.
 - **Initialization**: the default warm start is a matrix-free
   marginal positive initializer. Optional `L0Learn` initialization is
   off by default, only runs when explicitly requested, must not change
@@ -176,17 +190,21 @@ applied outside or inside the wrapper, the conceptual Gaussian model is
 ```text
 Y_i(j) = offset_i(j) + baseline_i
          + sum_{l=1}^L beta_il S[j, Z_l] + e_i(j),
-e_i(j) ~ approximately Gaussian,
+e_i(j) ~ N(0, sigma2_i / w_ij),
 beta_il >= 0.
 ```
 
 `Y_i(j)` is the working coverage outcome, not the raw count. It is the
 coverage after library-size normalization, bias correction, and any
-variance-stabilizing or residualizing transformation.
+variance-stabilizing or residualizing transformation that preserves
+linear coverage contrasts.
 The APA fit starts after this preprocessing. The wrapper may carry
 offsets, precision weights, and user-supplied corrected outcomes, but
 this change does not implement a unique library-size, GC-bias, or
 5'/3' bias correction pipeline.
+Do not apply rank-normalization or quantile-normalization inside the
+APA wrapper, because such transformations make `beta_il` no longer a
+modeled coverage/PAS-abundance contribution.
 
 The default upstream step basis is
 
@@ -404,6 +422,7 @@ apa_prescan <- function(Y,
                         pos,
                         offset = NULL,
                         weights = NULL,
+                        initial_candidates = NULL,
                         grid = NULL,
                         unit_weights = NULL,
                         tau2_scan = NULL,
@@ -412,17 +431,17 @@ apa_prescan <- function(Y,
                         region_half_width = 100,
                         merge_distance = 25,
                         max_peaks = NULL,
-                        annotations = NULL,
-                        tail_sites = NULL,
-                        motif_sites = NULL,
                         keep_local_background = TRUE,
                         ...)
 ```
 
 The helper returns a candidate set for the main APA wrapper. It is
-optional: users may still supply `candidates` directly. The pre-scan
-must not fit the final APA model, return final usage phenotypes, or
-replace the Bayesian posterior.
+only responsible for coverage-based candidate construction. Users may
+still supply a final `candidates` vector directly to `apa_susie()` and
+skip this helper. External PAS discovery is outside `apa_prescan()`;
+callers pass any external sites through `initial_candidates`. The
+pre-scan must not fit the final APA model, return final usage
+phenotypes, or replace the Bayesian posterior.
 
 Notation:
 
@@ -449,18 +468,45 @@ Offset and intercept rules:
    smooth GC, mappability, or broad 5'/3' bias correction belongs in
    preprocessing or in an externally supplied offset.
 
+Initial-candidate conditioning rule:
+
+1. If `initial_candidates = NULL`, define the scan response as
+   `R_i(j) = Y_i(j) - offset_i(j)` and run the marginal scan with a
+   weighted intercept.
+2. If `initial_candidates` is supplied, validate and map those
+   candidates with the same `apa_step_basis()` rules as the final fit.
+   These candidates are retained in the output candidate set.
+3. For each unit, fit a simple additive step model on the initial
+   candidate basis with a weighted intercept:
+
+   ```text
+   Y_i(j) - offset_i(j) = gamma_i^0
+                          + sum_{t in C0} b_it^0 S[j,t]
+                          + eta_i(j).
+   ```
+
+4. Use `R_i(j) = eta_i(j)` as the scan response for additional
+   candidates. This residualization step is only a candidate
+   construction device; it is not the final Bayesian fit, does not
+   produce usage, and does not define final prior weights.
+5. If the initial-candidate fit is rank-deficient or contains
+   low-information candidates, use a numerically stable weighted least
+   squares fallback such as dropping uninformative columns and record
+   diagnostics. Do not fail the entire scan solely because one initial
+   candidate is uninformative.
+
 For one unit and one scan position, the regression is
 
 ```text
-ytilde_ij = gamma_ir + beta_ir^scan G[j, r] + e_ij,
+R_i(j) = gamma_ir + beta_ir^scan G[j, r] + e_ij,
 beta_ir^scan >= 0.
 ```
 
-with `ytilde = Y - offset`. Weighted centering gives
+Weighted centering gives
 
 ```text
 N_ir =
-  sum_j w_ij (G[j,r] - Gbar_ir) (ytilde_ij - ybar_i)
+  sum_j w_ij (G[j,r] - Gbar_ir) (R_i(j) - Rbar_i)
 
 D_ir =
   sum_j w_ij (G[j,r] - Gbar_ir)^2
@@ -518,29 +564,33 @@ disable this merging by setting `merge_distance = NULL` or
 The returned object must contain:
 
 - `candidates`: numeric candidate coordinates for `apa_susie()`;
-- `candidate_metadata`: source labels such as `scan_region`,
-  `scan_background`, `annotation`, `tail`, or `motif`;
+- `candidate_metadata`: source labels such as `initial`,
+  `scan_region`, or `scan_background`;
 - `regions`: scan-seeded candidate regions with peak position, source
   curve, peak score, expanded interval, and retained candidates;
 - `scores`: optional scan score summaries or a lazily returned score
   object;
 - `diagnostics`: skipped positions, denominator failures,
-  low-side-weight failures, caps applied, and final candidate counts.
+  low-side-weight failures, initial-candidate residualization status,
+  caps applied, and final candidate counts.
 
 Within each expanded scan region, keep fine-scale positions and
 flanking low-score positions when `keep_local_background = TRUE`.
 These are not guaranteed null effects, but they provide nearby
 competing variables and reduce conditioning on only pre-selected
 maxima. Coverage-derived scan scores should normally be used for
-candidate inclusion. Annotation, motif, tail-read support, and other
-external evidence are the preferred inputs for strong final
-`prior_weights`, to reduce double use of the same coverage data.
+candidate inclusion, not as strong final `prior_weights`. Annotation,
+motif, tail-read support, and other external evidence can be supplied
+to the separate prior module after candidate construction. This
+separation reduces double use of the same coverage data.
 
 Implementation should use cumulative sums, not `R` separate dense
-regressions. For dense `R = J`, compute for each unit
+regressions. For dense `R = J`, compute for each unit after defining
+the scan response `R_i` as either offset-adjusted working coverage or
+the initial-candidate residual:
 `P_ir = sum_{j:x_j <= d_r} w_ij`,
-`H_ir = sum_{j:x_j <= d_r} w_ij * ytilde_ij`,
-`T_i = sum_j w_ij * ytilde_ij`, and `Q_i = sum_j w_ij`; then
+`H_ir = sum_{j:x_j <= d_r} w_ij * R_i(j)`,
+`T_i = sum_j w_ij * R_i(j)`, and `Q_i = sum_j w_ij`; then
 `N_ir = H_ir - P_ir * T_i / Q_i` and
 `D_ir = P_ir - P_ir^2 / Q_i`. These are the same WLS quantities
 above, written in prefix-sum form. This gives `O(n * J)` cost per gene
@@ -571,7 +621,8 @@ and fall back to uniform only when requested explicitly.
 
 Annotation features are evidence about candidate locations. They must
 not encode effect signs. Hard filtering, if explicitly requested by a
-user before calling the wrapper, is outside this module. The first
+user before calling the wrapper, is outside this module. The prior
+module must not run PAS discovery or candidate scanning. The first
 implementation should be deliberately simple: support direct
 `prior_weights`, direct numeric `scores`, or a small fixed linear
 score from supplied feature columns and supplied coefficients. It must
@@ -645,6 +696,11 @@ apa_estimate_tau2 <- function(bhat,
                               y_scale = NULL,
                               tau2_floor = NULL,
                               quantile = 0.5)
+
+apa_estimate_residual_variance <- function(Y,
+                                           weights = NULL,
+                                           offset = NULL,
+                                           floor = NULL)
 
 apa_l0learn_init <- function(Y,
                              basis,
@@ -731,19 +787,32 @@ Residual variance initialization:
 
 1. If the user supplies `residual_variance`, validate it as positive
    and use it as the initial `sigma2_i`.
-2. Otherwise, for each unit use a weighted analogue of susieR
-   trend-filtering's MAD-difference initializer on the centered
-   working coverage:
+2. Otherwise, call `apa_estimate_residual_variance()` once before
+   IBSS. For each unit, first compute centered working coverage
+   `Yc_i(j) = Y_i(j) - offset_i(j) - ybar_i`.
+3. If row precision weights are all one or absent, use the
+   trend-filtering MAD-difference initializer
 
    ```text
-   sigma2_i^MAD = 0.5 * (median(|diff(Yc_i)|) / 0.6745)^2.
+   sigma2_i^MAD = (MAD(diff(Yc_i)) / (0.6745 * sqrt(2)))^2.
    ```
 
-3. If the MAD value is zero or non-finite, fall back to the weighted
+4. If row precision weights vary, use standardized adjacent
+   differences:
+
+   ```text
+   z_i(j) = (Yc_i(j) - Yc_i(j-1))
+            / sqrt(1 / w_ij + 1 / w_i,j-1),
+   sigma2_i^MAD = (MAD(z_i) / 0.6745)^2.
+   ```
+
+5. If the MAD value is zero or non-finite, fall back to the weighted
    variance of `Yc_i`.
-4. If both are unavailable, use a small positive floor and record a
+6. If both are unavailable, use a small positive floor and record a
    diagnostic.
-5. Residual variance may be updated by
+7. By default, keep `sigma2_i` fixed during IBSS
+   (`estimate_residual_variance = FALSE`). Residual variance may be
+   updated by
    `update_model_variance.mf_apa_individual()` when
    `estimate_residual_variance = TRUE`; this is separate from the
    fixed `tau2` slab scale.
@@ -848,7 +917,7 @@ apa_susie <- function(Y,
                       weights = NULL,
                       offset = NULL,
                       residual_variance = NULL,
-                      estimate_residual_variance = TRUE,
+                      estimate_residual_variance = FALSE,
                       ...)
 ```
 
@@ -858,7 +927,9 @@ Input contract:
   vectors/matrices each length `J`;
 - `Y` is the working coverage outcome, not raw counts; preprocessing
   and bias correction are performed upstream or supplied through
-  `offset` and `weights`;
+  `offset` and `weights`; transformations must preserve linear
+  coverage contrasts, so rank-normalized or quantile-normalized
+  coverage is not a valid default input for the APA wrapper;
 - `pos` is length `J` and ordered in transcript direction;
 - `candidates` are positions or integer indices mappable to `pos`;
   they may be user-supplied directly or taken from
@@ -882,7 +953,11 @@ Input contract:
   step estimates;
 - `residual_variance` is optional and initializes per-unit residual
   variance; if `NULL`, initialize from centered working coverage using
-  MAD-difference with weighted-variance fallback;
+  `apa_estimate_residual_variance()` with MAD-difference,
+  weighted-variance, and positive-floor fallbacks;
+- `estimate_residual_variance = FALSE` by default keeps the
+  initialized `sigma2_i` fixed during IBSS; setting it to `TRUE`
+  updates residual variance only and never updates `tau2`;
 - `estimate_prior_variance` is not a first-version public APA
   argument; the slab scale is controlled by `tau2`;
 - `prior_strength` and `prior_floor` control how strongly annotation
@@ -1086,12 +1161,13 @@ phenotype among detected candidate steps, not a complete absolute
 isoform-abundance decomposition.
 
 If `sum_s A_is < eps`, usage for that unit is returned as missing.
-The output must include a unit-level `usage_reportable` flag. The
-default rule is reportable only when the usage denominator is at least
-`eps`, `max(candidate_pip)` is at least `pip_report_threshold`
-defaulting to `0.5`, and at least one non-diffuse credible set is
-present. These thresholds are post-fit reporting diagnostics, not
-model parameters.
+Otherwise usage is returned for all candidates; it is not filtered by
+credible sets or PIP before normalization. The output must include
+unit-level diagnostic flags, including `usage_has_mass` and
+`usage_reportable`. The default `usage_reportable` rule may use
+post-fit quantities such as the usage denominator, maximum candidate
+PIP, or CS diffuseness, but these flags must not change the returned
+usage matrix. They are reporting diagnostics, not model parameters.
 
 Expected length is
 
@@ -1099,8 +1175,8 @@ Expected length is
 EL_i = sum_t U_it c_t.
 ```
 
-Expected length is returned only for units with reportable usage;
-otherwise it is missing with the same diagnostic.
+Expected length is returned whenever usage has a nonzero denominator;
+otherwise it is missing with the same low-mass diagnostic.
 
 Balance for cutpoint `r`:
 
@@ -1194,17 +1270,27 @@ expected outputs must be documented.
    common breakpoint across units. Expected output: pooled/shared
    model has higher true-location PIP than fitting each unit
    independently, without forcing equal effect sizes.
-5. **Annotation prior stress test**: simulate a strong but imperfect
+5. **Endpoint-only units**: simulate one unit whose coverage ends at a
+   proximal candidate and another unit whose coverage ends at a distal
+   candidate, using the same candidate basis. Expected output:
+   posterior usage concentrates on the proximal candidate for the
+   first unit and on the distal candidate for the second unit, even
+   though neither unit contains two internal APA drops.
+6. **Conditional coverage scan**: supply one external initial
+   candidate, simulate an additional true breakpoint in the residual,
+   and verify that `apa_prescan()` retains the initial candidate while
+   adding the residual-scan candidate.
+7. **Annotation prior stress test**: simulate a strong but imperfect
    annotation. Expected output: higher prior odds and improved weak
    signal recovery when annotation is correct; recovery by data when
    annotation is wrong and the prior floor is not zero.
-6. **Bias/offset test**: add a broad positional trend that is supplied
+8. **Bias/offset test**: add a broad positional trend that is supplied
    as an offset. Expected output: false scan peaks are reduced after
    offset subtraction, while true sharp breakpoints remain detectable.
-7. **Overlapping-unit weights**: duplicate or partially duplicate
+9. **Overlapping-unit weights**: duplicate or partially duplicate
    analysis units. Expected output: downweighting duplicates reduces
    overconfidence in PIPs relative to treating them as independent.
-8. **Pre-scan recall**: simulate true PAS not exactly at the local
+10. **Pre-scan recall**: simulate true PAS not exactly at the local
    maximum. Expected output: expanded candidate regions contain the
    true candidate and local background candidates.
 
@@ -1284,3 +1370,18 @@ article stub explaining:
 
 The docs must emphasize that the model is unit-agnostic and that unit
 construction is the user's responsibility.
+
+Documentation and implementation comments have different audiences:
+
+- user-facing roxygen and vignette text should be concise and should
+  avoid implementation-level algebra unless needed for interpretation;
+- code comments near nontrivial statistical helpers must contain the
+  exact working formulas used by the code;
+- all package documentation and code comments added for this change
+  must be ASCII-only;
+- mathematical comments must use LaTeX-style text such as
+  `Y_i(j)`, `S[j,t]`, `sigma2_i`, `tau2`,
+  `bhat_it = x_it / d_it`, and
+  `shat2_it = sigma2_i / d_it`;
+- comments must distinguish `tau2`, `sigma2_i`, row precision
+  weights `w_ij`, and cross-unit weights `unit_weights_norm[i]`.
