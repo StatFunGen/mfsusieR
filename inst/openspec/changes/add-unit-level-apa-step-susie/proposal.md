@@ -44,6 +44,7 @@ one gene, with the gene subscript dropped:
 ```text
 Y_i(j) = offset_i(j) + baseline_i + sum_l beta_il S[j, Z_l] + e_i(j),
          beta_il >= 0.
+e_i(j) ~ N(0, sigma2_i / w_i(j)).
 ```
 
 where `i` indexes analysis units, `j` indexes observed ordered
@@ -51,10 +52,13 @@ positions/bins, `t` indexes candidate PAS locations, `Z_l` is the PAS
 location for single-effect component `l`, and `beta_il` is the
 unit-specific effect magnitude. The working outcome `Y_i(j)` is
 corrected coverage after library-size normalization, bias correction,
-and any variance-stabilizing or residualizing transformation. The APA
-module starts from this working outcome; it may accept offsets,
-weights, and user-supplied bias-corrected coverage, but it does not
-define a unique preprocessing pipeline.
+and any variance-stabilizing or residualizing transformation that
+preserves linear coverage contrasts. The APA module starts from this
+working outcome; it may accept offsets, precision weights, and
+user-supplied bias-corrected coverage, but it does not define a unique
+preprocessing pipeline. Rank-normalization or quantile-normalization
+of `Y` is outside the APA wrapper because it changes the interpretation
+of `beta` as a modeled coverage/PAS-abundance contribution.
 
 As in susieR, the baseline term is not represented as an explicit
 predictor inside IBSS. The wrapper subtracts the offset, then uses
@@ -74,13 +78,20 @@ beta_il | Z_l = t ~ N_+(0, tau2)
 
 The first version uses one fixed positive scalar `tau2` per fitted
 gene. A user-supplied positive `tau2` is used unchanged. If `tau2`
-is `NULL`, the wrapper initializes it once from marginal positive step
-estimates before IBSS and keeps it fixed during IBSS. Later
-empirical-Bayes scale updates can be added as a separate change.
-Residual variance is initialized per unit, mirroring the
-`susie_trendfilter()` idea: use a MAD-difference estimate on centered
-working coverage when possible, with weighted-variance and positive
-floor fallbacks.
+is `NULL`, the wrapper calls `apa_estimate_tau2()` once, using
+marginal positive step estimates on the final candidate set, and keeps
+`tau2` fixed during IBSS. Later empirical-Bayes scale updates can be
+added as a separate change.
+
+Residual variance is unit-specific. A user-supplied positive
+`residual_variance` is used unchanged. If it is `NULL`, the wrapper
+calls `apa_estimate_residual_variance()` once per unit. The default
+uses a robust first-difference MAD estimate on centered working
+coverage, with weighted-variance and positive-floor fallbacks. The
+first implementation keeps `sigma2_i` fixed by default; optional
+residual-variance updates are allowed only when
+`estimate_residual_variance = TRUE`, and they must never update
+`tau2`.
 
 Cross-unit evidence is combined with normalized unit weights. If
 users provide weights, positive weights are rescaled to have mean one
@@ -113,29 +124,43 @@ without copying their full complexity:
 
 ### Candidate PAS pre-scan module
 
-`R/apa_prescan.R` defines an optional high-recall screening function
-that constructs candidate PAS inputs before the APA step-SuSiE fit:
+`R/apa_prescan.R` defines a high-recall coverage scan that constructs
+or augments candidate PAS inputs before the APA step-SuSiE fit:
 
 ```text
 apa_prescan(Y, pos, offset = NULL, weights = NULL,
+            initial_candidates = NULL,
             grid = NULL, unit_weights = NULL,
             region_half_width = 100, merge_distance = 25,
-            annotations = NULL, tail_sites = NULL,
-            motif_sites = NULL, ...)
+            keep_local_background = TRUE, ...)
 ```
 
 The pre-scan is not final inference and must not be treated as a hard
-APA call. By default it scans every observed position or bin, so
-`R = J` and `d_r = x_r`. A coarser custom grid is allowed as a speed
-option.
+APA call or as a strong coverage-derived prior. External PAS discovery
+is outside this module. Users may pass a candidate list obtained from
+any external source through `initial_candidates`; the function records
+these as retained input candidates but does not know how they were
+generated. If `initial_candidates = NULL`, the function directly scans
+the working coverage. If `initial_candidates` is supplied, the function
+first residualizes the working coverage on those retained candidates
+and then scans the residuals for additional candidates. By default it
+scans every observed position or bin, so `R = J` and `d_r = x_r`. A
+coarser custom grid is allowed as a speed option.
 
 For each scan position it fits a one-step weighted regression with an
-intercept:
+intercept, either on centered `Y - offset` or on the residual after
+conditioning on `initial_candidates`:
 
 ```text
-Y_i(j) - offset_i(j) = gamma_ir + beta_ir^scan 1(x_j <= d_r) + e_i(j),
+R_i(j) = gamma_ir + beta_ir^scan 1(x_j <= d_r) + e_i(j),
 beta_ir^scan >= 0.
 ```
+
+When `initial_candidates` is supplied, `R_i(j)` is obtained by fitting
+an additive step model on the retained input candidates with a
+weighted intercept and subtracting the fitted step contribution. This
+conditioning step is only for candidate construction; it is not the
+final Bayesian APA fit.
 
 If no position-specific offset is supplied, the offset is zero. The
 intercept is always fit by weighted centering and absorbs the
@@ -159,12 +184,13 @@ with `merge_distance = NULL` or `merge_distance <= 0`.
 By default, finite local maxima with positive pooled score are
 retained; `max_peaks` can be used as an optional high-score cap.
 
-The returned candidate set must be the union of scan-window
-positions, annotation-supported sites, tail-read sites, motif sites,
-and fine-scale local background positions inside scan regions. Within
-each scan-expanded region, keep flanking low-score positions, not
-only the local maximum, so the final model retains nearby competing or
-null-like variables.
+The returned candidate set must be the union of retained
+`initial_candidates`, scan-window positions, and fine-scale local
+background positions inside scan regions. Within each scan-expanded
+region, keep flanking low-score positions, not only the local maximum,
+so the final model retains nearby competing or null-like variables.
+Candidate metadata must record whether a position came from
+`initial`, `scan_region`, or `scan_background`.
 
 ### Step-basis module
 
@@ -214,8 +240,8 @@ pi_t    = omega_t / sum_s omega_s.
 tail-read support, cleavage cluster support, internal priming risk,
 mappability, local sequence covariates, or user-defined numeric
 features. These features are prior evidence only. The module must not
-hard-filter candidates by annotation and must not encode effect signs
-in annotation features.
+discover PAS, hard-filter candidates by annotation, or encode effect
+signs in annotation features.
 
 The first implementation accepts either user-supplied `prior_weights`
 or a simple fixed score from user-supplied or default feature weights.
@@ -260,6 +286,16 @@ This module does not define the posterior target. The default
 initializer is a cheap marginal positive initializer using the same
 matrix-free step statistics as the model. `L0Learn` is an optional
 initializer only when explicitly requested.
+
+The same APA initialization file must expose the two scale helpers:
+
+```text
+apa_estimate_tau2(...)
+apa_estimate_residual_variance(...)
+```
+
+Both helpers are initialization helpers, not posterior updates. They
+must be callable and testable without running IBSS.
 
 The default initializer computes positive marginal evidence for each
 candidate and analysis unit, pools that evidence across units, and

@@ -37,7 +37,8 @@ outcome for analysis unit `i` and ordered position `j`.
 - **THEN** it SHALL state that `Y_i(j)` is not raw coverage
 - **AND** it SHALL describe `Y_i(j)` as coverage after library-size
   normalization, bias correction, and optional variance-stabilizing or
-  residualizing transformation.
+  residualizing transformation that preserves linear coverage
+  contrasts.
 
 #### Scenario: Bias correction is upstream of the APA fit
 
@@ -47,6 +48,15 @@ outcome for analysis unit `i` and ordered position `j`.
   optional working-model components
 - **AND** SHALL NOT require a built-in library-size, GC-bias, or
   5'/3' bias correction pipeline.
+
+#### Scenario: No rank-normalized coverage inside APA wrapper
+
+- **GIVEN** APA wrapper documentation
+- **THEN** it SHALL state that rank-normalization or
+  quantile-normalization of `Y` is not part of the APA wrapper
+- **AND** it SHALL explain that such transformations change the
+  interpretation of `beta` as a modeled coverage/PAS-abundance
+  contribution.
 
 #### Scenario: Row precision weights
 
@@ -184,20 +194,59 @@ relationship to, but distinction from, the existing Haar/DWT path.
 
 ### Requirement: Candidate PAS pre-scan
 
-The package SHALL provide an optional high-recall candidate pre-scan
-function that can construct candidate PAS inputs for the APA fitting
+The package SHALL provide a coverage-based candidate pre-scan function
+that can construct or augment candidate PAS inputs for the APA fitting
 module. The pre-scan SHALL be documented as input-variable screening,
-not final APA inference.
+not final APA inference. External PAS discovery SHALL be outside this
+function; external candidate sites may only enter as
+`initial_candidates`.
 
 #### Scenario: Dense default scan
 
 - **GIVEN** a working coverage matrix `Y` with `J` ordered positions
 - **AND** no custom scan grid
+- **AND** `initial_candidates = NULL`
 - **WHEN** `apa_prescan(Y, pos, ...)` is called
 - **THEN** the function SHALL scan all observed positions or bins as
   possible breakpoints
 - **AND** treat `R = J` and `d_r = x_r` up to boundary positions that
   fail minimum information checks.
+
+#### Scenario: Initial candidates are retained
+
+- **GIVEN** working coverage `Y`
+- **AND** finite `initial_candidates` from an external source
+- **WHEN** `apa_prescan(Y, pos, initial_candidates = initial_candidates, ...)`
+  is called
+- **THEN** the function SHALL validate and map the initial candidates
+  with the same step-basis rules as the final APA fit
+- **AND** retain valid initial candidates in the returned candidate
+  set
+- **AND** record source metadata identifying them as `initial`
+- **AND** SHALL NOT attempt to infer how those external candidates
+  were generated.
+
+#### Scenario: Conditional scan after initial candidates
+
+- **GIVEN** valid `initial_candidates`
+- **WHEN** `apa_prescan()` computes scan statistics
+- **THEN** it SHALL first fit, per analysis unit, an additive step
+  model on the initial-candidate basis with a weighted intercept
+- **AND** define the scan response as the residual from that fitted
+  additive model
+- **AND** scan the residual response for additional candidates
+- **AND** return the union of retained initial candidates and
+  scan-added candidates.
+
+#### Scenario: Conditional scan is not final inference
+
+- **GIVEN** a conditional scan with `initial_candidates`
+- **WHEN** `apa_prescan()` returns
+- **THEN** the residualization SHALL be documented as candidate
+  construction only
+- **AND** SHALL NOT return usage phenotypes
+- **AND** SHALL NOT define final prior weights
+- **AND** SHALL NOT replace the Bayesian APA fit.
 
 #### Scenario: Optional offset and fitted intercept
 
@@ -233,7 +282,7 @@ not final APA inference.
 - **GIVEN** a scan position `d_r` and analysis unit `i`
 - **WHEN** `apa_prescan()` computes marginal statistics
 - **THEN** it SHALL compute `bhat_ir^scan` from the weighted centered
-  regression on `1(x_j <= d_r)`
+  regression of the scan response on `1(x_j <= d_r)`
 - **AND** compute `shat2_ir` as the working sampling variance of
   `bhat_ir^scan`
 - **AND** compute the unit scan score as
@@ -297,12 +346,22 @@ not final APA inference.
 
 #### Scenario: Candidate source union
 
-- **GIVEN** scan-derived regions, annotations, tail-read sites, and
-  motif sites
+- **GIVEN** retained initial candidates and scan-derived regions
 - **WHEN** `apa_prescan()` finalizes the candidate set
-- **THEN** it SHALL return the union of these sources
-- **AND** return metadata indicating which source or sources supported
-  each candidate.
+- **THEN** it SHALL return the union of retained initial candidates,
+  scan-region candidates, and requested local-background candidates
+- **AND** return metadata indicating whether each candidate came from
+  `initial`, `scan_region`, `scan_background`, or multiple such
+  sources.
+
+#### Scenario: Scan scores are not strong final priors
+
+- **GIVEN** candidates added by the coverage scan
+- **WHEN** `apa_prescan()` returns candidate metadata
+- **THEN** coverage-derived scan scores SHALL be treated as
+  candidate-inclusion diagnostics
+- **AND** SHALL NOT automatically become strong final `prior_weights`
+  for `apa_susie()`.
 
 #### Scenario: Pre-scan efficiency
 
@@ -566,7 +625,8 @@ the posterior model being optimized.
 - **AND** marginal estimates `bhat_it` and sampling variances
   `shat2_it` are available from the matrix-free marginal initializer
 - **WHEN** `apa_susie()` prepares the model
-- **THEN** it SHALL compute
+- **THEN** it SHALL call an APA helper named `apa_estimate_tau2()`
+- **AND** compute
   `e_it = max(bhat_it, 0)^2 - shat2_it`
 - **AND** keep finite positive excess estimates
 - **AND** initialize one positive scalar `tau2` before the IBSS loop
@@ -579,9 +639,6 @@ the posterior model being optimized.
   used, and the retained-excess count in diagnostics
 - **AND** the APA prior-variance hooks SHALL leave `tau2` unchanged
   during IBSS
-- **AND** `update_model_variance.mf_apa_individual()` SHALL remain
-  responsible for residual-variance updates and derived-cache refresh
-  when `estimate_residual_variance = TRUE`
 - **AND** the implementation SHALL NOT perform grid, mixture, or
   in-loop `tau2` estimation in this change.
 
@@ -608,13 +665,42 @@ the posterior model being optimized.
 
 - **GIVEN** `residual_variance = NULL`
 - **WHEN** `apa_susie()` prepares the model
-- **THEN** it SHALL initialize each unit's residual variance from a
-  MAD-difference estimate on centered working coverage when finite
-  and positive
+- **THEN** it SHALL call an APA helper named
+  `apa_estimate_residual_variance()`
+- **AND** initialize each unit's residual variance from a
+  first-difference MAD estimate on centered working coverage when
+  finite and positive
 - **AND** fall back to weighted variance of centered working coverage
   when the MAD estimate is zero or non-finite
 - **AND** use a positive floor with diagnostics when neither estimate
   is available.
+
+#### Scenario: Weighted residual variance initialization
+
+- **GIVEN** non-constant row precision weights
+- **AND** `residual_variance = NULL`
+- **WHEN** `apa_estimate_residual_variance()` initializes
+  `sigma2_i`
+- **THEN** it SHALL standardize adjacent differences using
+  `sqrt(1 / w_ij + 1 / w_i,j-1)`
+- **AND** apply the MAD estimate to the standardized differences
+- **AND** return per-unit diagnostics for the estimator and fallback
+  used.
+
+#### Scenario: User-supplied residual variance
+
+- **GIVEN** the user supplies positive `residual_variance`
+- **WHEN** `apa_susie()` prepares the model
+- **THEN** it SHALL use the supplied value as the initial `sigma2_i`
+- **AND** record the source in diagnostics.
+
+#### Scenario: Residual variance fixed by default
+
+- **GIVEN** `estimate_residual_variance` is not supplied
+- **WHEN** `apa_susie()` fits the model
+- **THEN** it SHALL keep the initialized or user-supplied
+  `sigma2_i` fixed during IBSS
+- **AND** it SHALL record that residual variance was fixed.
 
 #### Scenario: Residual variance update
 
@@ -625,6 +711,8 @@ the posterior model being optimized.
 - **AND** `ERSS_i` SHALL be the weighted expected squared residual
   including posterior second-moment terms
 - **AND** it SHALL NOT use only the squared posterior mean residual
+- **AND** it SHALL refresh derived quantities that depend on
+  `sigma2_i`
 - **AND** it SHALL leave the fixed slab scale `tau2` unchanged.
 
 #### Scenario: Candidate validation and L cap
@@ -750,16 +838,28 @@ step-basis effects into unit-level APA summaries.
 - **AND** the centered baseline/intercept component SHALL NOT be
   included as a distal PAS or in the usage denominator.
 
+#### Scenario: Usage is computed before reporting filters
+
+- **GIVEN** a fitted APA model with nonzero modeled step-derived
+  candidate contribution in an analysis unit
+- **WHEN** `apa_phenotype()` computes usage
+- **THEN** it SHALL compute usage for all candidates before applying
+  any PIP, credible-set, entropy, or reportability diagnostic
+- **AND** PIP and credible-set summaries SHALL NOT be prerequisites
+  for constructing the usage matrix.
+
 #### Scenario: Usage reportability
 
 - **GIVEN** a fitted APA model
 - **WHEN** `apa_phenotype()` returns usage
-- **THEN** it SHALL include a unit-level `usage_reportable` flag
-- **AND** the default rule SHALL require usage denominator at least
-  `eps`, `max(candidate_pip) >= 0.5`, and at least one non-diffuse
-  credible set
-- **AND** non-reportable usage SHALL be returned as missing or flagged
-  according to the documented output contract.
+- **THEN** it SHALL include unit-level `usage_has_mass` and
+  `usage_reportable` flags
+- **AND** low modeled step-derived denominator SHALL make usage
+  missing with diagnostics
+- **AND** other reportability rules based on maximum PIP, entropy, or
+  credible-set diffuseness SHALL be diagnostic flags only
+- **AND** such reporting flags SHALL NOT alter non-missing usage
+  values.
 
 #### Scenario: Expected length
 
@@ -767,9 +867,9 @@ step-basis effects into unit-level APA summaries.
 - **AND** candidate usage estimates
 - **WHEN** expected length is requested
 - **THEN** the helper SHALL return `sum_t usage_it * coordinate_t`
-  for each analysis unit with reportable usage
-- **AND** expected length SHALL be missing with diagnostics for
-  non-reportable units.
+  for each analysis unit with non-missing usage
+- **AND** expected length SHALL be missing only when usage is missing,
+  with the same low-mass diagnostic.
 
 #### Scenario: Cutpoints are optional reporting boundaries
 
@@ -904,6 +1004,15 @@ its candidate-screening path.
   calculation that includes posterior second-moment terms
 - **AND** SHALL apply the documented per-unit variance floor.
 
+#### Scenario: Residual-variance initialization tests
+
+- **GIVEN** working coverage with unweighted, weighted, zero-MAD,
+  non-finite, and user-supplied residual-variance cases
+- **WHEN** `apa_estimate_residual_variance()` is tested directly
+- **THEN** it SHALL return positive finite `sigma2_i` values or
+  informative errors as documented
+- **AND** it SHALL record which estimator or fallback was used.
+
 #### Scenario: Candidate validation tests
 
 - **GIVEN** more single effects than informative candidate PAS
@@ -937,7 +1046,10 @@ its candidate-screening path.
   or too little modeled step-derived abundance
 - **WHEN** `apa_phenotype()` reports usage
 - **THEN** `usage_reportable` SHALL be `FALSE`
-- **AND** expected length SHALL be missing for non-reportable units
+- **AND** low modeled step-derived abundance SHALL make usage and
+  expected length missing
+- **AND** low maximum PIP or diffuse credible sets alone SHALL NOT
+  change non-missing usage values
 - **AND** the centered baseline/intercept SHALL NOT be included in the
   usage denominator.
 
@@ -950,6 +1062,29 @@ its candidate-screening path.
   locations
 - **AND** estimated unit-level effects SHALL vary across analysis
   units.
+
+#### Scenario: Endpoint-only simulation
+
+- **GIVEN** one analysis unit whose coverage ends at a proximal
+  candidate
+- **AND** another analysis unit whose coverage ends at a distal
+  candidate
+- **AND** both units use the same candidate basis
+- **WHEN** `apa_susie()` is fit
+- **THEN** unit-specific usage SHALL concentrate on the corresponding
+  endpoint candidate
+- **AND** the model SHALL NOT require each unit to contain two
+  internal APA drops.
+
+#### Scenario: Conditional pre-scan simulation
+
+- **GIVEN** one retained initial candidate and one additional true
+  breakpoint present in the residual
+- **WHEN** `apa_prescan()` is run with `initial_candidates`
+- **THEN** the output SHALL retain the initial candidate
+- **AND** add the residual-scan candidate or its candidate-resolution
+  neighborhood
+- **AND** record both candidate sources.
 
 #### Scenario: Pre-scan recall simulation
 
@@ -984,3 +1119,32 @@ its candidate-screening path.
 - **THEN** PIPs SHALL match `susieR::susie_get_pip()`
 - **AND** default credible sets SHALL match `susieR::susie_get_cs()`
   called without `X` or `Xcorr`.
+
+### Requirement: Documentation and code comments
+
+The package SHALL keep user documentation concise while documenting
+the implementation math in code comments for statistical helpers.
+
+#### Scenario: ASCII-only documentation and comments
+
+- **GIVEN** package documentation or code comments added for this APA
+  module
+- **THEN** the added text SHALL use ASCII characters only.
+
+#### Scenario: Mathematical comments near statistical helpers
+
+- **GIVEN** code implementing nontrivial APA statistical helpers
+- **WHEN** comments are added near the implementation
+- **THEN** those comments SHALL state the working formulas in
+  LaTeX-style ASCII text
+- **AND** include the relevant notation, such as `Y_i(j)`, `S[j,t]`,
+  `sigma2_i`, `tau2`, `bhat_it = x_it / d_it`, and
+  `shat2_it = sigma2_i / d_it`.
+
+#### Scenario: Distinguish variance and weight quantities
+
+- **GIVEN** documentation or code comments that mention model scales
+  or weights
+- **THEN** they SHALL distinguish row precision weights `w_ij`,
+  cross-unit weights `unit_weights_norm[i]`, residual variance
+  `sigma2_i`, and slab scale `tau2`.

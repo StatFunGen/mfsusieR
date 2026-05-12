@@ -39,7 +39,9 @@
 ## 1A. Candidate PAS pre-scan module
 
 - [ ] 1A.1 Add `R/apa_prescan.R` with `apa_prescan()` as a separate
-      high-recall candidate screening function.
+      coverage-based candidate construction function. It may accept
+      `initial_candidates`, but it must not implement external PAS
+      discovery.
 - [ ] 1A.2 Default to a dense scan with `R = J` and `d_r = x_r`;
       support a custom coarser grid as a speed option.
 - [ ] 1A.3 Treat `Y` as the working coverage outcome; if `offset` is
@@ -50,38 +52,52 @@
 - [ ] 1A.5 Do not estimate a flexible smooth GC, mappability, or
       5'/3' bias offset inside `apa_prescan()`; accept such correction
       only as preprocessing or as a supplied fixed offset.
-- [ ] 1A.6 Compute `bhat_ir^scan`, `shat2_ir`, and
+- [ ] 1A.6 If `initial_candidates` is supplied, validate and map them
+      with the same basis rules as the final fit, retain them in the
+      output, fit an additive weighted-intercept step model on those
+      candidates per unit, and scan the residuals. If
+      `initial_candidates = NULL`, scan offset-adjusted working
+      coverage directly.
+- [ ] 1A.7 Treat initial-candidate residualization as candidate
+      construction only: it must not return usage, must not define the
+      final Bayesian posterior, and must not turn coverage scan scores
+      into strong final prior weights.
+- [ ] 1A.8 Compute `bhat_ir^scan`, `shat2_ir`, and
       `m_ir = log BF^+(bhat_ir^scan, shat2_ir, tau2_scan)`, and
       document that `shat2_ir` is a sampling variance, not a score.
-- [ ] 1A.7 Skip or flag scan positions with too little effective
+- [ ] 1A.9 Skip or flag scan positions with too little effective
       weight on either side or with a near-zero centered denominator.
-- [ ] 1A.8 Compute the pooled score curve by weighted sums across
+- [ ] 1A.10 Compute the pooled score curve by weighted sums across
       analysis units after normalizing positive `unit_weights` to
       mean one.
-- [ ] 1A.9 Seed candidate regions from local maxima in the pooled
+- [ ] 1A.11 Seed candidate regions from local maxima in the pooled
       score curve; by default retain finite local maxima with
       positive pooled score, and use `max_peaks` only as an optional
       high-score cap.
-- [ ] 1A.10 Expand retained peaks by `region_half_width`, default
+- [ ] 1A.12 Expand retained peaks by `region_half_width`, default
       exactly 100 nt, and retain fine-scale plus flanking
       local-background candidates inside expanded regions.
-- [ ] 1A.11 Collapse nearby candidates within `merge_distance`,
+- [ ] 1A.13 Collapse nearby candidates within `merge_distance`,
       default exactly 25 nt, using a documented representative rule
       while preserving distinct peaks outside that distance; allow
       users to disable merging with `merge_distance = NULL` or
       `merge_distance <= 0`.
-- [ ] 1A.12 Return candidates as the union of scan-region,
-      annotation, tail-read, and motif sources, with candidate
-      metadata and region diagnostics.
-- [ ] 1A.13 Implement the dense scan with prefix sums or equivalent
+- [ ] 1A.14 Return candidates as the union of retained
+      `initial_candidates`, scan-region positions, and local
+      background positions, with source metadata and region
+      diagnostics.
+- [ ] 1A.15 Implement the dense scan with prefix sums or equivalent
       linear-time operations; do not fit `R` separate dense
       regressions per unit.
-- [ ] 1A.14 Add tests comparing prefix-sum scan estimates to explicit
+- [ ] 1A.16 Add tests comparing prefix-sum scan estimates to explicit
       weighted least-squares with an intercept, including supplied
       offsets, no-offset behavior, low-side-weight filtering, local
       background retention, multiple nearby peaks, merge behavior, and
       source-union metadata.
-- [ ] 1A.15 If `tau2_scan = NULL`, estimate it once from scan
+- [ ] 1A.17 Add a conditional-scan test where an initial candidate is
+      retained, residualization removes its fitted contribution, and
+      the residual scan adds a second true candidate.
+- [ ] 1A.18 If `tau2_scan = NULL`, estimate it once from scan
       marginal statistics using the positive-excess rule and record
       scan-scale diagnostics.
 
@@ -147,7 +163,9 @@
 ## 5. Initialization module
 
 - [ ] 5.1 Add `R/apa_init.R` with `apa_marginal_init()`,
-      `apa_l0learn_init()`, and `apa_init_from_step_coef()`.
+      `apa_l0learn_init()`, `apa_init_from_step_coef()`,
+      `apa_estimate_tau2()`, and
+      `apa_estimate_residual_variance()`.
 - [ ] 5.2 Add wrapper controls `init_method = c("marginal",
       "none", "l0learn")` and `l0_control = list()`. The default
       must be `"marginal"`.
@@ -185,10 +203,16 @@
 - [ ] 5.5E Define `y_scale` for `tau2_floor` as the median across
       units of finite weighted variances of centered `Y - offset`,
       with a documented positive fallback.
-- [ ] 5.5F Add residual-variance initialization: use supplied
-      `residual_variance` if present; otherwise use a weighted
-      MAD-difference estimate on centered working coverage with
-      weighted-variance and positive-floor fallbacks.
+- [ ] 5.5F Implement `apa_estimate_residual_variance()` as a separate
+      APA helper. Use supplied `residual_variance` if present;
+      otherwise use centered working coverage and a first-difference
+      MAD estimate. For varying row precision weights, standardize
+      adjacent differences by
+      `sqrt(1 / w_ij + 1 / w_i,j-1)`. Use weighted-variance and
+      positive-floor fallbacks, and return diagnostics per unit.
+- [ ] 5.5G Keep initialized `sigma2_i` fixed by default. Only update
+      residual variance when `estimate_residual_variance = TRUE`, and
+      never update `tau2` in the residual-variance update path.
 - [ ] 5.6 In `apa_l0learn_init()`, check that `L0Learn` is installed;
       otherwise return `NULL` with a diagnostic and let the wrapper
       use marginal initialization.
@@ -236,11 +260,10 @@
       alpha rows, dimensions matching `L`, `T`, and the number of
       analysis units, and no negative starting `beta` under the
       upstream-positive model.
-- [ ] 5.19 If a MAD residual-variance warm start is implemented,
-      mirror `susie_trendfilter()` behavior: skip it when
-      `model_init` is supplied, apply it per analysis unit to
-      centered `Y_i - offset_i`, and fall back cleanly when the
-      estimate is zero or non-finite.
+- [ ] 5.19 Add direct unit tests for
+      `apa_estimate_residual_variance()` covering unweighted,
+      weighted, zero-MAD, non-finite, and user-supplied
+      `residual_variance` cases.
 
 ## 6. APA data subclass and wrapper
 
@@ -250,8 +273,9 @@
       `Y`, `pos`, `candidates`, `L`, `offset`, row precision
       `weights`, `prior_weights`, `annotations`, `unit_weights`,
       `tau2`, `orientation`, `prior_strength`, `prior_floor`,
-      `init_method`, `l0_control`, `residual_variance`, and standard
-      SuSiE control arguments.
+      `init_method`, `l0_control`, `residual_variance`,
+      `estimate_residual_variance = FALSE`, and standard SuSiE
+      control arguments.
       Do not expose
       `estimate_prior_variance` in the first APA wrapper; `tau2`
       controls the slab scale.
@@ -281,7 +305,14 @@
 - [ ] 6.10 Treat `Y` as a working coverage outcome; accept `offset`,
       `weights`, and already-corrected coverage, but do not implement
       a built-in library-size, GC-bias, or 5'/3' bias correction
-      pipeline in this change.
+      pipeline in this change. Document that default inputs should
+      preserve linear coverage contrasts; do not add rank-normalized
+      or quantile-normalized coverage preprocessing inside the APA
+      wrapper.
+- [ ] 6.10B Initialize per-unit residual variance with
+      `apa_estimate_residual_variance()` when omitted. Keep it fixed
+      by default and update it only when
+      `estimate_residual_variance = TRUE`.
 - [ ] 6.10A Validate row precision weights. Accept `NULL`, a length-`J`
       vector recycled across units, a `J x n` matrix, or a list of
       `n` length-`J` vectors. Reject missing, negative, non-finite,
@@ -354,6 +385,10 @@
       as confident breakpoint calls.
 - [ ] 8.3 Normalize usage by unit and return missing usage with a
       diagnostic when total inferred abundance is below tolerance.
+- [ ] 8.3B Compute usage for all candidates before any PIP or
+      credible-set reporting filter. PIP and CS summaries are
+      uncertainty diagnostics; they must not be prerequisites for
+      constructing the usage matrix.
 - [ ] 8.3A Define first-version usage as relative modeled
       step-derived candidate usage. Do not include the centered
       baseline/intercept component as a distal PAS or in the usage
@@ -377,11 +412,10 @@
 - [ ] 8.9 If uncertainty summaries are not implemented by a documented
       approximation, return them as `NA` with diagnostics rather than
       using an undocumented delta-method shortcut.
-- [ ] 8.10 Add `usage_reportable` diagnostics. By default usage is
-      reportable only when the usage denominator is at least `eps`,
-      `max(candidate_pip) >= 0.5`, and at least one non-diffuse CS is
-      present. Expected length is missing when usage is not
-      reportable.
+- [ ] 8.10 Add `usage_has_mass` and `usage_reportable` diagnostics.
+      Low denominator still makes usage missing. Other rules based on
+      maximum PIP, entropy, or CS diffuseness are reporting flags only
+      and must not alter the returned usage matrix.
 - [ ] 8.11 Add deterministic tests for usage normalization, zero/one/
       multiple cutpoints, expected length, missing denominator flags,
       mixed-model export fields, and dimensions.
@@ -410,11 +444,21 @@
 - [ ] 9.9 Document uncertainty exports for downstream mixed models
       while making clear that association testing is out of scope.
 - [ ] 9.10 Document `apa_prescan()` as optional input-variable
-      screening, including the offset/intercept rule, the definition
-      of `m_ir` and `shat2_ir`, the default `region_half_width`, the
-      merge distance, local-background candidates, and why
-      coverage-derived scan scores are normally not used as strong
-      final priors.
+      screening, including `initial_candidates`, conditional
+      residualization before scan, the offset/intercept rule, the
+      definition of `m_ir` and `shat2_ir`, the default
+      `region_half_width`, the merge distance, local-background
+      candidates, and why coverage-derived scan scores are normally
+      not used as strong final priors.
+- [ ] 9.11 Add package documentation and code comments under the
+      ASCII-only rule. User-facing documentation should be concise;
+      implementation comments around nontrivial math must spell out
+      formulas in LaTeX-style ASCII text, including `Y_i(j)`,
+      `S[j,t]`, `sigma2_i`, `tau2`, `bhat_it = x_it / d_it`, and
+      `shat2_it = sigma2_i / d_it`.
+- [ ] 9.12 Code comments must explicitly distinguish row precision
+      weights `w_ij`, cross-unit weights `unit_weights_norm[i]`,
+      residual variance `sigma2_i`, and slab scale `tau2`.
 
 ## 10. Integration tests
 
@@ -472,12 +516,20 @@
 - [ ] 10.19 Verify first-version usage excludes the baseline from the
       usage denominator and returns missing usage when the modeled
       step-derived denominator is below tolerance.
-- [ ] 10.20 Verify diffuse credible sets and low maximum PIP make
-      `usage_reportable = FALSE`, and expected length is missing for
-      non-reportable units.
+- [ ] 10.20 Verify diffuse credible sets and low maximum PIP can make
+      `usage_reportable = FALSE` without changing non-missing usage
+      values when the usage denominator is adequate.
 - [ ] 10.21 Verify `init_method = "l0learn"` falls back to marginal
       initialization when any unit has non-constant row precision
       weights.
+- [ ] 10.22 Simulate endpoint-only units: one unit uses only a
+      proximal endpoint and another uses only a distal endpoint under
+      the same candidate basis. Verify unit-specific usage
+      concentrates on the corresponding candidate.
+- [ ] 10.23 Verify conditional coverage scan: supplied
+      `initial_candidates` are retained, the residual scan is run
+      after conditioning on them, and additional true candidates can
+      be added.
 
 ## 11. Performance tests
 
