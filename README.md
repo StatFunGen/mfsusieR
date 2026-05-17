@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/StatFunGen/mfsusieR/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/StatFunGen/mfsusieR/actions/workflows/ci.yml)
 [![Website](https://github.com/StatFunGen/mfsusieR/actions/workflows/dispatch_pkgdown_build.yml/badge.svg?branch=main)](https://statfungen.github.io/mfsusieR)
-[![Coverage](https://img.shields.io/endpoint?url=https://statfungen.github.io/mfsusieR/coverage.json)](https://github.com/StatFunGen/mfsusieR/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://statfungen.github.io/mfsusieR/coverage.json)](https://github.com/StatFunGen/mfsusieR/actions/workflows/dispatch_pkgdown_build.yml)
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![GitHub release](https://img.shields.io/github/v/release/StatFunGen/mfsusieR?include_prereleases&sort=semver)](https://github.com/StatFunGen/mfsusieR/releases)
 

@@ -37,9 +37,10 @@ jobs:
         # build. Override with the GitHub master tip.
         run: pixi run -e r44 R -e 'remotes::install_github("stephenslab/susieR", upgrade = "never")'
 
-      - name: Compute coverage (writes /tmp/coverage.json)
+      - name: Generate coverage badge data
         run: |
           pixi run -e r44 R -e '
+          pkgbuild::compile_dll(quiet = TRUE);
           cov <- covr::package_coverage(quiet = TRUE);
           pct <- covr::percent_coverage(cov);
           cat(sprintf("Computed coverage: %.2f%%\n", pct));
@@ -51,7 +52,7 @@ jobs:
       - name: Update pkgdown site
         run: pixi run -e r44 pkgdown_build
 
-      - name: Copy coverage.json into docs/ for Pages deploy
+      - name: Copy coverage badge data into docs
         run: |
           mkdir -p docs
           cp /tmp/coverage.json docs/coverage.json
