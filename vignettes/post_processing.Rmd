@@ -304,7 +304,7 @@ files in the working directory.
 checkpoint_path   <- tempfile("mfsusie_checkpoint_",   fileext = ".rds")
 distribution_path <- tempfile("mfsusie_distribution_", fileext = ".rds")
 fit_full <- fit                                      # complete, warm-start ready
-fit_thin <- mf_thin(fit_full, method = "alpha_collapsed")
+fit_thin <- mfsusieR:::mf_thin(fit_full, method = "alpha_collapsed")
 saveRDS(fit_full, checkpoint_path)                   # for resuming a fit
 saveRDS(fit_thin, distribution_path)                 # ~factor p smaller
 ```
