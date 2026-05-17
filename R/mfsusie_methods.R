@@ -176,7 +176,7 @@ coef.mfsusie <- function(object, smooth_method = NULL, ...) {
     for (l in seq_len(L)) {
       # Per-effect raw-X wavelet coefficient curve. Helper dispatches
       # on save_mu_method: "complete" runs sum_j alpha_lj mu_lj /
-      # csd_X[j]; "alpha_collapsed" reads the precomputed
+      # csd_X[j]; "aggregated" reads the precomputed
       # fit$coef_wavelet[[l]][[m]] (the per-j scaling cannot be
       # recovered after alpha-collapse); "lead" returns mu[j*, ] /
       # csd_X[j*].
@@ -712,7 +712,7 @@ mf_post_smooth <- function(fit,
       credible_bands[[m]][[l]] <- out$credible_band
       lfsr_curves[[m]][[l]]    <- out$lfsr
       # Per-variant clfsr requires the full p x T mu / mu2. Under
-      # save_mu_method = "alpha_collapsed" or "lead" we only have a
+      # save_mu_method = "aggregated" or "lead" we only have a
       # 1 x T summary, which would degenerate to the alpha-aggregated
       # lfsr already in lfsr_curves; leave clfsr_curves NULL so the
       # plot per-variant toggle errors instead of silently displaying

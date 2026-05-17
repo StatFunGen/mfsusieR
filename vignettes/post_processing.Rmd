@@ -290,7 +290,7 @@ trade-offs:
 | Mode | `mu[[l]][[m]]` shape | `coef` / `mf_post_smooth` numerics | `predict(newx)` | per-variant lfsr | warm-start (`model_init`) |
 |---|---|---|---|---|---|
 | `"complete"` (default) | `p x T_basis[m]` | exact | works | works | works |
-| `"alpha_collapsed"` | `1 x T_basis[m]` (= `alpha %*% mu_full`) | numerically equivalent to `"complete"` (1e-12) | errors | errors | errors |
+| `"aggregated"` | `1 x T_basis[m]` (= `alpha %*% mu_full`) | numerically equivalent to `"complete"` (1e-12) | errors | errors | errors |
 | `"lead"` | `1 x T_basis[m]` (= `mu_full[j*, ]`, `j* = which.max(alpha[l, ])`) | cheap lead-variable summary, biased toward the lead | errors | errors | errors |
 
 The two 1D modes drop the per-variant axis the SER step needs,
@@ -304,7 +304,7 @@ files in the working directory.
 checkpoint_path   <- tempfile("mfsusie_checkpoint_",   fileext = ".rds")
 distribution_path <- tempfile("mfsusie_distribution_", fileext = ".rds")
 fit_full <- fit                                      # complete, warm-start ready
-fit_thin <- mfsusieR:::mf_thin(fit_full, method = "alpha_collapsed")
+fit_thin <- mfsusieR:::mf_thin(fit_full, method = "aggregated")
 saveRDS(fit_full, checkpoint_path)                   # for resuming a fit
 saveRDS(fit_thin, distribution_path)                 # ~factor p smaller
 ```
@@ -312,7 +312,7 @@ saveRDS(fit_thin, distribution_path)                 # ~factor p smaller
 `coef(fit_thin)` and `mf_post_smooth(fit_thin, method = ...)`
 return the same numbers as `coef(fit_full)` and
 `mf_post_smooth(fit_full, ...)` to numerical precision under
-`"alpha_collapsed"`, and the cheap lead-variable summary under
+`"aggregated"`, and the cheap lead-variable summary under
 `"lead"`.
 
 ### Inspecting the structure
@@ -322,14 +322,14 @@ under each mode and look at the per-(effect, outcome) slot.
 
 ```{r save-mu-method-build, message = FALSE, warning = FALSE}
 fit_complete <- fsusie(Y, X, pos = positions, save_mu_method = "complete")
-fit_alpha    <- fsusie(Y, X, pos = positions, save_mu_method = "alpha_collapsed")
+fit_alpha    <- fsusie(Y, X, pos = positions, save_mu_method = "aggregated")
 fit_lead     <- fsusie(Y, X, pos = positions, save_mu_method = "lead")
 
 # "complete": fit$mu[[l]][[m]] is p x T_basis[m]. fit$top_index
 # and fit$coef_wavelet are absent.
 str(fit_complete$mu[[1]][[1]])
 
-# "alpha_collapsed": fit$mu[[l]][[m]] and fit$mu2[[l]][[m]] are
+# "aggregated": fit$mu[[l]][[m]] and fit$mu2[[l]][[m]] are
 # 1 x T_basis[m] (= alpha %*% mu_full / mu2_full). fit$coef_wavelet
 # carries the raw-X coef summary 1 x T_basis[m].
 str(fit_alpha$mu[[1]][[1]])
@@ -348,7 +348,7 @@ without re-inferring from shape.
 
 ```{r save-mu-method-attrs}
 sapply(list(complete        = fit_complete,
-            alpha_collapsed = fit_alpha,
+            aggregated = fit_alpha,
             lead            = fit_lead),
        function(f) attr(f, "save_mu_method"))
 ```
@@ -359,7 +359,7 @@ the constant overhead from `alpha`, `lbf_variable`, `fitted`,
 etc., which are unchanged across modes).
 
 ```{r save-mu-method-sizes}
-ac_path <- tempfile("mfsusieR_alpha_collapsed_", fileext = ".rds")
+ac_path <- tempfile("mfsusieR_aggregated_", fileext = ".rds")
 ld_path <- tempfile("mfsusieR_lead_",            fileext = ".rds")
 co_path <- tempfile("mfsusieR_complete_",        fileext = ".rds")
 saveRDS(fit_complete, co_path)
@@ -367,7 +367,7 @@ saveRDS(fit_alpha,    ac_path)
 saveRDS(fit_lead,     ld_path)
 
 size_table <- data.frame(
-  mode        = c("complete", "alpha_collapsed", "lead"),
+  mode        = c("complete", "aggregated", "lead"),
   object_mb   = c(object.size(fit_complete),
                   object.size(fit_alpha),
                   object.size(fit_lead)) / (1024 * 1024),
@@ -385,13 +385,13 @@ size_table
 ```
 
 The `coef()` outputs match exactly between `"complete"` and
-`"alpha_collapsed"` (lossless for the coef path); `"lead"`
+`"aggregated"` (lossless for the coef path); `"lead"`
 diverges by the cheap-coef bias.
 
 ```{r save-mu-method-coef-equiv}
 max_abs_diff_alpha <- max(abs(coef(fit_complete)[[1]] - coef(fit_alpha)[[1]]))
 max_abs_diff_lead  <- max(abs(coef(fit_complete)[[1]] - coef(fit_lead)[[1]]))
-c(complete_vs_alpha_collapsed = max_abs_diff_alpha,
+c(complete_vs_aggregated = max_abs_diff_alpha,
   complete_vs_lead            = max_abs_diff_lead)
 ```
 
@@ -402,7 +402,7 @@ overhead of the non-mu fields (`alpha`, `lbf_variable`, `fitted`,
 fine-mapping `p = 500-3000` the ratio approaches the theoretical
 factor `p`. For example a separate p = 500 / T = 64 / M = 2 / L = 5
 fixture saved at 7.8 MB under `"complete"` and 0.50 MB under
-`"alpha_collapsed"` (15.7x in-memory, 12.9x on disk).
+`"aggregated"` (15.7x in-memory, 12.9x on disk).
 
 The `coef()` zero-difference between `"complete"` and `"lead"` on
 this fixture is also a small-`p` artifact: every credible set
