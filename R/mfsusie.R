@@ -312,6 +312,7 @@ mfsusie <- function(X, Y,
                     model_init                = NULL,
                     small_sample_correction   = FALSE,
                     max_inner_em_steps            = 5L,
+                    cross_iter_prior          = TRUE,
                     attach_smoothing_inputs   = TRUE,
                     save_mu_method            = c("complete",
                                                   "alpha_collapsed",
@@ -431,7 +432,8 @@ mfsusie <- function(X, Y,
     small_sample_correction    = small_sample_correction,
     small_sample_df            = if (small_sample_correction) data$n - 1L
                                  else NULL,
-    max_inner_em_steps             = as.integer(max_inner_em_steps)
+    max_inner_em_steps             = as.integer(max_inner_em_steps),
+    cross_iter_prior               = isTRUE(cross_iter_prior)
   )
 
   # 4. Run the susieR workhorse. All per-effect and per-iteration
