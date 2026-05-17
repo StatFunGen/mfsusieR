@@ -44,7 +44,7 @@ mfsusie(
   small_sample_correction = FALSE,
   max_inner_em_steps = 5L,
   attach_smoothing_inputs = TRUE,
-  save_mu_method = c("complete", "alpha_collapsed", "lead")
+  save_mu_method = c("complete", "aggregated", "lead")
 )
 }
 \arguments{
@@ -265,7 +265,7 @@ when sharing fits where the per-individual data should
 not travel with the fit.}
 
 \item{save_mu_method}{one of \code{"complete"} (default),
-\code{"alpha_collapsed"}, or \code{"lead"}. Controls the storage shape
+\code{"aggregated"}, or \code{"lead"}. Controls the storage shape
 of the per-effect posterior moments \code{fit$mu} and \code{fit$mu2}
 after the IBSS loop finishes.
 
@@ -274,7 +274,7 @@ outcome) moments; this is the only mode that supports
 \code{model_init} warm-starts, \code{predict.mfsusie(newx)}, and the
 per-variant lfsr toggle in plots.
 
-\code{"alpha_collapsed"} replaces each \verb{p x T} matrix by the
+\code{"aggregated"} replaces each \verb{p x T} matrix by the
 alpha-weighted 1 x T summary
 \verb{mu[[l]][[m]] = sum_j alpha[l, j] * mu_full[l, j, ]} (and
 the analogous second-moment summary). Storage shrinks by
@@ -291,7 +291,7 @@ This is a cheap single-variable coefficient summary, biased
 toward the lead. \code{coef.mfsusie} and \code{mf_post_smooth} work but
 are not the alpha-weighted posterior mean; document accordingly.
 
-Both 1D modes (\code{"alpha_collapsed"}, \code{"lead"}) error on
+Both 1D modes (\code{"aggregated"}, \code{"lead"}) error on
 \code{predict.mfsusie(newx)}, the plot per-variant lfsr toggle,
 and \code{model_init}. Use \code{mf_thin()} to thin a complete fit
 after the fact while keeping the original for warm-starts.}

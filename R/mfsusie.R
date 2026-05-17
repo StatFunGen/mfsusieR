@@ -203,7 +203,7 @@
 #'   when sharing fits where the per-individual data should
 #'   not travel with the fit.
 #' @param save_mu_method one of `"complete"` (default),
-#'   `"alpha_collapsed"`, or `"lead"`. Controls the storage shape
+#'   `"aggregated"`, or `"lead"`. Controls the storage shape
 #'   of the per-effect posterior moments `fit$mu` and `fit$mu2`
 #'   after the IBSS loop finishes.
 #'
@@ -212,7 +212,7 @@
 #'   `model_init` warm-starts, `predict.mfsusie(newx)`, and the
 #'   per-variant lfsr toggle in plots.
 #'
-#'   `"alpha_collapsed"` replaces each `p x T` matrix by the
+#'   `"aggregated"` replaces each `p x T` matrix by the
 #'   alpha-weighted 1 x T summary
 #'   `mu[[l]][[m]] = sum_j alpha[l, j] * mu_full[l, j, ]` (and
 #'   the analogous second-moment summary). Storage shrinks by
@@ -230,7 +230,7 @@
 #'   toward the lead. `coef.mfsusie` and `mf_post_smooth` work but
 #'   are not the alpha-weighted posterior mean; document accordingly.
 #'
-#'   Both 1D modes (`"alpha_collapsed"`, `"lead"`) error on
+#'   Both 1D modes (`"aggregated"`, `"lead"`) error on
 #'   `predict.mfsusie(newx)`, the plot per-variant lfsr toggle,
 #'   and `model_init`. Use `mf_thin()` to thin a complete fit
 #'   after the fact while keeping the original for warm-starts.
@@ -314,7 +314,7 @@ mfsusie <- function(X, Y,
                     max_inner_em_steps            = 5L,
                     attach_smoothing_inputs   = TRUE,
                     save_mu_method            = c("complete",
-                                                  "alpha_collapsed",
+                                                  "aggregated",
                                                   "lead")) {
   if (!is.logical(small_sample_correction) ||
       length(small_sample_correction) != 1L ||

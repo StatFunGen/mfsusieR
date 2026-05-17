@@ -1,7 +1,7 @@
 # Miscellaneous internal utilities (internal).
 #
 # Covers the `save_mu_method` storage policy: helpers for inspecting and
-# applying the three mu/mu2 storage modes ("complete", "alpha_collapsed",
+# applying the three mu/mu2 storage modes ("complete", "aggregated",
 # "lead"), plus the post-fit `mf_thin()` trimmer.
 
 # ---- save_mu_method helpers ------------------------------------------
@@ -31,7 +31,7 @@ get_coef_wavelet_curve <- function(fit, l, m) {
     mu_raw_X <- sweep(fit$mu[[l]][[m]], 1L, X_scale, "/")
     return(as.numeric(fit$alpha[l, ] %*% mu_raw_X))
   }
-  if (mode == "alpha_collapsed") {
+  if (mode == "aggregated") {
     return(as.numeric(fit$coef_wavelet[[l]][[m]]))
   }
   if (mode == "lead") {
@@ -59,7 +59,7 @@ mf_apply_save_mu_method <- function(fit, mode) {
     attr(fit, "save_mu_method") <- "complete"
     return(fit)
   }
-  if (!(mode %in% c("alpha_collapsed", "lead"))) {
+  if (!(mode %in% c("aggregated", "lead"))) {
     stop(sprintf("Unknown save_mu_method: %s", mode))
   }
 
@@ -67,7 +67,7 @@ mf_apply_save_mu_method <- function(fit, mode) {
   M <- fit$dwt_meta$M
   X_scale <- fit$dwt_meta$X_scale
 
-  if (mode == "alpha_collapsed") {
+  if (mode == "aggregated") {
     coef_wavelet <- vector("list", L)
     for (l in seq_len(L)) {
       coef_wavelet[[l]] <- vector("list", M)
@@ -85,7 +85,7 @@ mf_apply_save_mu_method <- function(fit, mode) {
       }
     }
     fit$coef_wavelet <- coef_wavelet
-    attr(fit, "save_mu_method") <- "alpha_collapsed"
+    attr(fit, "save_mu_method") <- "aggregated"
     return(fit)
   }
 
@@ -107,7 +107,7 @@ mf_apply_save_mu_method <- function(fit, mode) {
 # ---- post-fit thinning ------------------------------------------------
 
 #' @keywords internal
-mf_thin <- function(fit, method = c("alpha_collapsed", "lead")) {
+mf_thin <- function(fit, method = c("aggregated", "lead")) {
   if (!inherits(fit, "mfsusie")) {
     stop("`fit` must be an `mfsusie` object.")
   }
