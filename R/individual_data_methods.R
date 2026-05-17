@@ -655,7 +655,8 @@ pre_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
   # per-effect adaptation lives in `model$pi_V` / `model$G_prior`,
   # not in the susieR scalar V. The pre-hook returns V = 1 so the
   # SER orchestrator's BF computation runs against the mixture as-is.
-  if (!is.null(model$fitted_g_per_effect)) {
+  if (!is.null(model$fitted_g_per_effect) &&
+      !isFALSE(params$cross_iter_prior)) {
     fge_l <- model$fitted_g_per_effect[[l]]
     for (m in seq_len(data$M)) {
       G_m <- model$G_prior[[m]]

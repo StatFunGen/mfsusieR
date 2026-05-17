@@ -43,6 +43,7 @@ mfsusie(
   model_init = NULL,
   small_sample_correction = FALSE,
   max_inner_em_steps = 5L,
+  cross_iter_prior = TRUE,
   attach_smoothing_inputs = TRUE,
   save_mu_method = c("complete", "alpha_collapsed", "lead")
 )
