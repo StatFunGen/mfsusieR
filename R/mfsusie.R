@@ -178,6 +178,16 @@
 #'   correction acts on variable selection probabilities only;
 #'   posterior moments given inclusion are unchanged. Default
 #'   `FALSE`.
+#' @param cross_iter_prior logical. When `TRUE` (default), the fitted
+#'   mixture weights `pi` for each effect `l` are stored after each
+#'   SER step and reloaded as the starting point for the same effect
+#'   in the next outer IBSS iteration (per-effect warm-start of the
+#'   prior). When `FALSE`, each SER step starts from the shared
+#'   initial prior regardless of previous iterations, which is closer
+#'   to the IBSS theoretical derivation (shared prior across effects).
+#'   Setting `FALSE` may reduce FDR inflation in high-resolution
+#'   wavelet fits where per-effect prior persistence can overfit to
+#'   cross-scale covariance structure in the data.
 #' @param max_inner_em_steps integer, number of M-step + alpha-update
 #'   sweeps run inside the post-loglik prior hook per (effect,
 #'   outer iter), to keep mixture pi and alpha in sync per effect per outer
@@ -311,6 +321,7 @@ mfsusie <- function(X, Y,
                     alpha_thin_eps            = 5e-5,
                     model_init                = NULL,
                     small_sample_correction   = FALSE,
+                    cross_iter_prior          = TRUE,
                     max_inner_em_steps            = 5L,
                     attach_smoothing_inputs   = TRUE,
                     save_mu_method            = c("complete",
@@ -431,6 +442,7 @@ mfsusie <- function(X, Y,
     small_sample_correction    = small_sample_correction,
     small_sample_df            = if (small_sample_correction) data$n - 1L
                                  else NULL,
+    cross_iter_prior           = isTRUE(cross_iter_prior),
     max_inner_em_steps             = as.integer(max_inner_em_steps)
   )
 

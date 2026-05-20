@@ -48,12 +48,12 @@ mf_low_count_indices <- function(Y_wd, threshold = 0) {
 #' Column-wise rank-based normal quantile transform
 #'
 #' Applies `qnorm(rank(., ties.method = "random") / (n + 1))`
-#' column-by-column, after seeding the RNG to `set.seed(1)` for
-#' tie-break reproducibility. Each input column is mapped to the
-#' standard normal scale via its empirical rank.
+#' column-by-column to non-NA entries only. NA positions are preserved
+#' as NA in the output. RNG is seeded to `set.seed(1)` per column for
+#' tie-break reproducibility.
 #'
 #' @param Y_wd numeric matrix.
-#' @return numeric matrix; same dimensions as `Y_wd`.
+#' @return numeric matrix; same dimensions as `Y_wd`, NA positions unchanged.
 #' @references
 #' Manuscript: methods/online_method.tex
 #' (column-wise rank-INT for non-Gaussian wavelet coefficients).
@@ -61,18 +61,17 @@ mf_low_count_indices <- function(Y_wd, threshold = 0) {
 #' @keywords internal
 #' @noRd
 mf_quantile_normalize <- function(Y_wd) {
-  if (is.null(dim(Y_wd))) {
+  qnorm_col <- function(col) {
+    non_na <- which(!is.na(col))
+    if (length(non_na) == 0L) return(col)
     set.seed(1L)
-    return(qqnorm(rank(Y_wd, ties.method = "random"),
-                  plot.it = FALSE)$x)
+    col[non_na] <- qqnorm(rank(col[non_na], ties.method = "random"),
+                          plot.it = FALSE)$x
+    col
   }
-  out <- matrix(0, nrow(Y_wd), ncol(Y_wd))
-  for (j in seq_len(ncol(Y_wd))) {
-    set.seed(1L)
-    out[, j] <- qqnorm(rank(Y_wd[, j], ties.method = "random"),
-                       plot.it = FALSE)$x
-  }
-  out
+  if (is.null(dim(Y_wd))) return(qnorm_col(Y_wd))
+  for (j in seq_len(ncol(Y_wd))) Y_wd[, j] <- qnorm_col(Y_wd[, j])
+  Y_wd
 }
 
 #' Column-wise centering and scaling
