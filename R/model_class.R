@@ -72,7 +72,7 @@ initialize_susie_model.mf_individual <- function(data, params, var_y, ...) {
   G_prior            <- if (is.null(prior)) NULL else prior$G_prior
   pi_V <- if (is.null(prior)) NULL else
     lapply(seq_len(L), function(.) prior$pi)
-  fitted_g_per_effect <- if (is.null(prior)) NULL else
+  fitted_g_per_effect <- if (is.null(prior) || !isTRUE(params$cross_iter_prior)) NULL else
     lapply(seq_len(L), function(.) {
       lapply(prior$G_prior, function(G_m)
         lapply(G_m, function(g_s) g_s$fitted_g))
