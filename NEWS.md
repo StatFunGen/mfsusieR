@@ -1,5 +1,32 @@
 # mfsusieR (development version)
 
+- susieR 0.16.1 compat: `track_ibss_fit.mf_individual` now delegates
+  to `susieR:::make_track_snapshot` so the per-iteration snapshots
+  satisfy the new `is_compact_track_snapshots` validator that
+  `ibss_finalize -> make_susie_track_history` runs at finalize.
+  Without this, `mfsusie(..., track_fit = TRUE)` errored with
+  "fit$trace is not a compact SuSiE track" against susieR >= 0.16.1.
+  The snapshot records mfsusieR's `sigma2` (a `list[M]`) as
+  `NA_real_` because susieR's helper assumes a scalar; the real
+  per-iteration values remain available on `fit$elbo` and
+  `fit$sigma2`.
+- New argument `save_mu_method = c("complete", "alpha_collapsed",
+  "lead")` on `mfsusie()` and the `fsusie()` wrapper. Default
+  `"complete"` is unchanged; `"alpha_collapsed"` and `"lead"`
+  shrink `fit$mu` and `fit$mu2` by roughly factor `p`. Under
+  `"alpha_collapsed"`, `coef.mfsusie` and `mf_post_smooth` are
+  numerically equivalent to `"complete"` (tolerance 1e-12), via
+  a precomputed `fit$coef_wavelet[[l]][[m]]` for the raw-X coef
+  path. Under `"lead"`, the same accessors return a cheap
+  lead-variable summary biased toward `j* = which.max(alpha[l, ])`
+  and the fit also carries `fit$top_index[l]`. Both 1D modes
+  error on `predict.mfsusie(newx)`, the plot per-variant
+  clfsr matrix, and `model_init` warm-start; refit with
+  `"complete"` for those operations.
+- New helper `mf_thin(fit, method)` performs the same trim as
+  `save_mu_method` but as a post-fit operation, so callers can
+  keep a complete checkpoint for warm-starts and a thinned copy
+  for distribution.
 - `pip` now incorporates the `V[l] > prior_tol` filter. The
   per-effect effective slab variance (mean over (m, s) of
   `sum_k pi[l, m, s, k] * var_k`) populates `model$V[l]` after
