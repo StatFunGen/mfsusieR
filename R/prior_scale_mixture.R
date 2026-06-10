@@ -253,8 +253,9 @@ mf_prior_scale_mixture <- function(data,
                                                             "per_outcome",
                                                             "per_scale_normal",
                                                             "per_scale_laplace"),
-                                   null_prior_init    = 0,
-                                   grid_multiplier      = sqrt(2)) {
+                                   null_prior_init      = 0,
+                                   grid_multiplier      = sqrt(2),
+                                   min_bins_per_ebnm_group = 1L) {
   prior_variance_scope <- match.arg(prior_variance_scope)
   if (!inherits(data, "mf_individual")) {
     stop("`data` must be an mf_individual object.")
@@ -294,6 +295,28 @@ mf_prior_scale_mixture <- function(data,
       list(unlist(data$scale_index[[m]], use.names = FALSE))
     } else {
       data$scale_index[[m]]
+    }
+    # Fix 1: merge consecutive ebnm groups that are smaller than
+    # min_bins_per_ebnm_group. Coarse wavelet scales (level 1 = 1 bin,
+    # level 2 = 2 bins) are underdetermined for ebnm; merging them
+    # with adjacent scales prevents single-bin overfitting.
+    if (use_ebnm && min_bins_per_ebnm_group > 1L) {
+      merged <- list()
+      carry  <- integer(0)
+      for (g in groups_m) {
+        carry <- c(carry, g)
+        if (length(carry) >= min_bins_per_ebnm_group) {
+          merged <- c(merged, list(carry))
+          carry  <- integer(0)
+        }
+      }
+      if (length(carry) > 0L) {
+        if (length(merged) > 0L)
+          merged[[length(merged)]] <- c(merged[[length(merged)]], carry)
+        else
+          merged <- list(carry)
+      }
+      groups_m <- merged
     }
 
     if (use_ebnm) {
