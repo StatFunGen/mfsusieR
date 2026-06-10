@@ -801,8 +801,9 @@ post_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
         pi_warm_start  = pi_prev)
       model$G_prior[[m]][[s]]$fitted_g$pi <- new_pi
       model$pi_V[[l]][[m]][s, ]            <- new_pi
-      model$fitted_g_per_effect[[l]][[m]][[s]] <-
-        model$G_prior[[m]][[s]]$fitted_g
+      if (!is.null(model$fitted_g_per_effect))
+        model$fitted_g_per_effect[[l]][[m]][[s]] <-
+          model$G_prior[[m]][[s]]$fitted_g
     }
   }
   model
@@ -840,7 +841,8 @@ post_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
       fit <- do.call(ebnm_fn, args)
       model$G_prior[[m]][[s]]$fitted_g <- fit$fitted_g
       model$pi_V[[l]][[m]][s, ]         <- fit$fitted_g$pi
-      model$fitted_g_per_effect[[l]][[m]][[s]] <- fit$fitted_g
+      if (!is.null(model$fitted_g_per_effect))
+        model$fitted_g_per_effect[[l]][[m]][[s]] <- fit$fitted_g
     }
   }
   model
