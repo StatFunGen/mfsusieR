@@ -28,7 +28,7 @@ jobs:
           ref: main
 
       - name: Setup pixi
-        uses: prefix-dev/setup-pixi@v0.9.5
+        uses: prefix-dev/setup-pixi@v0.10.1
 
       - name: Install susieR from GitHub master
         # mfsusieR depends on internals (e.g. compute_marginal_bhat_shat,
