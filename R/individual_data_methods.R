@@ -838,13 +838,23 @@ post_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
                    g_init = G_m[[s]]$fitted_g,
                    fix_g  = fix_g)
       if (!fix_g) args$mode <- 0
-      # Fix 2: optional null prior weight for ebnm. Analogous to
-      # mixture_null_weight for the mixsqp path but routed through
-      # ebnm's prior_weights argument.
-      nw <- params$ebnm_null_prior_weight
-      if (!fix_g && !is.null(nw) && is.finite(nw) && nw > 0 && nw < 1)
-        args$prior_weights <- c(nw, 1 - nw)
       fit <- do.call(ebnm_fn, args)
+      # Fix 2: floor on pi_null after ebnm. ebnm_point_normal has no
+      # prior_weights argument; enforce the minimum by post-processing.
+      nw <- params$ebnm_null_prior_weight
+      if (!fix_g && !is.null(nw) && is.finite(nw) && nw > 0 && nw < 1) {
+        fg <- fit$fitted_g
+        if (!is.null(fg$pi) && length(fg$pi) >= 2L && fg$pi[1L] < nw) {
+          slab_mass    <- sum(fg$pi[-1L])
+          fg$pi[1L]    <- nw
+          fg$pi[-1L]   <- if (slab_mass > 0)
+                            fg$pi[-1L] * (1 - nw) / slab_mass
+                          else
+                            rep((1 - nw) / (length(fg$pi) - 1L),
+                                length(fg$pi) - 1L)
+          fit$fitted_g <- fg
+        }
+      }
       model$G_prior[[m]][[s]]$fitted_g <- fit$fitted_g
       model$pi_V[[l]][[m]][s, ]         <- fit$fitted_g$pi
       if (!is.null(model$fitted_g_per_effect))
