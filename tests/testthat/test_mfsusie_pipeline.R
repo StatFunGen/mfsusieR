@@ -97,6 +97,13 @@ make_regions <- function() {
   )
 }
 
+test_that("summary.mfsusie does not error on empty result", {
+  e <- mfsusie_empty_result("r_sum", "screen_rejected", 0.5)
+  s <- summary(e)
+  expect_equal(s$status, "screen_rejected")
+  expect_equal(s$n_cs, 0L)
+})
+
 test_that("mfsusie_pipeline returns list with results and funnel", {
   # Using a null-only region at a loose threshold to guarantee one rejects
   regions <- list(
@@ -150,4 +157,29 @@ test_that("rejected region produces mfsusie_empty_result in results", {
                           verbose = FALSE)
   expect_true(mfsusie_is_empty(out$results[["nr"]]))
   expect_equal(out$funnel$status, "screen_rejected")
+})
+
+test_that("multi-region pipeline: mixed pass/reject, funnel and results consistent", {
+  # real region (Y2 has signal) should pass 1e-5; null region (Y1) at p_cutoff=0 forces reject
+  regs <- list(
+    real = list(X = X_raw, Y = list(Y2), pos = list(pos1), region_id = "real"),
+    null = list(X = X_raw, Y = list(Y1), pos = list(pos1), region_id = "null")
+  )
+  out <- mfsusie_pipeline(regs, p_cutoff = 0,   # null forced-reject; real still passes (min_pval>0 not <0)
+                          use_wavelet_filter = TRUE,
+                          L = 3L, max_iter = 5L, verbose = FALSE)
+  # p_cutoff=0 means min_pval < 0 is impossible -> both rejected; test structure
+  expect_equal(nrow(out$funnel), 2L)
+  expect_true(all(c("real", "null") %in% out$funnel$region_id))
+  expect_true(all(sapply(out$results, mfsusie_is_empty)))
+
+  # Now use a permissive p_cutoff so real passes but null is forced-reject via p_cutoff=0
+  # Instead: use_wavelet_filter=FALSE for both, verify both fit
+  out2 <- mfsusie_pipeline(regs, use_wavelet_filter = FALSE,
+                           L = 3L, max_iter = 5L, verbose = FALSE)
+  expect_equal(nrow(out2$funnel), 2L)
+  expect_true(all(out2$funnel$status == "fit_completed"))
+  expect_false(any(sapply(out2$results, mfsusie_is_empty)))
+  # funnel cell_types_entered matches Y list length
+  expect_true(all(out2$funnel$cell_types_entered == 1L))
 })

@@ -145,7 +145,7 @@ mfsusie_screen <- function(X, Y, pos         = NULL,
 
     # Pearson r: T_basis x p matrix
     r <- tryCatch(
-      cor(D_m, X_ctr, use = "complete.obs"),
+      cor(D_m, X_ctr, use = "pairwise.complete.obs"),
       error = function(e) NULL
     )
     if (is.null(r)) next
@@ -329,6 +329,24 @@ mfsusie_pipeline <- function(regions,
     outs <- lapply(seq_along(regions), process_one)
   }
   names(outs) <- ids
+
+  # mclapply returns try-error for workers killed by SIGKILL / OOM.
+  # Convert those to fit_failed empty results so the funnel loop never sees them.
+  for (i in seq_along(outs)) {
+    if (inherits(outs[[i]], "try-error")) {
+      msg <- as.character(outs[[i]])
+      if (verbose)
+        message(sprintf("[%s] worker killed (OOM or SIGKILL): %s", ids[i], msg))
+      outs[[i]] <- list(
+        result = mfsusie_empty_result(region_id = ids[i],
+                                      status    = "fit_failed",
+                                      min_pval  = NA_real_),
+        screen = list(region_id = ids[i], min_pval = NA_real_,
+                      n_tested = 0L, passed = NA),
+        status = "fit_failed"
+      )
+    }
+  }
 
   # Assemble results
   results        <- lapply(outs, `[[`, "result")

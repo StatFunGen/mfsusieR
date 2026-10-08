@@ -280,6 +280,14 @@ print.mfsusie <- function(x, ...) {
 #' @return an object of class `summary.mfsusie` (a list).
 #' @export
 summary.mfsusie <- function(object, ...) {
+  if (mfsusie_is_empty(object)) {
+    scr <- object[["screen_result"]]
+    return(invisible(structure(
+      list(region_id = scr[["region_id"]], status = scr[["status"]],
+           min_pval = scr[["min_pval"]], n_cs = 0L, n_hp_cs = 0L),
+      class = "summary.mfsusie"
+    )))
+  }
   meta <- object$dwt_meta
   alpha <- object$alpha
   pip   <- object$pip
