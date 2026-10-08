@@ -89,6 +89,7 @@ mf_total_wavelet <- function(fit, m) {
 #'   csd_X[j]`, the same form as `susieR::predict.susie()`.
 #' @export
 predict.mfsusie <- function(object, newx = NULL, ...) {
+  if (mfsusie_is_empty(object)) return(invisible(NULL))
   if (is.null(newx)) return(fitted.mfsusie(object))
   if (!is.matrix(newx)) stop("`newx` must be a numeric matrix.")
   if (ncol(newx) != ncol(object$alpha)) {
@@ -142,6 +143,7 @@ predict.mfsusie <- function(object, newx = NULL, ...) {
 #'   `attr(., "smooth_method")` recording the choice.
 #' @export
 coef.mfsusie <- function(object, smooth_method = NULL, ...) {
+  if (mfsusie_is_empty(object)) return(invisible(NULL))
   if (!is.null(smooth_method)) {
     if (is.null(object$smoothed) ||
         is.null(object$smoothed[[smooth_method]])) {
@@ -207,6 +209,7 @@ coef.mfsusie <- function(object, smooth_method = NULL, ...) {
 #'   `n x T_m` of fitted curves on the training X.
 #' @export
 fitted.mfsusie <- function(object, ...) {
+  if (mfsusie_is_empty(object)) return(invisible(NULL))
   meta <- object$dwt_meta
   M    <- meta$M
   out  <- vector("list", M)
@@ -228,6 +231,14 @@ fitted.mfsusie <- function(object, ...) {
 #' @return `invisible(x)`.
 #' @export
 print.mfsusie <- function(x, ...) {
+  if (mfsusie_is_empty(x)) {
+    scr <- x[["screen_result"]]
+    cat(sprintf("mfsusie empty result [%s] (status: %s, min_pval: %s)\n",
+                scr[["region_id"]] %||% "?",
+                scr[["status"]]    %||% "unknown",
+                format(scr[["min_pval"]], digits = 3)))
+    return(invisible(x))
+  }
   meta <- x$dwt_meta
   cat("mfsusie fit\n")
   cat(sprintf("  p (predictors): %d\n", ncol(x$alpha)))
