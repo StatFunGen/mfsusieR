@@ -151,9 +151,12 @@ create_mf_individual <- function(X,
     lowc_idx[[m]]   <- integer(0)
     Y_remapped[[m]] <- Y[[m]]
     if (T_basis[m] > 1L) {
-      if (wavelet_qnorm) D[[m]] <- mf_quantile_normalize(D[[m]])
+      # Low-count mask is computed on raw DWT output, before qnorm: after
+      # qnorm, formerly-zero columns get median(|col|) ≈ 0.67 and the
+      # threshold check would never fire.
       lowc_idx[[m]] <- mf_low_count_indices(D[[m]],
                                             threshold = wavelet_magnitude_cutoff)
+      if (wavelet_qnorm) D[[m]] <- mf_quantile_normalize(D[[m]])
       if (length(lowc_idx[[m]]) > 0L) {
         D[[m]][, lowc_idx[[m]]] <- 0
       }
