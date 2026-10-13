@@ -116,9 +116,13 @@ mf_sigma2_per_position <- function(data, model, m) {
 # update), so we read `model$iter_cache$shat2[[m]]` populated by
 # `refresh_iter_cache` instead of redoing the outer product per (l, m).
 mf_per_outcome_bhat_shat <- function(data, model, m) {
-  pw    <- data$xtx_diag_list[[m]]
-  XtR_m <- model$residuals[[m]]
-  bhat_m <- XtR_m / pw
+  pw      <- data$xtx_diag_list[[m]]
+  zero_pw <- pw == 0
+  pw_safe <- pw
+  if (any(zero_pw)) pw_safe[zero_pw] <- 1  # prevent division by zero
+
+  XtR_m  <- model$residuals[[m]]
+  bhat_m <- XtR_m / pw_safe
 
   cached_shat2 <- model$iter_cache$shat2[[m]]
   shat2_m <- if (!is.null(cached_shat2) &&
@@ -129,7 +133,13 @@ mf_per_outcome_bhat_shat <- function(data, model, m) {
     # Fallback before iter_cache is populated (e.g., first SER call)
     # or in tests that bypass the IBSS orchestrator.
     sigma2_per_pos <- mf_sigma2_per_position(data, model, m)
-    outer(1 / pw, sigma2_per_pos)
+    outer(1 / pw_safe, sigma2_per_pos)
+  }
+
+  # Zero-xtx mask: constant predictors carry no information.
+  if (any(zero_pw)) {
+    bhat_m[zero_pw, ]  <- 0
+    shat2_m[zero_pw, ] <- 1
   }
 
   # Low-count mask: the IBSS treats flagged columns as
@@ -485,9 +495,13 @@ refresh_iter_cache.mf_individual <- function(data, model) {
   log_sdmat_list <- if (is_mixsqp_prior) vector("list", M) else NULL
 
   for (m in seq_len(M)) {
-    pw <- data$xtx_diag_list[[m]]
+    pw      <- data$xtx_diag_list[[m]]
+    zero_pw <- pw == 0
+    pw_safe <- pw
+    if (any(zero_pw)) pw_safe[zero_pw] <- 1
     sigma2_per_pos <- mf_sigma2_per_position(data, model, m)
-    shat2_m <- outer(1 / pw, sigma2_per_pos)
+    shat2_m <- outer(1 / pw_safe, sigma2_per_pos)
+    if (any(zero_pw)) shat2_m[zero_pw, ] <- 1
     shat2_list[[m]] <- shat2_m
 
     if (!is_mixsqp_prior) next
@@ -839,6 +853,22 @@ post_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
                    fix_g  = fix_g)
       if (!fix_g) args$mode <- 0
       fit <- do.call(ebnm_fn, args)
+      # Fix 2: floor on pi_null after ebnm. ebnm_point_normal has no
+      # prior_weights argument; enforce the minimum by post-processing.
+      nw <- params$ebnm_null_prior_weight
+      if (!fix_g && !is.null(nw) && is.finite(nw) && nw > 0 && nw < 1) {
+        fg <- fit$fitted_g
+        if (!is.null(fg$pi) && length(fg$pi) >= 2L && fg$pi[1L] < nw) {
+          slab_mass    <- sum(fg$pi[-1L])
+          fg$pi[1L]    <- nw
+          fg$pi[-1L]   <- if (slab_mass > 0)
+                            fg$pi[-1L] * (1 - nw) / slab_mass
+                          else
+                            rep((1 - nw) / (length(fg$pi) - 1L),
+                                length(fg$pi) - 1L)
+          fit$fitted_g <- fg
+        }
+      }
       model$G_prior[[m]][[s]]$fitted_g <- fit$fitted_g
       model$pi_V[[l]][[m]][s, ]         <- fit$fitted_g$pi
       if (!is.null(model$fitted_g_per_effect))

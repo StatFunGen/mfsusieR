@@ -323,6 +323,9 @@ mfsusie <- function(X, Y,
                     small_sample_correction   = FALSE,
                     cross_iter_prior          = TRUE,
                     max_inner_em_steps            = 5L,
+                    min_bins_per_ebnm_group   = 1L,
+                    ebnm_null_prior_weight    = NULL,
+                    cs_min_lead_pip           = 0,
                     attach_smoothing_inputs   = TRUE,
                     save_mu_method            = c("complete",
                                                   "aggregated",
@@ -394,9 +397,10 @@ mfsusie <- function(X, Y,
   #    effect by `optimize_prior_variance.mf_individual`.
   prior <- mf_prior_scale_mixture(
     data,
-    prior_variance_grid  = prior_variance_grid,
-    prior_variance_scope = prior_variance_scope,
-    null_prior_init    = null_prior_init
+    prior_variance_grid     = prior_variance_grid,
+    prior_variance_scope    = prior_variance_scope,
+    null_prior_init         = null_prior_init,
+    min_bins_per_ebnm_group = as.integer(min_bins_per_ebnm_group)
   )
 
   # 3. Assemble params for `susie_workhorse`.
@@ -443,13 +447,33 @@ mfsusie <- function(X, Y,
     small_sample_df            = if (small_sample_correction) data$n - 1L
                                  else NULL,
     cross_iter_prior           = isTRUE(cross_iter_prior),
-    max_inner_em_steps             = as.integer(max_inner_em_steps)
+    max_inner_em_steps         = as.integer(max_inner_em_steps),
+    ebnm_null_prior_weight     = ebnm_null_prior_weight
   )
 
   # 4. Run the susieR workhorse. All per-effect and per-iteration
   #    work dispatches to the .mf_individual / .mfsusie S3 methods
   #    registered by `.onLoad`.
   fit <- susie_workhorse(data, params)
+
+  # Fix 3: filter CS whose lead-SNP PIP falls below cs_min_lead_pip.
+  # Targets spurious extra CS formed by null effects in per_scale_normal
+  # where alpha is diffuse and no single SNP is well-supported.
+  if (cs_min_lead_pip > 0 && !is.null(fit$sets$cs) && length(fit$sets$cs) > 0L) {
+    pip  <- fit$pip
+    keep <- vapply(fit$sets$cs,
+                   function(s) max(pip[s]) >= cs_min_lead_pip,
+                   logical(1L))
+    if (!all(keep)) {
+      fit$sets$cs     <- fit$sets$cs[keep]
+      if (!is.null(fit$sets$purity) && nrow(fit$sets$purity) == length(keep))
+        fit$sets$purity <- fit$sets$purity[keep, , drop = FALSE]
+      kept_idx <- which(keep)
+      names(fit$sets$cs) <- paste0("L", kept_idx)
+      if (!is.null(fit$sets$purity))
+        rownames(fit$sets$purity) <- paste0("L", kept_idx)
+    }
+  }
 
   # Mask the iter-1 ELBO. mfsusie initialises sigma2 = var(Y) and
   # does the first closed-form M-step at the end of iter 1; the
