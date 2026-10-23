@@ -78,7 +78,13 @@ mf_em_likelihood_per_scale <- function(bhat_slice, shat_slice, sd_grid,
     col_med <- apply(log_L, 2L, median, na.rm = TRUE)
     log_L[nas] <- col_med[col(log_L)[nas]]
   }
-  L <- exp(log_L)
+  # Rescale each row by its maximum before exponentiating so no row
+  # underflows to all zeros (mixsqp rejects a zero row). mixsqp
+  # normalizes rows by their maximum anyway, so the solution is
+  # unchanged up to rounding.
+  row_max <- matrixStats::rowMaxs(log_L)
+  row_max[!is.finite(row_max)] <- 0
+  L <- exp(log_L - row_max)
 
   if (is_ebmvfr) L else rbind(c(100, rep(0, K - 1)), L)
 }

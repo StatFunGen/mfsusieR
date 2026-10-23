@@ -625,3 +625,24 @@ this round follow.
     surfaces a need to tune the two independently, the shared-tol
     decision can be split into a public `inner_em_tol` argument.
     Audit ID C-6 (2026-04-30).
+
+### Optimization review bug-fix bundle (2026-10-23)
+
+Source: `optimization/results.md` (Claude + Codex review). Each entry
+is a port-source bug fix covered by a `<= 1e-12` test.
+
+- fsusieR/R/computational_functions.R (`cal_L_mixsq_s_per_scale`)
+  Behavior: upstream returns `exp(log_L)` with no row rescaling. When
+    every component density of a row underflows (for example
+    `bhat = 100`, `shat = 0.1`, `sd_grid = c(0, 1)`), the row is all
+    zeros and `mixsqp` stops with "all entries of the matrix-vector
+    product L %*% x0 should be positive".
+  Decision: fixed in `mf_em_likelihood_per_scale`
+    (`R/em_helpers.R`): rows are rescaled by their maximum in log
+    space, `exp(log_L - rowMaxs(log_L))`, before the penalty row is
+    prepended.
+  Reason: `mixsqp` divides every row by its maximum
+    (`normalize.rows = TRUE`), so the solution is invariant to row
+    scaling; the rescaled matrix only removes the underflow. The
+    fidelity test in `tests/testthat/test_mvf_alpha_fidelity.R`
+    compares against the row-normalized upstream matrix at `1e-12`.

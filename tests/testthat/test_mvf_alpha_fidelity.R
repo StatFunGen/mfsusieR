@@ -164,6 +164,12 @@ test_that("mf_em_likelihood_per_scale matches fsusieR::cal_L_mixsq_s_per_scale a
                                                indx_lst = data$scale_index[[1]])
     ours_L <- mfsusieR:::mf_em_likelihood_per_scale(
       Bhat[, idx, drop = FALSE], Shat[, idx, drop = FALSE], sd_grid)
-    expect_equal(ours_L, ref_L, tolerance = 1e-12)
+    # mfsusieR rescales each data row by its maximum to avoid
+    # underflow (refactor-exceptions, 2026-10-23); mixsqp applies
+    # the same row normalization, so compare row-normalized forms.
+    ref_data <- ref_L[-1, , drop = FALSE]
+    expect_equal(ours_L[1, ], ref_L[1, ], tolerance = 1e-12)
+    expect_equal(ours_L[-1, , drop = FALSE],
+                 ref_data / apply(ref_data, 1, max), tolerance = 1e-12)
   }
 })
