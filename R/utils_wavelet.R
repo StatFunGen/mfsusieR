@@ -61,6 +61,16 @@ mf_low_count_indices <- function(Y_wd, threshold = 0) {
 #' @keywords internal
 #' @noRd
 mf_quantile_normalize <- function(Y_wd) {
+  # The per-column `set.seed(1L)` makes tie-breaking reproducible;
+  # restore the caller's RNG state on exit so the seed does not leak.
+  had_seed <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
+  old_seed <- if (had_seed) get(".Random.seed", envir = globalenv(),
+                                inherits = FALSE)
+  on.exit({
+    if (had_seed) assign(".Random.seed", old_seed, envir = globalenv())
+    else if (exists(".Random.seed", envir = globalenv(), inherits = FALSE))
+      rm(".Random.seed", envir = globalenv())
+  }, add = TRUE)
   qnorm_col <- function(col) {
     non_na <- which(!is.na(col))
     if (length(non_na) == 0L) return(col)

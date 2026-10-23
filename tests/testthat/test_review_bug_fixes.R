@@ -30,3 +30,15 @@ test_that("cached and uncached M-step likelihoods agree on low-count columns", {
   expect_equal(L_cached, L_plain, tolerance = 1e-12)
 })
 
+# ---- BUG-5: wavelet_qnorm does not touch the caller's RNG ----------
+
+test_that("mf_quantile_normalize restores the caller's RNG state", {
+  Y <- matrix(c(1, 1, 2, 2, 3, 3), 3, 2)
+  set.seed(123); before <- .Random.seed
+  invisible(mfsusieR:::mf_quantile_normalize(Y))
+  expect_identical(.Random.seed, before)
+  # Output is still the seeded, reproducible transform.
+  expect_identical(mfsusieR:::mf_quantile_normalize(Y),
+                   mfsusieR:::mf_quantile_normalize(Y))
+})
+
