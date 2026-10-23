@@ -42,3 +42,13 @@ test_that("mf_quantile_normalize restores the caller's RNG state", {
                    mfsusieR:::mf_quantile_normalize(Y))
 })
 
+# ---- BUG-6: NA rows do not disable low-count detection ------------
+
+test_that("mf_low_count_indices ignores NA rows", {
+  set.seed(mfsusier_test_seed())
+  Wd <- matrix(rnorm(40), 10, 4); Wd[, 2] <- 0
+  Wd_na <- Wd; Wd_na[1, ] <- NA
+  expect_identical(mfsusieR:::mf_low_count_indices(Wd), 2L)
+  expect_identical(mfsusieR:::mf_low_count_indices(Wd_na), 2L)
+})
+

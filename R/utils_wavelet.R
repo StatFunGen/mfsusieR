@@ -41,7 +41,8 @@ mf_low_count_indices <- function(Y_wd, threshold = 0) {
   if (threshold < 0) {
     stop("`wavelet_magnitude_cutoff` must be non-negative.")
   }
-  col_med <- apply(abs(Y_wd), 2L, median)
+  # Missing samples are NA rows of the wavelet matrix; ignore them.
+  col_med <- apply(abs(Y_wd), 2L, median, na.rm = TRUE)
   which(col_med <= threshold)
 }
 
