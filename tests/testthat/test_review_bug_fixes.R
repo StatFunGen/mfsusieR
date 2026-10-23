@@ -81,3 +81,26 @@ test_that("mf_adjust_for_covariates(wavelet_eb) rejects missing values", {
                "does not support missing values")
 })
 
+# ---- BUG-9: cs_min_lead_pip keeps the CS fields aligned ------------
+
+test_that("cs_min_lead_pip subsets cs, purity, cs_index and coverage together", {
+  set.seed(mfsusier_test_seed())
+  n <- 150; p <- 40; T_m <- 16
+  X <- matrix(rnorm(n * p), n)
+  shape <- exp(-((seq_len(T_m) - 8)^2) / 8)
+  Y <- outer(X[, 5], shape) * 1.2 + outer(X[, 30], shape) * 0.7 +
+       matrix(rnorm(n * T_m), n)
+  fit0 <- mfsusie(X, list(Y), L = 5, verbose = FALSE)
+  skip_if(length(fit0$sets$cs) < 2L, "fixture produced fewer than 2 CS")
+  lead <- vapply(fit0$sets$cs, function(s) max(fit0$pip[s]), numeric(1))
+  skip_if(length(unique(round(lead, 6))) < 2L, "lead PIPs tie")
+  thr <- mean(sort(lead, decreasing = TRUE)[1:2])
+  fit <- mfsusie(X, list(Y), L = 5, verbose = FALSE, cs_min_lead_pip = thr)
+  keep <- lead >= thr
+  expect_identical(fit$sets$cs, fit0$sets$cs[keep])
+  expect_identical(fit$sets$cs_index, fit0$sets$cs_index[keep])
+  expect_identical(fit$sets$coverage, fit0$sets$coverage[keep])
+  expect_identical(names(fit$sets$cs), paste0("L", fit$sets$cs_index))
+  expect_equal(nrow(fit$sets$purity), length(fit$sets$cs))
+})
+
