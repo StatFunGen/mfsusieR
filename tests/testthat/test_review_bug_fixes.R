@@ -104,3 +104,20 @@ test_that("cs_min_lead_pip subsets cs, purity, cs_index and coverage together", 
   expect_equal(nrow(fit$sets$purity), length(fit$sets$cs))
 })
 
+# ---- BUG-10: HMM with only the null state, and maxiter = 1 ---------
+
+test_that("mf_fit_hmm runs with a single (null) state", {
+  set.seed(mfsusier_test_seed())
+  x <- rnorm(32); sd <- rep(1, 32)
+  out <- mfsusieR:::mf_fit_hmm(x, sd, halfK = 1L)
+  expect_equal(out$x_post, rep(0, 32))
+  expect_true(is.finite(out$ll_hmm))
+})
+
+test_that("mf_fit_hmm returns a finite log-likelihood when maxiter = 1", {
+  set.seed(mfsusier_test_seed())
+  x <- c(rnorm(16), rnorm(16, 3)); sd <- rep(1, 32)
+  out <- mfsusieR:::mf_fit_hmm(x, sd, halfK = 5L, maxiter = 1L)
+  expect_true(is.finite(out$ll_hmm))
+  expect_true(is.finite(out$log_BF))
+})
