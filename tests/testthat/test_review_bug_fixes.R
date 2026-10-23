@@ -52,3 +52,32 @@ test_that("mf_low_count_indices ignores NA rows", {
   expect_identical(mfsusieR:::mf_low_count_indices(Wd_na), 2L)
 })
 
+# ---- BUG-7: OLS covariate adjustment with missing rows -------------
+
+test_that("mf_residualize_ols fits on complete rows and keeps NA rows NA", {
+  set.seed(mfsusier_test_seed())
+  n <- 50; T_m <- 8
+  Z <- cbind(1, matrix(rnorm(n * 2), n))
+  Y <- Z %*% matrix(rnorm(3 * T_m), 3) + matrix(rnorm(n * T_m), n)
+  X <- matrix(rnorm(n * 4), n)
+  Y_na <- Y; Y_na[c(3, 7), ] <- NA
+  out <- mfsusieR:::mf_residualize_ols(Y_na, Z, X)
+  obs <- setdiff(seq_len(n), c(3, 7))
+  ref <- mfsusieR:::mf_residualize_ols(Y[obs, ], Z[obs, ], X[obs, ])
+  expect_true(all(is.na(out$Y_adjusted[c(3, 7), ])))
+  expect_equal(out$Y_adjusted[obs, ], ref$Y_adjusted, tolerance = 1e-12)
+  expect_equal(out$X_adjusted[obs, ], ref$X_adjusted, tolerance = 1e-12)
+  expect_equal(out$fitted_func, ref$fitted_func, tolerance = 1e-12)
+  # Complete data: unchanged closed form.
+  full <- mfsusieR:::mf_residualize_ols(Y, Z)
+  expect_equal(full$Y_adjusted,
+               Y - Z %*% solve(crossprod(Z), crossprod(Z, Y)), tolerance = 1e-12)
+})
+
+test_that("mf_adjust_for_covariates(wavelet_eb) rejects missing values", {
+  set.seed(mfsusier_test_seed())
+  Y <- matrix(rnorm(20 * 16), 20); Y[2, ] <- NA
+  expect_error(mf_adjust_for_covariates(Y, matrix(rnorm(20), 20)),
+               "does not support missing values")
+})
+
