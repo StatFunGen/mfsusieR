@@ -626,6 +626,30 @@ this round follow.
     decision can be split into a public `inner_em_tol` argument.
     Audit ID C-6 (2026-04-30).
 
+### Null-weight P-scaling fix (2026-10-24)
+
+Source: fsusieR commit 64a0e425 and mvf.susie.alpha commit 052bacdd
+(William Denault, communicated 2026-10-24).
+
+- fsusieR/R/EM.R (`m_step.lik_mixture_normal`, `scale_m_step`)
+  Behavior: upstream constructs the mixsqp weight vector as
+    `w = c(nullweight * P_s, rep(zeta, P_s))`, where `P_s` is the
+    number of data points in the scale group. The null-component
+    penalty weight therefore grows linearly with P, making the prior
+    increasingly conservative as the SNP window widens.
+  Decision: fixed in `mf_em_m_step_per_scale` (`R/em_helpers.R`):
+    the weight vector is now `c(mixture_null_weight, rep(zeta, idx_size))`
+    -- the null weight is a constant independent of `idx_size`.
+  Reason: the intended behavior (from mvf.susie.alpha `m_step_u` and
+    William's commits) is that the penalty row contributes a fixed
+    weight regardless of P. At P = 2333 the old code applied a null
+    penalty of 0.1 * 2333 = 233.3 times the per-observation weight,
+    effectively suppressing all non-null mixture components. The
+    fix matches the mvf.susie.alpha `m_step_u` convention
+    (`w = c(nullweight, zeta)`). Fidelity tests compare the new
+    output against the port source at `1e-12`; the discrepancy
+    from the old (buggy) behavior exceeds 1e-8 and is expected.
+
 ### Optimization review bug-fix bundle (2026-10-23)
 
 Source: `optimization/results.md` (Claude + Codex review). Each entry
