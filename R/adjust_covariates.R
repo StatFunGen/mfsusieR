@@ -40,7 +40,10 @@
 #' downstream fine-mapping users who need it.
 #'
 #' @param Y `n x T` numeric matrix; the functional response. `T`
-#'   must be a power of two for `method = "wavelet_eb"`.
+#'   must be a power of two for `method = "wavelet_eb"`. With
+#'   `method = "ols"`, rows with any missing value in `Y`, `Z` (or
+#'   `X`) are left out of the fit and returned as `NA`; the
+#'   `"wavelet_eb"` method requires complete data.
 #' @param Z `n x K` numeric matrix; covariates to adjust away.
 #' @param X optional `n x p` numeric matrix; the genotype matrix
 #'   to FWL-residualize. Default `NULL`.
@@ -119,6 +122,9 @@ mf_adjust_for_covariates <- function(Y, Z, X = NULL,
   if (method == "ols") {
     return(mf_residualize_ols(Y, Z, X))
   }
+  if (anyNA(Y) || anyNA(Z) || (!is.null(X) && anyNA(X)))
+    stop("`method = \"wavelet_eb\"` does not support missing values; ",
+         "use `method = \"ols\"` or drop incomplete rows first.")
 
   mf_residualize_wavelet_eb(Y, Z, X = X,
                             wavelet_basis_order   = wavelet_basis_order,
@@ -145,10 +151,33 @@ mf_adjust_for_covariates <- function(Y, Z, X = NULL,
 #' @keywords internal
 #' @noRd
 mf_residualize_ols <- function(Y, Z, X = NULL) {
-  ZtZ_inv_Zt <- solve(crossprod(Z), t(Z))   # K x n
-  fitted_func <- ZtZ_inv_Zt %*% Y           # K x T
-  Y_adjusted  <- Y - Z %*% fitted_func
-  X_adjusted  <- if (is.null(X)) NULL else X - Z %*% (ZtZ_inv_Zt %*% X)
+  # Fit on rows complete in Y and Z (and X when supplied); other rows
+  # come back as NA, matching how `mfsusie()` drops rows with missing
+  # Y via `complete.cases()`. Without this, one NA row turns every
+  # entry of `Y_adjusted` into NA.
+  obs <- complete.cases(Y) & complete.cases(Z)
+  if (!is.null(X)) obs <- obs & complete.cases(X)
+  if (!any(obs)) stop("No rows are complete in `Y` and `Z`.")
+  if (all(obs)) {
+    ZtZ_inv_Zt <- solve(crossprod(Z), t(Z))   # K x n
+    fitted_func <- ZtZ_inv_Zt %*% Y           # K x T
+    Y_adjusted  <- Y - Z %*% fitted_func
+    X_adjusted  <- if (is.null(X)) NULL else X - Z %*% (ZtZ_inv_Zt %*% X)
+  } else {
+    Z_obs       <- Z[obs, , drop = FALSE]
+    ZtZ_inv_Zt  <- solve(crossprod(Z_obs), t(Z_obs))
+    fitted_func <- ZtZ_inv_Zt %*% Y[obs, , drop = FALSE]
+    Y_adjusted  <- Y
+    Y_adjusted[]     <- NA_real_
+    Y_adjusted[obs, ] <- Y[obs, , drop = FALSE] - Z_obs %*% fitted_func
+    X_adjusted  <- if (is.null(X)) NULL else {
+      X_adj <- X
+      X_adj[] <- NA_real_
+      X_adj[obs, ] <- X[obs, , drop = FALSE] -
+        Z_obs %*% (ZtZ_inv_Zt %*% X[obs, , drop = FALSE])
+      X_adj
+    }
+  }
   list(
     Y_adjusted  = Y_adjusted,
     X_adjusted  = X_adjusted,

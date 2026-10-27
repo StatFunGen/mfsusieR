@@ -78,7 +78,13 @@ mf_em_likelihood_per_scale <- function(bhat_slice, shat_slice, sd_grid,
     col_med <- apply(log_L, 2L, median, na.rm = TRUE)
     log_L[nas] <- col_med[col(log_L)[nas]]
   }
-  L <- exp(log_L)
+  # Rescale each row by its maximum before exponentiating so no row
+  # underflows to all zeros (mixsqp rejects a zero row). mixsqp
+  # normalizes rows by their maximum anyway, so the solution is
+  # unchanged up to rounding.
+  row_max <- matrixStats::rowMaxs(log_L)
+  row_max[!is.finite(row_max)] <- 0
+  L <- exp(log_L - row_max)
 
   if (is_ebmvfr) L else rbind(c(100, rep(0, K - 1)), L)
 }
@@ -87,8 +93,13 @@ mf_em_likelihood_per_scale <- function(bhat_slice, shat_slice, sd_grid,
 #'
 #' For `is_ebmvfr = FALSE` (default; mfsusie path):
 #' builds the weight vector
-#' `w = (mixture_null_weight * idx_size, zeta_repeated)`,
+#' `w = (mixture_null_weight, zeta_repeated)`,
 #' prepended with the null-component penalty pseudo-observation.
+#' The null-component weight is a fixed constant independent of the
+#' number of data points (`idx_size`); multiplying by `idx_size`
+#' caused the penalty to grow with P, making the prior overly
+#' conservative at large P (port-source bug; fixed in fsusieR
+#' commit 64a0e42 and mvf.susie.alpha commit 052bacd).
 #'
 #' For `is_ebmvfr = TRUE` (covariate-adjustment path): omits the
 #' penalty prepend; the weight vector is just
@@ -133,7 +144,7 @@ mf_em_m_step_per_scale <- function(L, zeta, idx_size,
     # null-component penalty row.
     rep(zeta, idx_size)
   } else {
-    c(mixture_null_weight * idx_size, rep(zeta, idx_size))
+    c(mixture_null_weight, rep(zeta, idx_size))
   }
 
   # mixsqp defaults tuned for warm-started inner-loop use. tol.svd = 0

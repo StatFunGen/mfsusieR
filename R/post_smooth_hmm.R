@@ -106,8 +106,11 @@ mf_fit_hmm <- function(x, sd,
   alpha_hat   <- matrix(NA_real_, T_pos, K)
   alpha_tilde <- matrix(NA_real_, T_pos, K)
   G_t         <- rep(NA_real_, T_pos)
-  alpha_hat[1L, ]   <- pi_init * emit_dn(1L)
-  alpha_tilde[1L, ] <- alpha_hat[1L, ]
+  # Normalize the first step as the EM loop does, so `G_t[1]` is set
+  # and `ll_hmm` is defined when `maxiter = 1` skips the loop.
+  alpha_tilde[1L, ] <- pi_init * emit_dn(1L)
+  G_t[1L]           <- sum(alpha_tilde[1L, ])
+  alpha_hat[1L, ]   <- alpha_tilde[1L, ] / G_t[1L]
   for (t in seq_len(T_pos - 1L)) {
     m <- alpha_hat[t, ] %*% P
     alpha_tilde[t + 1L, ] <- m * emit_dn(t + 1L)
@@ -156,7 +159,8 @@ mf_fit_hmm <- function(x, sd,
   ash_obj   <- vector("list", length(idx_comp))
   x_post    <- numeric(T_pos)
   x_post_m2 <- numeric(T_pos)
-  for (i in 2L:length(idx_comp)) {
+  # seq_along()[-1]: no slab refinement when only the null state is left.
+  for (i in seq_along(idx_comp)[-1L]) {
     mu_ash <- mu[idx_comp[i]]
     weight <- prob[, idx_comp[i]]
     ash_obj[[i]] <- do.call(ash,
@@ -237,7 +241,7 @@ mf_fit_hmm <- function(x, sd,
     # state's ash refinement gives PosteriorMean and PosteriorSD;
     # second moment per state is sd^2 + mean^2.
     x_post_m2 <- numeric(T_pos)
-    for (k in 2L:K) {
+    for (k in seq_len(K)[-1L]) {
       ash_obj[[k]] <- do.call(ash,
                               c(list(x, sd, weight = prob[, k], mode = mu[k]),
                                 ash_extras))

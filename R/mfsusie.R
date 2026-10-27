@@ -465,13 +465,16 @@ mfsusie <- function(X, Y,
                    function(s) max(pip[s]) >= cs_min_lead_pip,
                    logical(1L))
     if (!all(keep)) {
-      fit$sets$cs     <- fit$sets$cs[keep]
+      # Subset every field aligned with `cs`. The names (`L<effect>`)
+      # and `cs_index` carry the effect index, so they are kept, not
+      # renumbered by list position.
+      fit$sets$cs <- fit$sets$cs[keep]
       if (!is.null(fit$sets$purity) && nrow(fit$sets$purity) == length(keep))
         fit$sets$purity <- fit$sets$purity[keep, , drop = FALSE]
-      kept_idx <- which(keep)
-      names(fit$sets$cs) <- paste0("L", kept_idx)
-      if (!is.null(fit$sets$purity))
-        rownames(fit$sets$purity) <- paste0("L", kept_idx)
+      for (f in c("cs_index", "coverage")) {
+        if (length(fit$sets[[f]]) == length(keep))
+          fit$sets[[f]] <- fit$sets[[f]][keep]
+      }
     }
   }
 

@@ -224,8 +224,11 @@ mixture_log_bf_laplace_per_scale <- function(bhat_slice,
   # `pi_0 -> 0` or `pi_0 -> 1` (see `ebnm:::pl_partog`). Defend by
   # branching on `length(pi)` and treating the single-component
   # record as either pure-slab (pi_1 = 1) or pure-null (pi_0 = 1).
+  # A one-component record is pure null when its scale is 0 and pure
+  # slab otherwise; its `pi[1]` is 1 in both cases, so it cannot be
+  # read as the null weight.
   n_comp <- length(fitted_g$pi)
-  pi_0 <- if (n_comp == 1L && fitted_g$scale[1L] == 0) 1
+  pi_0 <- if (n_comp == 1L) as.numeric(fitted_g$scale[1L] == 0)
           else fitted_g$pi[1L]
   pi_1 <- 1 - pi_0
   # Slab parameters live at index 2 in the 2-component case, at

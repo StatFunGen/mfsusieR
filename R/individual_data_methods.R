@@ -502,6 +502,11 @@ refresh_iter_cache.mf_individual <- function(data, model) {
     sigma2_per_pos <- mf_sigma2_per_position(data, model, m)
     shat2_m <- outer(1 / pw_safe, sigma2_per_pos)
     if (any(zero_pw)) shat2_m[zero_pw, ] <- 1
+    # Same low-count mask as `mf_per_outcome_bhat_shat`, so the
+    # cached sdmat (M-step) and the SER statistics (BF, moments)
+    # describe the same likelihood.
+    lowc <- data$lowc_idx[[m]]
+    if (length(lowc) > 0L) shat2_m[, lowc] <- 1
     shat2_list[[m]] <- shat2_m
 
     if (!is_mixsqp_prior) next
