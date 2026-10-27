@@ -94,7 +94,7 @@ univariate_smash_regression <- function(Y, X, alpha = 0.05,
   # Per-position OLS estimate of Y on X via the susieR helper.
   # Bhat / Shat are J x T matrices; with J = 1 the SER kernel
   # collapses to a single-regressor path.
-  res <- compute_marginal_bhat_shat(X, Y)
+  res <- mf_compute_marginal_bhat_shat(X, Y)
   est <- as.numeric(res$Bhat[1L, ])
   sds <- as.numeric(res$Shat[1L, ])
 

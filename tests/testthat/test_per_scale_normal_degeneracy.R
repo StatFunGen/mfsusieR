@@ -322,13 +322,13 @@ test_that("6: iter_cache skips sdmat / log_sdmat on the ebnm path", {
   expect_null(cached$iter_cache$log_sdmat)
 })
 
-test_that("6: iter_cache keeps sdmat / log_sdmat on the mixsqp path", {
+test_that("6: iter_cache has shat2 and no sdmat on the mixsqp path (P3)", {
   ds  <- make_sparse_data()
   fit <- fit_sparse("per_outcome", fx = ds$fx)
   cached <- mfsusieR:::refresh_iter_cache.mf_individual(ds$data, fit)
   expect_false(is.null(cached$iter_cache$shat2[[1L]]))
-  expect_false(is.null(cached$iter_cache$sdmat[[1L]][[1L]]))
-  expect_false(is.null(cached$iter_cache$log_sdmat[[1L]][[1L]]))
+  expect_null(cached$iter_cache$sdmat)
+  expect_null(cached$iter_cache$log_sdmat)
 })
 
 # ============================================================

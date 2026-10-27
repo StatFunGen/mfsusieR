@@ -314,7 +314,7 @@ mf_univariate_hmm_regression <- function(Y, X, halfK = 20L, ...) {
   X     <- col_scale(X)
   csd_X <- attr(X, "scaled:scale")
 
-  res <- compute_marginal_bhat_shat(matrix(X[, 1L], ncol = 1L), Y)
+  res <- mf_compute_marginal_bhat_shat(matrix(X[, 1L], ncol = 1L), Y)
   est <- as.numeric(res$Bhat[1L, ])
   sds <- as.numeric(res$Shat[1L, ])
 

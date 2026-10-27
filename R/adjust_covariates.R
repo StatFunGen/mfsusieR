@@ -275,7 +275,7 @@ mf_residualize_wavelet_eb <- function(Y, Z, X = NULL,
     for (j in seq_len(K)) {
       fitted_wc[j, ] <- 0
       partial_resid <- Y_wd - Z_scaled %*% fitted_wc
-      bs <- compute_marginal_bhat_shat(
+      bs <- mf_compute_marginal_bhat_shat(
         X = matrix(Z_scaled[, j], ncol = 1L),
         Y = partial_resid)
       bhat_j <- as.numeric(bs$Bhat)

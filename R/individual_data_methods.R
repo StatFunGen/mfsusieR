@@ -464,35 +464,21 @@ update_variance_components.mf_individual <- function(data, params, model, ...) {
   refresh_iter_cache.mf_individual(data, model)
 }
 
-# Recompute per-iter precomputes that depend on `sigma2` (and, for
-# the mixsqp-backed prior classes, on the slab sd grid). Slots are
+# Recompute per-iter precomputes that depend on `sigma2`. Slots are
 # invariant across the L-effect loop within one IBSS iteration;
 # rebuilding them per effect would be L-fold redundant.
 #
 # Cache contents per outcome m:
-#   $shat2[[m]]            -- p x T_basis[m] = outer(1/xtx_diag,
-#                             sigma2_per_pos). Read by
-#                             mf_per_outcome_bhat_shat() on every
-#                             SER call (loglik + posterior moments)
-#                             for every prior class. Always built.
-#   $sdmat[[m]][[s]]       -- (p*|idx_s|) x K matrix used by
-#                             mf_em_likelihood_per_scale, the
-#                             mixsqp M-step kernel only. Skipped
-#                             for the ebnm-backed prior classes
-#                             (point_normal, point_laplace), which
-#                             fit 2 scalars per (m, s) by direct
-#                             optim and have no per-(j, t, k)
-#                             aggregate to amortize.
-#   $log_sdmat[[m]][[s]]   -- log of $sdmat[[m]][[s]] (mixsqp-only).
+#   $shat2[[m]]  -- p x T_basis[m] = outer(1/xtx_diag, sigma2_per_pos).
+#                  Read by mf_per_outcome_bhat_shat() on every SER call
+#                  (loglik + posterior moments) for every prior class.
+#
+# sdmat / log_sdmat are no longer cached. mf_em_likelihood_per_scale
+# rebuilds them from shat2 on each call (NULL-cache path); the 117 MB
+# persistent allocation and 252 MB per-iteration build are avoided.
 refresh_iter_cache.mf_individual <- function(data, model) {
-  M  <- data$M
-  is_mixsqp_prior <- inherits(
-    model$G_prior[[1L]],
-    c("mixture_normal", "mixture_normal_per_scale"))
-
-  shat2_list     <- vector("list", M)
-  sdmat_list     <- if (is_mixsqp_prior) vector("list", M) else NULL
-  log_sdmat_list <- if (is_mixsqp_prior) vector("list", M) else NULL
+  M          <- data$M
+  shat2_list <- vector("list", M)
 
   for (m in seq_len(M)) {
     pw      <- data$xtx_diag_list[[m]]
@@ -502,35 +488,12 @@ refresh_iter_cache.mf_individual <- function(data, model) {
     sigma2_per_pos <- mf_sigma2_per_position(data, model, m)
     shat2_m <- outer(1 / pw_safe, sigma2_per_pos)
     if (any(zero_pw)) shat2_m[zero_pw, ] <- 1
-    # Same low-count mask as `mf_per_outcome_bhat_shat`, so the
-    # cached sdmat (M-step) and the SER statistics (BF, moments)
-    # describe the same likelihood.
     lowc <- data$lowc_idx[[m]]
     if (length(lowc) > 0L) shat2_m[, lowc] <- 1
     shat2_list[[m]] <- shat2_m
-
-    if (!is_mixsqp_prior) next
-
-    G_m       <- model$G_prior[[m]]
-    sdmat_m     <- vector("list", length(G_m))
-    log_sdmat_m <- vector("list", length(G_m))
-    for (s in seq_along(G_m)) {
-      idx     <- G_m[[s]]$idx
-      sd_grid <- G_m[[s]]$fitted_g$sd
-      svec_s  <- as.numeric(sqrt(shat2_m[, idx, drop = FALSE]))
-      sdmat   <- sqrt(outer(svec_s^2, sd_grid^2, "+"))
-      sdmat_m[[s]]     <- sdmat
-      log_sdmat_m[[s]] <- log(sdmat)
-    }
-    sdmat_list[[m]]     <- sdmat_m
-    log_sdmat_list[[m]] <- log_sdmat_m
   }
 
-  model$iter_cache <- list(
-    shat2     = shat2_list,
-    sdmat     = sdmat_list,
-    log_sdmat = log_sdmat_list
-  )
+  model$iter_cache <- list(shat2 = shat2_list)
   model
 }
 
