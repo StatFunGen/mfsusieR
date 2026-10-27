@@ -59,11 +59,10 @@
 #' @param tol numeric, convergence tolerance on the per-scale
 #'   prior weights `||pi - pi_prev|| / log(K) < tol`.
 #'   Default `1e-3`.
-#' @param init_pi0_w numeric, starting null-component mass for
-#'   mixsqp. Default `1`.
-#' @param control_mixsqp optional named list of `mixsqp` control
-#'   args. Default `list(verbose = FALSE, eps = 1e-6,
-#'   numiter.em = 4L)`.
+#' @param init_pi0_w,control_mixsqp Legacy optimizer arguments
+#'   retained for call compatibility. The wavelet-EB path now uses
+#'   an exact responsibility M-step (Kim et al.) instead of mixsqp,
+#'   so these arguments have no effect.
 #' @param grid_mult numeric, multiplier for the ash mixture grid.
 #'   Default `sqrt(2)`.
 #' @param wavelet_magnitude_cutoff non-negative numeric. Wavelet
@@ -87,7 +86,6 @@
 #' @references
 #' Manuscript: methods/online_method.tex eq:wavelet_residualization
 #' (covariate adjustment in the wavelet domain).
-#' @importFrom ashr postmean postsd set_data get_fitted_g
 #' @export
 mf_adjust_for_covariates <- function(Y, Z, X = NULL,
                                      method = c("wavelet_eb", "ols"),
@@ -235,18 +233,16 @@ mf_residualize_wavelet_eb <- function(Y, Z, X = NULL,
   lev_res <- log2(T_pad)
   indx_lst <- gen_wavelet_indx(lev_res)
 
-  # Mask wavelet columns whose absolute-value median falls at or
-  # below `wavelet_magnitude_cutoff`. Quantile normalization is not
-  # offered here: the function returns `Y_adjusted` on the original
-  # position scale, and a qnorm step inside would put `fitted_func`
-  # in a different unit system, making `Y_adjusted = Y - fitted` a
-  # unit mismatch.
+  # Low-count columns excluded from fitting and prior learning (matching
+  # fsusieR EBmvFR behaviour: prior_groups excludes lowc_wc).
   lowc_idx <- mf_low_count_indices(Y_wd, threshold = wavelet_magnitude_cutoff)
-  if (length(lowc_idx) > 0L) {
-    Y_wd[, lowc_idx] <- 0
-  }
+  active_per_scale <- lapply(indx_lst, function(idx_s) {
+    if (length(lowc_idx) > 0L) setdiff(idx_s, lowc_idx) else idx_s
+  })
 
-  # Step 3: prior init via the existing helper.
+  # Step 3: prior init via the existing helper. Pass Y_wd without
+  # zeroing lowc columns — the prior grid is set from the full data
+  # distribution, which is unchanged.
   prior_obj <- init_scale_mixture_prior_default(
     Y_m            = Y_wd,
     X              = Z_scaled,
@@ -256,96 +252,64 @@ mf_residualize_wavelet_eb <- function(Y, Z, X = NULL,
   G_prior <- prior_obj$G_prior
 
   # Step 4: state init.
-  K <- ncol(Z_scaled)
+  K      <- ncol(Z_scaled)
+  pw     <- colSums(Z_scaled^2)   # n-normalised predictor norms, reused each iter
   fitted_wc  <- matrix(0, K, T_pad)
   fitted_wc2 <- matrix(0, K, T_pad)
-  MLE_wc     <- matrix(0, K, T_pad)
-  MLE_wc2    <- matrix(0, K, T_pad)
-  sigma2     <- mean(apply(Y_cent, 2, var))   # initial guess
+  sigma2     <- mean(apply(Y_cent, 2, var))   # initial guess (informational only)
 
   pi_hist <- list(.flatten_pi_per_scale(G_prior, indx_lst))
 
-  # Step 5: outer loop. Per-covariate Gauss-Seidel coordinate
-  # descent inside; per-scale prior-weight EM after the j sweep.
+  # Step 5: outer loop. Gauss-Seidel coordinate descent over
+  # covariates; exact responsibility M-step (Kim et al.) after the
+  # sweep. The E-step and M-step are fused: `.wavelet_eb_normal_means`
+  # returns posterior moments AND per-component responsibilities in
+  # one pass, removing the need for a separate mixsqp sub-problem.
   check     <- 3 * tol
   iter      <- 1L
   converged <- FALSE
   while (check > tol && iter < max_iter) {
-    # 5a: Gauss-Seidel sweep over covariates.
+    # 5a: Gauss-Seidel sweep; accumulate responsibilities across j.
+    mixture_counts <- lapply(seq_along(indx_lst), function(s) {
+      matrix(0, K, length(G_prior[[s]]$fitted_g$pi))
+    })
     for (j in seq_len(K)) {
-      fitted_wc[j, ] <- 0
+      fitted_wc[j, ] <- 0        # exclude covariate j from residual
       partial_resid <- Y_wd - Z_scaled %*% fitted_wc
       bs <- mf_compute_marginal_bhat_shat(
         X = matrix(Z_scaled[, j], ncol = 1L),
         Y = partial_resid)
       bhat_j <- as.numeric(bs$Bhat)
       shat_j <- pmax(as.numeric(bs$Shat), 1e-32)
-      # Low-count mask: flagged columns are treated as
-      # uninformative (Bhat = 0, Shat = 1).
-      if (length(lowc_idx) > 0L) {
-        bhat_j[lowc_idx] <- 0
-        shat_j[lowc_idx] <- 1
-      }
-      MLE_wc [j, ] <- bhat_j
-      # MLE_wc2 stores the per-coefficient second moment Shat^2
-      # so `sqrt(MLE_wc2) = Shat` recovers the standard error
-      # for the L_mixsq call below.
-      MLE_wc2[j, ] <- shat_j^2
-
-      # ash posterior per scale, in wavethresh ordering.
-      pm <- numeric(T_pad)
-      ps <- numeric(T_pad)
       for (s in seq_along(indx_lst)) {
-        idx_s <- indx_lst[[s]]
-        m     <- G_prior[[s]]
-        data_s <- ashr::set_data(bhat_j[idx_s], shat_j[idx_s])
-        g <- ashr::get_fitted_g(m)
-        pm[idx_s] <- ashr::postmean(g, data_s)
-        ps[idx_s] <- ashr::postsd  (g, data_s)
+        act_s <- active_per_scale[[s]]
+        if (!length(act_s)) next
+        post <- .wavelet_eb_normal_means(bhat_j[act_s], shat_j[act_s],
+                                         G_prior[[s]]$fitted_g)
+        fitted_wc [j, act_s] <- post$mean
+        fitted_wc2[j, act_s] <- post$var
+        mixture_counts[[s]][j, ] <- post$counts
       }
-      fitted_wc [j, ] <- pm
-      fitted_wc2[j, ] <- ps^2
     }
 
-    # 5b: residual variance update. The formula is intentionally
-    # an approximation here (sigma2 is downstream-inert because
-    # `compute_marginal_bhat_shat` ignores it); see
-    # `inst/notes/refactor-exceptions.md` for the full discussion.
-    # The stored sigma2 field is informational only and does not
-    # affect `Y_adjusted`.
-    # Posterior-expected squared-error decomposition under the
-    # factorized variational posterior:
-    #   E[||Y - X*beta||^2]
-    #     = ||Y - X*mu||^2 + sum_j pw[j] * sum_t Var(beta[j,t])
-    # where mu = E[beta] (= fitted_wc), pw[j] = colSums(X^2),
-    # and Var(beta[j,t]) = fitted_wc2[j,t] (set to postsd^2
-    # by the ash posterior block above).
-    pw     <- colSums(Z_scaled^2)
-    rss    <- sum((Y_wd - Z_scaled %*% fitted_wc)^2)
-    er2    <- rss + sum(pw * rowSums(fitted_wc2))
-    sigma2 <- er2 / (n * T_pad)
+    # 5b: residual variance on active columns only (matches fsusieR
+    # EBmvFR: estimate_residual_variance uses active_wc).
+    active_all <- unlist(active_per_scale)
+    if (length(active_all)) {
+      resid_act <- Y_wd[, active_all, drop = FALSE] -
+                   (Z_scaled %*% fitted_wc)[, active_all, drop = FALSE]
+      er2    <- sum(resid_act^2) +
+                sum(pw * rowSums(fitted_wc2[, active_all, drop = FALSE]))
+      sigma2 <- er2 / (n * length(active_all))
+    }
 
-    # 5c: prior-weight update via mixsqp (is_ebmvfr = TRUE).
-    new_G_prior <- G_prior
+    # 5c: exact EM M-step — average posterior responsibilities across
+    # covariates and positions (Kim et al.; no mixsqp sub-problem).
     for (s in seq_along(indx_lst)) {
-      idx_s  <- indx_lst[[s]]
-      sd_grid <- G_prior[[s]]$fitted_g$sd
-      L <- mf_em_likelihood_per_scale(
-        bhat_slice = MLE_wc [, idx_s, drop = FALSE],
-        shat_slice = sqrt(MLE_wc2[, idx_s, drop = FALSE]),
-        sd_grid    = sd_grid,
-        is_ebmvfr  = TRUE)
-      new_pi_s <- mf_em_m_step_per_scale(
-        L              = L,
-        zeta           = rep(1 / K, K),
-        idx_size       = length(idx_s),
-        init_pi0_w     = init_pi0_w,
-        tol_null_prior = 0.001,
-        control_mixsqp = control_mixsqp,
-        is_ebmvfr      = TRUE)
-      new_G_prior[[s]]$fitted_g$pi <- new_pi_s
+      totals <- colSums(mixture_counts[[s]])
+      if (sum(totals) == 0) next
+      G_prior[[s]]$fitted_g$pi <- totals / sum(totals)
     }
-    G_prior <- new_G_prior
 
     # 5d: convergence on flattened pi (sum |delta| / log(K_total)).
     flat_now  <- .flatten_pi_per_scale(G_prior, indx_lst)
@@ -389,6 +353,43 @@ mf_residualize_wavelet_eb <- function(Y, Z, X = NULL,
     converged   = converged,
     method      = "wavelet_eb"
   )
+}
+
+# Internal: compute posterior moments and mixture-component responsibilities
+# for one covariate at one wavelet scale, under a zero-centred normal mixture
+# prior. Implements the same computation as fsusieR's `.ebmvfr_normal_means`.
+#
+# Returns a list with:
+#   mean   -- posterior mean, length |bhat|
+#   var    -- posterior variance, length |bhat|
+#   counts -- colSums of responsibilities, length K_mix (for exact M-step)
+.wavelet_eb_normal_means <- function(bhat, shat, g) {
+  keep <- which(g$pi > 0)
+  if (!length(keep)) {
+    return(list(mean   = numeric(length(bhat)),
+                var    = numeric(length(bhat)),
+                counts = numeric(length(g$pi))))
+  }
+  prior_var  <- g$sd[keep]^2
+  se2        <- shat^2
+  # total_var[t, k] = se2[t] + prior_var[k]
+  total_var  <- outer(se2, prior_var, "+")
+  log_weight <- sweep(-0.5 * (log(2 * pi * total_var) + bhat^2 / total_var),
+                      2L, log(g$pi[keep]), "+")
+  # Subtract row max before exp to prevent underflow (same result up to
+  # normalisation).
+  offset     <- matrixStats::rowMaxs(log_weight)
+  weight     <- exp(log_weight - offset)
+  weight     <- weight / rowSums(weight)    # responsibilities: T x length(keep)
+  # Posterior mean and variance under the mixture.
+  shrink     <- sweep(1 / total_var, 2L, prior_var, "*")   # T x K_keep
+  comp_mean  <- bhat * shrink
+  post_mean  <- rowSums(weight * comp_mean)
+  post_var   <- rowSums(weight * (se2 * shrink + (comp_mean - post_mean)^2))
+  # Counts = sum of responsibilities over positions, per mixture component.
+  counts        <- numeric(length(g$pi))
+  counts[keep]  <- colSums(weight)
+  list(mean = post_mean, var = post_var, counts = counts)
 }
 
 # Internal: flatten the per-scale pi vectors of `G_prior` into a
