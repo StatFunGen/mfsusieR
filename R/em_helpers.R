@@ -82,7 +82,7 @@ mf_em_likelihood_per_scale <- function(bhat_slice, shat_slice, sd_grid,
   # underflows to all zeros (mixsqp rejects a zero row). mixsqp
   # normalizes rows by their maximum anyway, so the solution is
   # unchanged up to rounding.
-  row_max <- matrixStats::rowMaxs(log_L)
+  row_max <- matrixStats::rowMaxs(log_L, na.rm = TRUE)
   row_max[!is.finite(row_max)] <- 0
   L <- exp(log_L - row_max)
 
@@ -98,8 +98,8 @@ mf_em_likelihood_per_scale <- function(bhat_slice, shat_slice, sd_grid,
 #' The null-component weight is a fixed constant independent of the
 #' number of data points (`idx_size`); multiplying by `idx_size`
 #' caused the penalty to grow with P, making the prior overly
-#' conservative at large P (port-source bug; fixed in fsusieR
-#' commit 64a0e42 and mvf.susie.alpha commit 052bacd).
+#' conservative at large P. See `inst/notes/refactor-exceptions.md`
+#' for provenance.
 #'
 #' For `is_ebmvfr = TRUE` (covariate-adjustment path): omits the
 #' penalty prepend; the weight vector is just

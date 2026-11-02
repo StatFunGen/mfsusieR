@@ -451,12 +451,13 @@ update_variance_components.mf_individual <- function(data, params, model, ...) {
   for (m in seq_len(data$M)) {
     er2_t <- mf_get_ER2_per_position(data, model, m)
     n     <- length(data$na_idx[[m]])
+    lb <- params$residual_variance_lowerbound %||% 1e-8
     if (method == "per_outcome") {
-      model$sigma2[[m]] <- sum(er2_t) / (n * data$T_basis[m])
+      model$sigma2[[m]] <- max(sum(er2_t) / (n * data$T_basis[m]), lb)
     } else {
       indx_m <- data$scale_index[[m]]
       sigma2_per_scale <- vapply(indx_m, function(idx) {
-        sum(er2_t[idx]) / (n * length(idx))
+        max(sum(er2_t[idx]) / (n * length(idx)), lb)
       }, numeric(1))
       model$sigma2[[m]] <- sigma2_per_scale
     }
@@ -734,26 +735,10 @@ post_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
   mixture_null_weight <- (params$mixture_null_weight %||% 0.05) *
                         max(1L, data$M)
   control <- params$control_mixsqp %||% list()
-  cache   <- model$iter_cache
-  p_full  <- ncol(model$alpha)   # `model$alpha` is `L x p`
-
-  # The cached sdmat / log_sdmat are laid out in column-major order
-  # over `(j = 1..p_full, t in idx)`. Restricting to the rows that
-  # correspond to `keep_idx` is the same index expression for both
-  # caches, so we factor it once per `(m, s)`.
-  cache_row_keep <- function(idx) {
-    as.vector(outer(keep_idx, (seq_along(idx) - 1L) * p_full, "+"))
-  }
-  cache_subset <- function(cache_ms, idx) {
-    if (is.null(cache_ms)) NULL
-    else cache_ms[cache_row_keep(idx), , drop = FALSE]
-  }
   for (m in seq_len(data$M)) {
     bhat_m <- ser_stats$betahat[[m]]
     shat_m <- sqrt(ser_stats$shat2[[m]])
     G_m    <- model$G_prior[[m]]
-    cache_m_sdmat     <- if (is.null(cache)) NULL else cache$sdmat[[m]]
-    cache_m_log_sdmat <- if (is.null(cache)) NULL else cache$log_sdmat[[m]]
     # Uniform group loop: each G_prior entry holds the column
     # indices it covers (`$idx`). For `per_outcome` there is one
     # group spanning every wavelet column (one mixsqp solve over
@@ -764,14 +749,10 @@ post_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
       sd_grid <- G_m[[s]]$fitted_g$sd
       bhat_sub <- bhat_m[keep_idx, idx, drop = FALSE]
       shat_sub <- shat_m[keep_idx, idx, drop = FALSE]
-      sdmat_sub     <- cache_subset(cache_m_sdmat[[s]],     idx)
-      log_sdmat_sub <- cache_subset(cache_m_log_sdmat[[s]], idx)
       L_mat <- mf_em_likelihood_per_scale(
-        bhat_slice      = bhat_sub,
-        shat_slice      = shat_sub,
-        sd_grid         = sd_grid,
-        sdmat_cache     = sdmat_sub,
-        log_sdmat_cache = log_sdmat_sub)
+        bhat_slice = bhat_sub,
+        shat_slice = shat_sub,
+        sd_grid    = sd_grid)
       # Warm-start mixsqp from the previous (m, s) pi -- it changes
       # slowly between IBSS iters, cutting inner SQP iterations
       # from ~20 (cold) to ~1-3.
