@@ -216,8 +216,7 @@ ibss_initialize.mf_individual <- function(data, params) {
   class(model) <- if (inherits(mat_init, "susie")) model_class else "susie"
   model$converged <- FALSE
   # Populate the per-iter precompute cache so the first SER
-  # iteration has cached `shat2` (and, on mixsqp paths, `sdmat`
-  # / `log_sdmat`). Re-populated by
+  # iteration has cached `shat2`. Re-populated by
   # `update_variance_components.mf_individual` after each sigma2
   # update.
   if (inherits(data, "mf_individual")) {

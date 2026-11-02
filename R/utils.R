@@ -144,11 +144,16 @@ mf_compute_marginal_bhat_shat <- function(X, Y,
   if (is.null(dim(Y))) Y <- matrix(Y, ncol = 1L)
   n       <- nrow(Y)
   pw      <- if (is.null(predictor_weights)) colSums(X^2) else predictor_weights
+  zero_pw <- pw == 0
+  pw_safe <- pw
+  if (any(zero_pw)) pw_safe[zero_pw] <- 1
   Sxy_raw <- crossprod(X, Y)
-  Bhat    <- Sxy_raw / pw
+  Bhat    <- Sxy_raw / pw_safe
+  if (any(zero_pw)) Bhat[zero_pw, ] <- 0
   if (!is.null(sigma2)) {
-    return(list(Bhat = Bhat,
-                Shat = matrix(sqrt(sigma2 / pw), ncol(X), ncol(Y))))
+    Shat <- matrix(sqrt(sigma2 / pw_safe), ncol(X), ncol(Y))
+    if (any(zero_pw)) Shat[zero_pw, ] <- 1
+    return(list(Bhat = Bhat, Shat = Shat))
   }
   xm  <- colMeans(X); ym <- colMeans(Y)
   Sxx <- colSums(X^2) - n * xm^2
@@ -156,5 +161,7 @@ mf_compute_marginal_bhat_shat <- function(X, Y,
   Syy <- colSums(Y^2) - n * ym^2
   V   <- (rep(Syy, each = ncol(X)) - 2 * Bhat * Sxy + Bhat^2 * Sxx) /
          (n - 1L)
-  list(Bhat = Bhat, Shat = sqrt(pmax(V, 1e-64)) / sqrt(n - 1L))
+  Shat <- sqrt(pmax(V, 1e-64)) / sqrt(n - 1L)
+  if (any(zero_pw)) Shat[zero_pw, ] <- 1
+  list(Bhat = Bhat, Shat = Shat)
 }
