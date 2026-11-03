@@ -315,7 +315,6 @@ calculate_posterior_moments.mf_individual <- function(data, params, model, V, l,
 #' @keywords internal
 #' @noRd
 SER_posterior_e_loglik.mf_individual <- function(data, params, model, l, ...) {
-  X       <- data$X
   alpha_l <- model$alpha[l, ]
   out     <- 0
   for (m in seq_len(data$M)) {
@@ -328,9 +327,10 @@ SER_posterior_e_loglik.mf_individual <- function(data, params, model, l, ...) {
     R_m   <- model$raw_residuals[[m]][idx_m, , drop = FALSE]
     sigma2_per_pos <- mf_sigma2_per_position(data, model, m)
 
-    XEb_m <- (X %*% Eb_m)[idx_m, , drop = FALSE]
+    # sum_n R[n,t] * (X Eb)[n,t] = sum_j Eb[j,t] * (X'R)[j,t]
+    # model$residuals[[m]] = X[idx_m,]' R[idx_m,] cached by compute_residuals.
     sumR2_t    <- colSums(R_m * R_m)
-    sumRXEb_t  <- colSums(R_m * XEb_m)
+    sumRXEb_t  <- colSums(Eb_m * model$residuals[[m]])
     sumpwEb2_t <- colSums(pw * Eb2_m)
     quad_t     <- sumR2_t - 2 * sumRXEb_t + sumpwEb2_t
 
@@ -451,12 +451,13 @@ update_variance_components.mf_individual <- function(data, params, model, ...) {
   for (m in seq_len(data$M)) {
     er2_t <- mf_get_ER2_per_position(data, model, m)
     n     <- length(data$na_idx[[m]])
+    lb <- params$residual_variance_lowerbound %||% 1e-8
     if (method == "per_outcome") {
-      model$sigma2[[m]] <- sum(er2_t) / (n * data$T_basis[m])
+      model$sigma2[[m]] <- max(sum(er2_t) / (n * data$T_basis[m]), lb)
     } else {
       indx_m <- data$scale_index[[m]]
       sigma2_per_scale <- vapply(indx_m, function(idx) {
-        sum(er2_t[idx]) / (n * length(idx))
+        max(sum(er2_t[idx]) / (n * length(idx)), lb)
       }, numeric(1))
       model$sigma2[[m]] <- sigma2_per_scale
     }
@@ -464,35 +465,21 @@ update_variance_components.mf_individual <- function(data, params, model, ...) {
   refresh_iter_cache.mf_individual(data, model)
 }
 
-# Recompute per-iter precomputes that depend on `sigma2` (and, for
-# the mixsqp-backed prior classes, on the slab sd grid). Slots are
+# Recompute per-iter precomputes that depend on `sigma2`. Slots are
 # invariant across the L-effect loop within one IBSS iteration;
 # rebuilding them per effect would be L-fold redundant.
 #
 # Cache contents per outcome m:
-#   $shat2[[m]]            -- p x T_basis[m] = outer(1/xtx_diag,
-#                             sigma2_per_pos). Read by
-#                             mf_per_outcome_bhat_shat() on every
-#                             SER call (loglik + posterior moments)
-#                             for every prior class. Always built.
-#   $sdmat[[m]][[s]]       -- (p*|idx_s|) x K matrix used by
-#                             mf_em_likelihood_per_scale, the
-#                             mixsqp M-step kernel only. Skipped
-#                             for the ebnm-backed prior classes
-#                             (point_normal, point_laplace), which
-#                             fit 2 scalars per (m, s) by direct
-#                             optim and have no per-(j, t, k)
-#                             aggregate to amortize.
-#   $log_sdmat[[m]][[s]]   -- log of $sdmat[[m]][[s]] (mixsqp-only).
+#   $shat2[[m]]  -- p x T_basis[m] = outer(1/xtx_diag, sigma2_per_pos).
+#                  Read by mf_per_outcome_bhat_shat() on every SER call
+#                  (loglik + posterior moments) for every prior class.
+#
+# sdmat / log_sdmat are no longer cached. mf_em_likelihood_per_scale
+# rebuilds them from shat2 on each call (NULL-cache path); the 117 MB
+# persistent allocation and 252 MB per-iteration build are avoided.
 refresh_iter_cache.mf_individual <- function(data, model) {
-  M  <- data$M
-  is_mixsqp_prior <- inherits(
-    model$G_prior[[1L]],
-    c("mixture_normal", "mixture_normal_per_scale"))
-
-  shat2_list     <- vector("list", M)
-  sdmat_list     <- if (is_mixsqp_prior) vector("list", M) else NULL
-  log_sdmat_list <- if (is_mixsqp_prior) vector("list", M) else NULL
+  M          <- data$M
+  shat2_list <- vector("list", M)
 
   for (m in seq_len(M)) {
     pw      <- data$xtx_diag_list[[m]]
@@ -502,30 +489,12 @@ refresh_iter_cache.mf_individual <- function(data, model) {
     sigma2_per_pos <- mf_sigma2_per_position(data, model, m)
     shat2_m <- outer(1 / pw_safe, sigma2_per_pos)
     if (any(zero_pw)) shat2_m[zero_pw, ] <- 1
+    lowc <- data$lowc_idx[[m]]
+    if (length(lowc) > 0L) shat2_m[, lowc] <- 1
     shat2_list[[m]] <- shat2_m
-
-    if (!is_mixsqp_prior) next
-
-    G_m       <- model$G_prior[[m]]
-    sdmat_m     <- vector("list", length(G_m))
-    log_sdmat_m <- vector("list", length(G_m))
-    for (s in seq_along(G_m)) {
-      idx     <- G_m[[s]]$idx
-      sd_grid <- G_m[[s]]$fitted_g$sd
-      svec_s  <- as.numeric(sqrt(shat2_m[, idx, drop = FALSE]))
-      sdmat   <- sqrt(outer(svec_s^2, sd_grid^2, "+"))
-      sdmat_m[[s]]     <- sdmat
-      log_sdmat_m[[s]] <- log(sdmat)
-    }
-    sdmat_list[[m]]     <- sdmat_m
-    log_sdmat_list[[m]] <- log_sdmat_m
   }
 
-  model$iter_cache <- list(
-    shat2     = shat2_list,
-    sdmat     = sdmat_list,
-    log_sdmat = log_sdmat_list
-  )
+  model$iter_cache <- list(shat2 = shat2_list)
   model
 }
 
@@ -766,26 +735,10 @@ post_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
   mixture_null_weight <- (params$mixture_null_weight %||% 0.05) *
                         max(1L, data$M)
   control <- params$control_mixsqp %||% list()
-  cache   <- model$iter_cache
-  p_full  <- ncol(model$alpha)   # `model$alpha` is `L x p`
-
-  # The cached sdmat / log_sdmat are laid out in column-major order
-  # over `(j = 1..p_full, t in idx)`. Restricting to the rows that
-  # correspond to `keep_idx` is the same index expression for both
-  # caches, so we factor it once per `(m, s)`.
-  cache_row_keep <- function(idx) {
-    as.vector(outer(keep_idx, (seq_along(idx) - 1L) * p_full, "+"))
-  }
-  cache_subset <- function(cache_ms, idx) {
-    if (is.null(cache_ms)) NULL
-    else cache_ms[cache_row_keep(idx), , drop = FALSE]
-  }
   for (m in seq_len(data$M)) {
     bhat_m <- ser_stats$betahat[[m]]
     shat_m <- sqrt(ser_stats$shat2[[m]])
     G_m    <- model$G_prior[[m]]
-    cache_m_sdmat     <- if (is.null(cache)) NULL else cache$sdmat[[m]]
-    cache_m_log_sdmat <- if (is.null(cache)) NULL else cache$log_sdmat[[m]]
     # Uniform group loop: each G_prior entry holds the column
     # indices it covers (`$idx`). For `per_outcome` there is one
     # group spanning every wavelet column (one mixsqp solve over
@@ -796,14 +749,10 @@ post_loglik_prior_hook.mf_individual <- function(data, params, model, ser_stats,
       sd_grid <- G_m[[s]]$fitted_g$sd
       bhat_sub <- bhat_m[keep_idx, idx, drop = FALSE]
       shat_sub <- shat_m[keep_idx, idx, drop = FALSE]
-      sdmat_sub     <- cache_subset(cache_m_sdmat[[s]],     idx)
-      log_sdmat_sub <- cache_subset(cache_m_log_sdmat[[s]], idx)
       L_mat <- mf_em_likelihood_per_scale(
-        bhat_slice      = bhat_sub,
-        shat_slice      = shat_sub,
-        sd_grid         = sd_grid,
-        sdmat_cache     = sdmat_sub,
-        log_sdmat_cache = log_sdmat_sub)
+        bhat_slice = bhat_sub,
+        shat_slice = shat_sub,
+        sd_grid    = sd_grid)
       # Warm-start mixsqp from the previous (m, s) pi -- it changes
       # slowly between IBSS iters, cutting inner SQP iterations
       # from ~20 (cold) to ~1-3.

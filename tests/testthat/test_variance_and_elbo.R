@@ -406,6 +406,19 @@ test_that("mf_em_likelihood_per_scale returns positive matrix with penalty row",
   expect_true(all(L[-1, ] > 0))                      # all real rows positive (likelihoods)
 })
 
+test_that("mf_em_likelihood_per_scale rows do not underflow and the M-step runs", {
+  # bhat = 100 with shat = 0.1: every component density underflows
+  # on the raw scale. Rows are rescaled by their max, so each data
+  # row has max exactly 1 and mixsqp accepts the matrix.
+  bhat <- matrix(c(100, 0.1), 2, 1)
+  shat <- matrix(0.1, 2, 1)
+  L <- mfsusieR:::mf_em_likelihood_per_scale(bhat, shat, c(0, 1))
+  expect_equal(apply(L[-1, , drop = FALSE], 1, max), c(1, 1))
+  pi_hat <- mfsusieR:::mf_em_m_step_per_scale(L, zeta = c(1, 1), idx_size = 1)
+  expect_true(all(is.finite(pi_hat)))
+  expect_equal(sum(pi_hat), 1, tolerance = 1e-8)
+})
+
 test_that("mf_em_likelihood_per_scale handles edge case sd_grid = 0 (pure null)", {
   bhat <- matrix(rnorm(8), 4, 2)
   shat <- matrix(runif(8, 0.5, 1.5), 4, 2)

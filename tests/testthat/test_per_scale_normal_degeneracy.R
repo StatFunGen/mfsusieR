@@ -322,13 +322,13 @@ test_that("6: iter_cache skips sdmat / log_sdmat on the ebnm path", {
   expect_null(cached$iter_cache$log_sdmat)
 })
 
-test_that("6: iter_cache keeps sdmat / log_sdmat on the mixsqp path", {
+test_that("6: iter_cache has shat2 and no sdmat on the mixsqp path (P3)", {
   ds  <- make_sparse_data()
   fit <- fit_sparse("per_outcome", fx = ds$fx)
   cached <- mfsusieR:::refresh_iter_cache.mf_individual(ds$data, fit)
   expect_false(is.null(cached$iter_cache$shat2[[1L]]))
-  expect_false(is.null(cached$iter_cache$sdmat[[1L]][[1L]]))
-  expect_false(is.null(cached$iter_cache$log_sdmat[[1L]][[1L]]))
+  expect_null(cached$iter_cache$sdmat)
+  expect_null(cached$iter_cache$log_sdmat)
 })
 
 # ============================================================
@@ -675,6 +675,14 @@ test_that("9b: mixture_log_bf_laplace_per_scale handles single-component laplace
   out <- mfsusieR:::mixture_log_bf_laplace_per_scale(bhat, shat, fg_slab1)
   expect_length(out, p)
   expect_true(all(is.finite(out)))
+  # The pure slab is the full normal-Laplace marginal (w = 1), not the
+  # null: per-cell log-BF is log f_slab(b) - log N(b; 0, s).
+  ref <- rowSums(matrix(
+    mfsusieR:::vloglik_point_laplace(x = as.vector(bhat), s = as.vector(shat),
+                                     w = 1, a = 1 / 0.5, mu = 0) -
+      dnorm(as.vector(bhat), 0, as.vector(shat), log = TRUE),
+    nrow = p))
+  expect_equal(out, ref, tolerance = 1e-12)
 })
 
 # ============================================================

@@ -98,7 +98,7 @@ init_scale_mixture_prior_default <- function(Y_m,
     Y_m <- Y_m[na_idx, , drop = FALSE]
     X   <- X[na_idx,   , drop = FALSE]
   }
-  bs <- compute_marginal_bhat_shat(X, Y_m)
+  bs <- mf_compute_marginal_bhat_shat(X, Y_m)
 
   keep_cols <- if (length(lowc_idx) > 0L) -lowc_idx else TRUE
   pool_Bhat <- bs$Bhat[, keep_cols, drop = FALSE]
@@ -197,7 +197,7 @@ init_ebnm_prior_per_scale <- function(Y_m,
     Y_m <- Y_m[na_idx, , drop = FALSE]
     X   <- X[na_idx,   , drop = FALSE]
   }
-  bs <- compute_marginal_bhat_shat(X, Y_m)
+  bs <- mf_compute_marginal_bhat_shat(X, Y_m)
 
   G_prior <- lapply(groups, function(idx) {
     bhat_slice <- bs$Bhat[, idx, drop = FALSE]

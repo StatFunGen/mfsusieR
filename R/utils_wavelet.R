@@ -41,7 +41,8 @@ mf_low_count_indices <- function(Y_wd, threshold = 0) {
   if (threshold < 0) {
     stop("`wavelet_magnitude_cutoff` must be non-negative.")
   }
-  col_med <- apply(abs(Y_wd), 2L, median)
+  # Missing samples are NA rows of the wavelet matrix; ignore them.
+  col_med <- apply(abs(Y_wd), 2L, median, na.rm = TRUE)
   which(col_med <= threshold)
 }
 
@@ -61,6 +62,16 @@ mf_low_count_indices <- function(Y_wd, threshold = 0) {
 #' @keywords internal
 #' @noRd
 mf_quantile_normalize <- function(Y_wd) {
+  # The per-column `set.seed(1L)` makes tie-breaking reproducible;
+  # restore the caller's RNG state on exit so the seed does not leak.
+  had_seed <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
+  old_seed <- if (had_seed) get(".Random.seed", envir = globalenv(),
+                                inherits = FALSE)
+  on.exit({
+    if (had_seed) assign(".Random.seed", old_seed, envir = globalenv())
+    else if (exists(".Random.seed", envir = globalenv(), inherits = FALSE))
+      rm(".Random.seed", envir = globalenv())
+  }, add = TRUE)
   qnorm_col <- function(col) {
     non_na <- which(!is.na(col))
     if (length(non_na) == 0L) return(col)

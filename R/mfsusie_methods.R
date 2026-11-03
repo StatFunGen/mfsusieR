@@ -892,8 +892,8 @@ univariate_ti_regression <- function(Y_pos, x_eff,
        filter.number = filter_number, family = family)$C))
 
   # Univariate regression of each wavelet column on x_sc.
-  reg_d  <- compute_marginal_bhat_shat(matrix(x_sc, ncol = 1L), Y_f)
-  reg_c  <- compute_marginal_bhat_shat(matrix(x_sc, ncol = 1L), Y_c)
+  reg_d  <- mf_compute_marginal_bhat_shat(matrix(x_sc, ncol = 1L), Y_f)
+  reg_c  <- mf_compute_marginal_bhat_shat(matrix(x_sc, ncol = 1L), Y_c)
   bhat_d <- as.numeric(reg_d$Bhat)
   shat_d <- as.numeric(reg_d$Shat)
   bhat_c <- as.numeric(reg_c$Bhat)
