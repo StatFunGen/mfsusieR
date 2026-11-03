@@ -315,7 +315,6 @@ calculate_posterior_moments.mf_individual <- function(data, params, model, V, l,
 #' @keywords internal
 #' @noRd
 SER_posterior_e_loglik.mf_individual <- function(data, params, model, l, ...) {
-  X       <- data$X
   alpha_l <- model$alpha[l, ]
   out     <- 0
   for (m in seq_len(data$M)) {
@@ -328,9 +327,10 @@ SER_posterior_e_loglik.mf_individual <- function(data, params, model, l, ...) {
     R_m   <- model$raw_residuals[[m]][idx_m, , drop = FALSE]
     sigma2_per_pos <- mf_sigma2_per_position(data, model, m)
 
-    XEb_m <- (X %*% Eb_m)[idx_m, , drop = FALSE]
+    # sum_n R[n,t] * (X Eb)[n,t] = sum_j Eb[j,t] * (X'R)[j,t]
+    # model$residuals[[m]] = X[idx_m,]' R[idx_m,] cached by compute_residuals.
     sumR2_t    <- colSums(R_m * R_m)
-    sumRXEb_t  <- colSums(R_m * XEb_m)
+    sumRXEb_t  <- colSums(Eb_m * model$residuals[[m]])
     sumpwEb2_t <- colSums(pw * Eb2_m)
     quad_t     <- sumR2_t - 2 * sumRXEb_t + sumpwEb2_t
 
